@@ -159,7 +159,10 @@ struct ProductWebView: NSViewRepresentable {
               var wrap = document.createElement('div');
               wrap.innerHTML = html.trim();
               var node = wrap.firstChild;
-              if (act === 'dom-append-template') {
+              if (act === 'dom-append-template' || !target.contains(el)) {
+                // Append when explicitly asked, OR fall back to append when
+                // the button isn't a child of the target (insertBefore would
+                // throw NotFoundError otherwise).
                 target.appendChild(node);
               } else {
                 target.insertBefore(node, el);
