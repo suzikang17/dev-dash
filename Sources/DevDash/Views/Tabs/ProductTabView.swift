@@ -8,6 +8,7 @@ import AppKit
 struct ProductTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var lastRegenAt: Date?
+    @State private var reloadToken: Int = 0
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -92,6 +93,7 @@ struct ProductTabView: View {
             ProductWebView(
                 url: URL(fileURLWithPath: path),
                 docsRoot: docsRoot,
+                reloadToken: reloadToken,
                 onSave: { rel, html in
                     saveSection(projectPath: project.path, rel: rel, html: html)
                 },
@@ -147,6 +149,7 @@ struct ProductTabView: View {
             tasks: tasks
         )
         lastRegenAt = Date()
+        reloadToken &+= 1   // force WKWebView reload so latest HTML + JS land
     }
 
     private func openFile(_ path: String) {

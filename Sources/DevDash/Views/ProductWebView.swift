@@ -11,6 +11,7 @@ import WebKit
 struct ProductWebView: NSViewRepresentable {
     let url: URL
     let docsRoot: URL
+    let reloadToken: Int                                   // bump to force reload
     let onSave: (String, String) -> Void                   // (relPath, html)
     let onAction: ([String: Any]) -> Void                  // generic dispatch
 
@@ -26,14 +27,16 @@ struct ProductWebView: NSViewRepresentable {
         config.userContentController = controller
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.loadFileURL(url, allowingReadAccessTo: docsRoot)
+        context.coordinator.lastReloadToken = reloadToken
         return wv
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        // Only reload when the URL changes (different project / forced regen).
-        // Plain re-renders of SwiftUI shouldn't blow away in-flight edits.
-        if nsView.url != url {
+        // Reload when the URL changes (different project) OR when the token
+        // bumps (caller wants the latest bridge JS / regenerated content).
+        if nsView.url != url || context.coordinator.lastReloadToken != reloadToken {
             nsView.loadFileURL(url, allowingReadAccessTo: docsRoot)
+            context.coordinator.lastReloadToken = reloadToken
         }
         context.coordinator.onSave = onSave
         context.coordinator.onAction = onAction
@@ -46,6 +49,7 @@ struct ProductWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var onSave: (String, String) -> Void
         var onAction: ([String: Any]) -> Void
+        var lastReloadToken: Int = -1
 
         init(onSave: @escaping (String, String) -> Void,
              onAction: @escaping ([String: Any]) -> Void) {
@@ -275,9 +279,141 @@ struct ProductWebView: NSViewRepresentable {
         });
       }
 
+      // Triage board drag-and-drop. Operates on any .triage-board / .triage-cols
+      // ancestor inside an editable section so the dropped state auto-saves.
+      function attachTriage(scope) {
+        (scope || document).querySelectorAll('.triage-list').forEach(function(list) {
+          if (list.dataset.triageAttached) return;
+          list.dataset.triageAttached = 'true';
+          list.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            list.classList.add('is-drop-target');
+          });
+          list.addEventListener('dragleave', function() {
+            list.classList.remove('is-drop-target');
+          });
+          list.addEventListener('drop', function(e) {
+            e.preventDefault();
+            list.classList.remove('is-drop-target');
+            var id = e.dataTransfer.getData('text/triage-id');
+            var card = id ? document.querySelector('[data-triage-id="' + id + '"]') : null;
+            if (!card) return;
+            list.appendChild(card);
+            updateCounts(list.closest('.triage-cols'));
+            var section = findEditableAncestor(list);
+            if (section) {
+              section.classList.add('is-dirty');
+              save(section);
+            }
+          });
+        });
+
+        (scope || document).querySelectorAll('.triage-card').forEach(function(card) {
+          if (card.dataset.triageCardAttached) return;
+          card.dataset.triageCardAttached = 'true';
+          card.setAttribute('draggable', 'true');
+          if (!card.dataset.triageId) {
+            card.dataset.triageId = 't-' + Math.random().toString(36).slice(2, 9);
+          }
+          card.addEventListener('dragstart', function(e) {
+            e.dataTransfer.setData('text/triage-id', card.dataset.triageId);
+            e.dataTransfer.effectAllowed = 'move';
+            card.classList.add('dragging');
+          });
+          card.addEventListener('dragend', function() {
+            card.classList.remove('dragging');
+          });
+          // Tag click → toggle filter
+          card.querySelectorAll('.tag').forEach(function(tag) {
+            if (tag.dataset.tagFilterAttached) return;
+            tag.dataset.tagFilterAttached = 'true';
+            tag.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var board = card.closest('.triage-cols');
+              var current = board && board.dataset.filter;
+              var next = (current === tag.textContent) ? '' : tag.textContent;
+              if (board) {
+                board.dataset.filter = next;
+                applyFilter(board);
+              }
+            });
+          });
+        });
+      }
+
+      function updateCounts(board) {
+        if (!board) return;
+        board.querySelectorAll('.triage-col').forEach(function(col) {
+          var count = col.querySelectorAll('.triage-card').length;
+          var cnt = col.querySelector('.tcount');
+          if (cnt) cnt.textContent = count;
+        });
+      }
+
+      function applyFilter(board) {
+        var filter = (board.dataset.filter || '').trim();
+        board.querySelectorAll('.triage-card').forEach(function(card) {
+          if (!filter) { card.classList.remove('is-filtered-out'); return; }
+          var tags = Array.from(card.querySelectorAll('.tag')).map(function(t) { return t.textContent; });
+          if (tags.indexOf(filter) === -1) card.classList.add('is-filtered-out');
+          else card.classList.remove('is-filtered-out');
+        });
+      }
+
+      // Triage-specific actions
+      document.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        var act = btn.dataset.action;
+
+        if (act === 'triage-add') {
+          var section = findEditableAncestor(btn);
+          if (!section) return;
+          var col = btn.dataset.col || 'now';
+          var list = section.querySelector('[data-droplist="' + col + '"]');
+          if (!list) return;
+          var card = document.createElement('div');
+          card.className = 'triage-card';
+          card.contentEditable = 'true';
+          card.dataset.triageId = 't-' + Math.random().toString(36).slice(2, 9);
+          card.innerHTML = '<div class="t-title">New ticket</div><div class="t-tags"><span class="tag">untagged</span></div>';
+          list.appendChild(card);
+          attachTriage(list);
+          updateCounts(list.closest('.triage-cols'));
+          section.classList.add('is-dirty');
+          save(section);
+          e.preventDefault();
+          return;
+        }
+
+        if (act === 'triage-export-md') {
+          var section = findEditableAncestor(btn);
+          if (!section) return;
+          var lines = ['# Triage'];
+          section.querySelectorAll('.triage-col').forEach(function(col) {
+            var title = (col.querySelector('h4') || {}).textContent || '';
+            lines.push('');
+            lines.push('## ' + title.replace(/\\d+$/, '').trim());
+            col.querySelectorAll('.triage-card').forEach(function(card) {
+              var t = (card.querySelector('.t-title') || {}).textContent || '';
+              lines.push('- ' + t.trim());
+            });
+          });
+          var md = lines.join('\\n');
+          if (navigator.clipboard) navigator.clipboard.writeText(md);
+          btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = 'Copy as Markdown'; }, 1200);
+          e.preventDefault();
+          return;
+        }
+      });
+
       attachEditing(document);
       autoInject(document);
+      attachTriage(document);
       attachActions();   // must run after autoInject so injected buttons get handlers
+      // Initialize counts on any boards present
+      document.querySelectorAll('.triage-cols').forEach(updateCounts);
       // Re-attach after tab switches (panes are still in DOM but new buttons may exist)
       document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
         b.addEventListener('click', function() {
@@ -291,3 +427,4 @@ struct ProductWebView: NSViewRepresentable {
     })();
     """
 }
+

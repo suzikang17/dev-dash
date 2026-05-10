@@ -537,7 +537,7 @@ enum ProductDocGenerator {
     // MARK: - Document templates (richer artifacts spawned via "New …")
 
     enum DocType: String, CaseIterable, Identifiable {
-        case prd, implementationPlan, statusReport, decisionLog, conceptExplainer, retrospective
+        case prd, implementationPlan, statusReport, decisionLog, conceptExplainer, retrospective, triageBoard
 
         var id: String { rawValue }
         var label: String {
@@ -548,6 +548,7 @@ enum ProductDocGenerator {
             case .decisionLog:       return "Decision log"
             case .conceptExplainer:  return "Concept explainer"
             case .retrospective:     return "Retrospective"
+            case .triageBoard:       return "Triage board"
             }
         }
         var folder: String {
@@ -558,6 +559,7 @@ enum ProductDocGenerator {
             case .decisionLog:        return "decisions"
             case .conceptExplainer:   return "concepts"
             case .retrospective:      return "retros"
+            case .triageBoard:        return "triage"
             }
         }
         var defaultSlug: String {
@@ -568,6 +570,7 @@ enum ProductDocGenerator {
             case .decisionLog:        return "decision-log.html"
             case .conceptExplainer:   return "concept-explainer.html"
             case .retrospective:      return "retro-\(Self.dateSlug()).html"
+            case .triageBoard:        return "triage-\(Self.dateSlug()).html"
             }
         }
         private static func dateSlug() -> String {
@@ -816,6 +819,40 @@ enum ProductDocGenerator {
             <details><summary><strong>Q: <em>another?</em></strong></summary><p><em>Answer.</em></p></details>
             """
 
+        case .triageBoard:
+            return """
+            <div class="doc-head">
+              <h2>Triage Board</h2>
+              <span class="doc-status meta">Drag tickets between columns. Auto-saves.</span>
+            </div>
+
+            <div class="triage-controls">
+              <button class="add-btn" contenteditable="false" data-action="triage-add" data-col="now">+ Ticket</button>
+              <button class="add-btn" contenteditable="false" data-action="triage-export-md">Copy as Markdown</button>
+            </div>
+
+            <div class="triage-cols">
+              <div class="triage-col" data-col="now">
+                <h4>Now <span class="meta tcount">0</span></h4>
+                <div class="triage-list" data-droplist="now"></div>
+              </div>
+              <div class="triage-col" data-col="next">
+                <h4>Next <span class="meta tcount">0</span></h4>
+                <div class="triage-list" data-droplist="next"></div>
+              </div>
+              <div class="triage-col" data-col="later">
+                <h4>Later <span class="meta tcount">0</span></h4>
+                <div class="triage-list" data-droplist="later"></div>
+              </div>
+              <div class="triage-col" data-col="cut">
+                <h4>Cut <span class="meta tcount">0</span></h4>
+                <div class="triage-list" data-droplist="cut"></div>
+              </div>
+            </div>
+
+            <p class="empty">Hint: click a tag on a ticket to filter. Click the title to edit.</p>
+            """
+
         case .retrospective:
             return """
             <div class="doc-head">
@@ -996,6 +1033,30 @@ enum ProductDocGenerator {
                  padding: 6px 12px; border-radius: 6px; font: inherit; font-size: 12px;
                  cursor: pointer; margin: 6px 0; }
       .add-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+      /* Triage board */
+      .triage-controls { display: flex; gap: 6px; margin: 12px 0; }
+      .triage-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+                     margin: 12px 0 24px; }
+      .triage-col { background: var(--card); border: 1px solid var(--border);
+                    border-radius: 10px; padding: 10px; min-height: 200px; }
+      .triage-col h4 { margin-top: 0; display: flex; justify-content: space-between;
+                       align-items: baseline; }
+      .triage-list { min-height: 120px; }
+      .triage-list.is-drop-target { background: color-mix(in srgb, var(--accent) 12%, transparent);
+                                    border-radius: 6px; outline: 2px dashed var(--accent);
+                                    outline-offset: -4px; }
+      .triage-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+                     padding: 8px 10px; margin-bottom: 6px; cursor: grab; font-size: 12px; }
+      .triage-card:active { cursor: grabbing; }
+      .triage-card.dragging { opacity: 0.4; }
+      .triage-card .t-title { font-weight: 500; }
+      .triage-card .t-tags { margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap; }
+      .triage-card .t-tags .tag { cursor: pointer; }
+      .triage-card.is-filtered-out { display: none; }
+      @media (max-width: 720px) {
+        .triage-cols { grid-template-columns: 1fr 1fr; }
+      }
 
       /* Bar chart (vanilla, no JS) */
       .bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; padding: 8px 0; }
