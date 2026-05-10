@@ -167,6 +167,118 @@ struct Todo: Identifiable, Codable, Hashable {
     var doneAt: String?
 }
 
+// MARK: - Structured tasks (v2: stage + category + source)
+
+enum TaskCategory: String, Codable, CaseIterable, Hashable {
+    case engineering, design, content, marketing, distribution, ops, research, other
+
+    var label: String { rawValue.capitalized }
+    var systemImage: String {
+        switch self {
+        case .engineering: return "hammer"
+        case .design: return "paintbrush"
+        case .content: return "doc.richtext"
+        case .marketing: return "megaphone"
+        case .distribution: return "shippingbox"
+        case .ops: return "gearshape.2"
+        case .research: return "magnifyingglass"
+        case .other: return "circle.dashed"
+        }
+    }
+    var tint: String {
+        switch self {
+        case .engineering: return "blue"
+        case .design: return "pink"
+        case .content: return "purple"
+        case .marketing: return "orange"
+        case .distribution: return "teal"
+        case .ops: return "gray"
+        case .research: return "indigo"
+        case .other: return "secondary"
+        }
+    }
+}
+
+enum TaskSource: String, Codable, Hashable {
+    case local, template, suggested, github
+
+    var label: String {
+        switch self {
+        case .local: return "Local"
+        case .template: return "Template"
+        case .suggested: return "Suggested"
+        case .github: return "GitHub"
+        }
+    }
+}
+
+enum TaskStatus: String, Codable, Hashable {
+    case open, inProgress = "in_progress", done, skipped
+
+    var label: String {
+        switch self {
+        case .open: return "Open"
+        case .inProgress: return "In progress"
+        case .done: return "Done"
+        case .skipped: return "Skipped"
+        }
+    }
+}
+
+struct TaskItem: Identifiable, Codable, Hashable {
+    let id: String
+    var title: String
+    var notes: String?
+    var stage: String?              // template stage id; nil = unstaged
+    var category: TaskCategory
+    var source: TaskSource
+    var status: TaskStatus
+    var createdAt: Date
+    var startedAt: Date?
+    var completedAt: Date?
+    var ghIssueURL: URL?
+}
+
+/// Per-project metadata persisted to `.devdash/project.json`. Drives stage
+/// gating and template application in the Tasks tab.
+struct ProjectMeta: Codable, Hashable {
+    var templateId: String?
+    var currentStageId: String?
+    var stageStartedAt: Date?
+    var checkedExitCriteria: Set<String>  // keys: "<stageId>:<criterion>"
+    var roadmapPath: String?              // resolved at first scan
+    var roadmapLastSeenMtime: Date?
+    var updatedAt: Date
+
+    static let empty = ProjectMeta(
+        templateId: nil, currentStageId: nil, stageStartedAt: nil,
+        checkedExitCriteria: [], roadmapPath: nil, roadmapLastSeenMtime: nil,
+        updatedAt: Date()
+    )
+}
+
+// MARK: - Launch templates
+// Templates encode a methodology — sequence of stages, exit criteria,
+// guiding questions. They never auto-create tasks. Tasks come from the
+// user (with the tool's help) answering the questions.
+
+struct LaunchTemplate: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let summary: String
+    let methodology: String     // overall philosophy; later seeds AI prompts
+    let stages: [TemplateStage]
+}
+
+struct TemplateStage: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let purpose: String
+    let methodology: String       // stage-level philosophy
+    let guidingQuestions: [String]
+    let exitCriteria: [String]
+}
+
 struct Issue: Identifiable, Hashable {
     let number: Int
     let title: String

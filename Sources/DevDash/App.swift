@@ -31,6 +31,7 @@ struct DevDashApp: App {
                     store.refreshHeatmaps()
                     store.refreshRecentCommits()
                     store.refreshSessionDigests()
+                    store.loadProjectMetaAndTasks()
                 }
         }
         .windowStyle(.titleBar)

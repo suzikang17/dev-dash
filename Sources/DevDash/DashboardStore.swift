@@ -65,6 +65,9 @@ final class DashboardStore: ObservableObject {
     @Published var openSessionId: String? = nil
     private var digestTask: Task<Void, Never>?
 
+    @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
+    @Published var projectTasks: [String: [TaskItem]] = [:]   // path → tasks
+
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
     }
@@ -398,6 +401,117 @@ final class DashboardStore: ObservableObject {
             if FileManager.default.fileExists(atPath: candidate) { return candidate }
         }
         return nil
+    }
+
+    // MARK: - Project metadata + structured tasks
+
+    func meta(for projectPath: String) -> ProjectMeta {
+        projectMeta[projectPath] ?? .empty
+    }
+
+    func template(for projectPath: String) -> LaunchTemplate? {
+        Templates.find(meta(for: projectPath).templateId)
+    }
+
+    func currentStage(for projectPath: String) -> TemplateStage? {
+        guard let template = template(for: projectPath),
+              let stageId = meta(for: projectPath).currentStageId else { return nil }
+        return template.stages.first { $0.id == stageId }
+    }
+
+    func tasksV2(for projectPath: String) -> [TaskItem] {
+        projectTasks[projectPath] ?? []
+    }
+
+    /// Initial load — pulls meta + tasks for every project (cheap reads).
+    func loadProjectMetaAndTasks() {
+        let paths = projects.map { $0.path }
+        Task.detached(priority: .utility) { [weak self] in
+            var metaMap: [String: ProjectMeta] = [:]
+            var taskMap: [String: [TaskItem]] = [:]
+            for path in paths {
+                metaMap[path] = ProjectMetaStore.read(path)
+                let tasks = TaskStore.read(path)
+                if !tasks.isEmpty { taskMap[path] = tasks }
+            }
+            await MainActor.run {
+                self?.projectMeta = metaMap
+                self?.projectTasks = taskMap
+            }
+        }
+    }
+
+    func applyTemplate(_ template: LaunchTemplate, to projectPath: String) {
+        do {
+            try ProjectMetaStore.applyTemplate(template, to: projectPath)
+            projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+        } catch {
+            todoError = "Couldn't apply template: \(error.localizedDescription)"
+        }
+    }
+
+    func clearTemplate(for projectPath: String) {
+        var m = meta(for: projectPath)
+        m.templateId = nil
+        m.currentStageId = nil
+        m.stageStartedAt = nil
+        m.checkedExitCriteria = []
+        try? ProjectMetaStore.write(projectPath, meta: m)
+        projectMeta[projectPath] = m
+    }
+
+    func setStage(_ stageId: String, for projectPath: String) {
+        try? ProjectMetaStore.setStage(stageId, for: projectPath)
+        projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+    }
+
+    func toggleExitCriterion(_ criterion: String, stageId: String, for projectPath: String) {
+        try? ProjectMetaStore.toggleExitCriterion(criterion, stageId: stageId, for: projectPath)
+        projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+    }
+
+    func addTask(
+        projectPath: String,
+        title: String,
+        category: TaskCategory = .other,
+        stage: String? = nil,
+        notes: String? = nil
+    ) {
+        do {
+            _ = try TaskStore.add(
+                projectPath: projectPath, title: title,
+                category: category, stage: stage, notes: notes,
+                source: .local
+            )
+            projectTasks[projectPath] = TaskStore.read(projectPath)
+            todoError = nil
+        } catch {
+            todoError = "Couldn't add task: \(error.localizedDescription)"
+        }
+    }
+
+    func setTaskStatus(projectPath: String, id: String, status: TaskStatus) {
+        try? TaskStore.setStatus(projectPath: projectPath, id: id, status: status)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+    }
+
+    func deleteTask(projectPath: String, id: String) {
+        try? TaskStore.delete(projectPath: projectPath, id: id)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+    }
+
+    func updateTask(projectPath: String, _ task: TaskItem) {
+        try? TaskStore.update(projectPath: projectPath, task)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+    }
+
+    /// Days since the project's roadmap (if any) was last edited.
+    func roadmapAgeDays(for projectPath: String) -> Int? {
+        ProjectMetaStore.roadmapAgeDays(in: projectPath)
+    }
+
+    func roadmapPath(for projectPath: String) -> String? {
+        ProjectMetaStore.discoverRoadmap(in: projectPath)
     }
 
     // MARK: - Recent commits feed
