@@ -57,12 +57,12 @@ struct ProductTabView: View {
             .buttonStyle(.borderless)
             .help("Open in default browser")
             Menu {
-                Button("Edit one-pager") { openMd("\(project.path)/docs/devdash/one-pager.md") }
-                Button("Edit goals & KPIs") { openMd("\(project.path)/docs/devdash/goals.md") }
-                Button("Edit ideas") { openMd("\(project.path)/docs/devdash/ideas.md") }
+                Button("Edit overview") { openFile("\(project.path)/docs/devdash/sections/overview.html") }
+                Button("Edit goals & KPIs") { openFile("\(project.path)/docs/devdash/sections/goals.html") }
+                Button("Edit ideas") { openFile("\(project.path)/docs/devdash/sections/ideas.html") }
                 Divider()
-                Button("New PRD…") { newDoc(at: "\(project.path)/docs/devdash/prds", suggested: "prd-feature.md") }
-                Button("New document…") { newDoc(at: "\(project.path)/docs/devdash/documents", suggested: "doc.md") }
+                Button("New PRD…") { newDoc(at: "\(project.path)/docs/devdash/prds", suggested: "prd-feature.html") }
+                Button("New document…") { newDoc(at: "\(project.path)/docs/devdash/documents", suggested: "doc.html") }
             } label: {
                 Image(systemName: "pencil.and.outline")
             }
@@ -103,7 +103,7 @@ struct ProductTabView: View {
         lastRegenAt = Date()
     }
 
-    private func openMd(_ path: String) {
+    private func openFile(_ path: String) {
         store.pendingFilePath = path
         store.detailTab = .files
     }
@@ -112,9 +112,18 @@ struct ProductTabView: View {
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         let target = "\(folder)/\(suggested)"
         if !FileManager.default.fileExists(atPath: target) {
-            let stub = "# \((suggested as NSString).deletingPathExtension)\n\n_Drafted by DevDash. Edit me._\n"
+            let title = (suggested as NSString).deletingPathExtension
+            let stub = """
+            <h2>\(title)</h2>
+            <p class="meta"><em>Drafted by DevDash. Edit me at <code>\(target)</code>.</em></p>
+
+            <div class="card">
+              <h3>Section</h3>
+              <p>Write your content here.</p>
+            </div>
+            """
             try? stub.write(toFile: target, atomically: true, encoding: .utf8)
         }
-        openMd(target)
+        openFile(target)
     }
 }

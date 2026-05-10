@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- managed by devdash — content comes from sibling .md files; this file is regenerated -->
+<meta charset="utf-8">
+<title>dev-dash — Product</title>
+<style>
+  :root { --bg: #0f1115; --fg: #e8e8ec; --muted: #9aa0a8; --accent: #5ac8fa;
+          --border: #23262d; --card: #181a1f; --code: #1c1f26; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #ffffff; --fg: #1c1c1e; --muted: #6e6e73; --accent: #007aff;
+            --border: #e5e5ea; --card: #f7f7f9; --code: #f1f3f5; }
+  }
+  html, body { background: var(--bg); color: var(--fg); margin: 0; padding: 0;
+               font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+               line-height: 1.55; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 28px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .crumbs { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
+             margin-bottom: 22px; padding-bottom: 0; position: sticky; top: 0; background: var(--bg);
+             z-index: 5; padding-top: 4px; }
+  nav.tabs .tab { background: transparent; color: var(--muted); border: 0;
+                  padding: 8px 12px; font: inherit; cursor: pointer; border-radius: 6px 6px 0 0;
+                  border-bottom: 2px solid transparent; }
+  nav.tabs .tab:hover { color: var(--fg); }
+  nav.tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  h2 { font-size: 18px; margin-top: 32px; margin-bottom: 8px; }
+  h3 { font-size: 15px; margin-top: 22px; margin-bottom: 6px; }
+  p { margin: 8px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { background: var(--code); border-radius: 4px; }
+  code { padding: 1px 5px; font-size: 12px; }
+  pre { padding: 10px 12px; overflow-x: auto; font-size: 12px; }
+  ul { padding-left: 22px; }
+  li { margin: 3px 0; }
+  blockquote { border-left: 3px solid var(--border); padding: 4px 12px; color: var(--muted);
+               margin: 6px 0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px 18px; margin: 12px 0; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+          background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+  .pill.done { color: #2ecc71; border-color: rgba(46,204,113,0.4); }
+  .pill.current { color: var(--accent); border-color: rgba(90,200,250,0.4); }
+  .pill.pending { color: var(--muted); }
+  .file-list { display: grid; gap: 8px; }
+  .file-link { display: flex; justify-content: space-between; align-items: center;
+               padding: 10px 14px; background: var(--card); border: 1px solid var(--border);
+               border-radius: 8px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+       letter-spacing: 0.5px; }
+  .empty { color: var(--muted); font-style: italic; padding: 14px 0; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>dev-dash</h1>
+    <div class="crumbs">
+      Methodology: <strong>Personal Tool</strong>
+       · Stage: <strong>Identify the itch</strong>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="roadmap">Roadmap</button>
+      <button class="tab" data-tab="initiatives">Initiatives</button>
+      <button class="tab" data-tab="goals">Goals &amp; KPIs</button>
+      <button class="tab" data-tab="ideas">Ideas</button>
+      <button class="tab" data-tab="prds">PRDs</button>
+      <button class="tab" data-tab="documents">Documents</button>
+    </nav>
+  <section id="tab-overview" class="tab-pane active">
+    <!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>:root { color-scheme: light dark; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 28px 36px;
+    max-width: 820px;
+    color: -apple-system-text;
+}
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin-top: 1.6em; margin-bottom: 0.5em; }
+h1 { font-size: 1.9em; border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding-bottom: 0.3em; }
+h2 { font-size: 1.45em; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); padding-bottom: 0.25em; }
+h3 { font-size: 1.15em; }
+p { margin: 0.5em 0 0.9em; }
+a { color: -apple-system-blue; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+}
+pre {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+}
+pre code { background: transparent; padding: 0; font-size: 12px; }
+blockquote {
+    margin: 0.6em 0;
+    padding: 0.4em 0.9em;
+    border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+    color: color-mix(in srgb, currentColor 75%, transparent);
+}
+ul, ol { padding-left: 1.5em; margin: 0.4em 0 0.9em; }
+li { margin: 0.15em 0; }
+hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent); margin: 1.6em 0; }</style>
+</head>
+<body>
+<h1>dev-dash — One-pager</h1>
+<h2>What is it?</h2>
+<p>_One sentence: what does this project do?_</p>
+<h2>Who's it for?</h2>
+<p>_Specific. Role + situation._</p>
+<h2>Why now?</h2>
+<p>_What's changed that makes this the right time?_</p>
+<h2>What it is <em>not</em></h2>
+<p>_Out-of-scope. The features you're consciously not building._</p>
+<h2>How will we know it's working?</h2>
+<p>_Activation / retention / revenue / qualitative signal._</p>
+</body>
+</html>
+  </section>
+  <section id="tab-roadmap" class="tab-pane">
+    <!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>:root { color-scheme: light dark; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 28px 36px;
+    max-width: 820px;
+    color: -apple-system-text;
+}
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin-top: 1.6em; margin-bottom: 0.5em; }
+h1 { font-size: 1.9em; border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding-bottom: 0.3em; }
+h2 { font-size: 1.45em; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); padding-bottom: 0.25em; }
+h3 { font-size: 1.15em; }
+p { margin: 0.5em 0 0.9em; }
+a { color: -apple-system-blue; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+}
+pre {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+}
+pre code { background: transparent; padding: 0; font-size: 12px; }
+blockquote {
+    margin: 0.6em 0;
+    padding: 0.4em 0.9em;
+    border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+    color: color-mix(in srgb, currentColor 75%, transparent);
+}
+ul, ol { padding-left: 1.5em; margin: 0.4em 0 0.9em; }
+li { margin: 0.15em 0; }
+hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent); margin: 1.6em 0; }</style>
+</head>
+<body>
+<p><!-- managed by devdash — edit answers/exit criteria in the dashboard, not this file --></p>
+<h1>dev-dash — Roadmap</h1>
+<blockquote><p><strong>Methodology:</strong> Personal Tool</p></blockquote>
+<blockquote><p><strong>Current stage:</strong> Identify the itch</p></blockquote>
+<p>_You are the user. Build for yourself, use it daily, fix what actually annoys you (not what you imagine will annoy other people). Resist polishing for an audience that doesn't exist. If it ends up useful to others, that's a bonus — not the goal._</p>
+<h2>Progress</h2>
+<ul>
+<li>▶︎ <strong>Identify the itch</strong> — 0/3 exit criteria</li>
+<li>◯ <strong>Sketch the smallest version</strong> — 0/3 exit criteria</li>
+<li>◯ <strong>Live with it</strong> — 0/3 exit criteria</li>
+<li>◯ <strong>Refine the parts that hurt</strong> — 0/3 exit criteria</li>
+<li>◯ <strong>Maybe share it</strong> — 0/3 exit criteria</li>
+</ul>
+<hr>
+<h2>Identify the itch — _in progress_</h2>
+<p><strong>Purpose:</strong> Pin down the recurring annoyance. Personal tools work when they fix something real for you, not something speculative.</p>
+<blockquote><p>If you can't name the moment of annoyance, you don't have an itch yet — you have a curiosity. Wait for the itch.</p></blockquote>
+<h3>Questions (4/5 answered)</h3>
+<p><strong>What's the specific moment that annoys you?</strong></p>
+<blockquote><p>Switching between many local dev projects and not knowing which is running, on what port, what AI sessions exist, what tasks are pending — context-loss when bouncing between projects daily.</p></blockquote>
+<p><strong>How often does it happen — daily, weekly, monthly?</strong></p>
+<blockquote><p>Daily, multiple times per day.</p></blockquote>
+<p><strong>What's your current workaround — and why is it bad enough to replace?</strong></p>
+<blockquote><p>Manually checking lsof, opening terminals per project, hunting for resume commands in ~/.claude. Slow and breaks flow.</p></blockquote>
+<p><strong>Is this actually a tool problem, or a habit problem?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What's the rough shape of the fix in your head?</strong></p>
+<blockquote><p>Native macOS dashboard that auto-discovers running dev servers, shows them with previews, integrates Claude session resume, and tracks per-project tasks/state.</p></blockquote>
+<h3>Exit criteria</h3>
+<ul>
+<li>[ ] The annoyance written in one sentence</li>
+<li>[ ] Frequency known (you've actually counted, not guessed)</li>
+<li>[ ] Rough shape of the fix sketched</li>
+</ul>
+<hr>
+<h2>Sketch the smallest version — _pending_</h2>
+<p><strong>Purpose:</strong> Build the crappiest possible version that solves the itch. No polish. No edge cases. No options. Make it work for you, today, in your one workflow.</p>
+<blockquote><p>Hardcode everything. Skip auth. Skip config. Skip UI niceties. The goal is to use it, not to ship it.</p></blockquote>
+<h3>Questions (2/5 answered)</h3>
+<p><strong>What's the dumbest possible version that works?</strong></p>
+<blockquote><p>Sidebar of running services + heatmap home + click to preview localhost URL in WKWebView.</p></blockquote>
+<p><strong>What can be hardcoded for now (paths, names, choices)?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What's the one workflow it must support?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What's NOT in v0 (write it down so you don't sneak it in)?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>Where will it live — local script, menu bar app, web page on localhost?</strong></p>
+<blockquote><p>Native macOS app (SPM executable) with menu bar extra + main window.</p></blockquote>
+<h3>Exit criteria</h3>
+<ul>
+<li>[ ] It runs on your machine</li>
+<li>[ ] It solves the itch in your one workflow</li>
+<li>[ ] You haven't added a single feature beyond the itch</li>
+</ul>
+<h3>Tasks</h3>
+<ul>
+<li>[x] Build native macOS app _(Engineering)_</li>
+<li>[x] Wire up project tracker _(Engineering)_</li>
+</ul>
+<hr>
+<h2>Live with it — _pending_</h2>
+<p><strong>Purpose:</strong> Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.</p>
+<blockquote><p>Don't open the editor for 1-2 weeks. Just use it. Take notes when something annoys you. The notes become the refine list.</p></blockquote>
+<h3>Questions (0/4 answered)</h3>
+<p><strong>Have you actually used it for the original itch this week?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What new annoyances have you noticed (be specific)?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What feature did you almost add — and is the urge real or imagined?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What's missing that genuinely blocks you, vs. nice-to-have?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<h3>Exit criteria</h3>
+<ul>
+<li>[ ] Used daily/weekly for at least 1-2 weeks</li>
+<li>[ ] Friction list written (real annoyances, not imagined ones)</li>
+<li>[ ] Nothing added during this stage</li>
+</ul>
+<h3>Tasks</h3>
+<ul>
+<li>[/] Initiative: Dogfood dev-dash on dev-dash itself _(Ops)_</li>
+<li>[/] Apply personal-tool template + populate task DB _(Ops)_</li>
+<li>[ ] Use dev-dash for a week and file friction items _(Research)_</li>
+<li>[ ] Initiative: QA & verification pass _(QA)_</li>
+<li>[ ] Verify chat sheet auto-fills question + persists across restarts _(QA)_</li>
+<li>[ ] Test session detail view from both Home and Claude tab _(QA)_</li>
+<li>[ ] Verify ROADMAP.md generation matches stage state across all mutations _(QA)_</li>
+<li>[ ] Test legacy root-level ROADMAP.md cleanup on first regeneration _(QA)_</li>
+<li>[ ] Run provider detection against 5+ real projects, verify accuracy _(QA)_</li>
+<li>[ ] Test validation runner on a real project _(QA)_</li>
+<li>[ ] Verify legacy todos.json migration to tasks.json _(QA)_</li>
+<li>[ ] Test back/forward navigation across all selection types _(QA)_</li>
+<li>[ ] Verify Suggest-tasks parser robustness across TASK: line variations _(QA)_</li>
+<li>[ ] Verify Swift / Apple platform project detection _(QA)_</li>
+<li>[/] Initiative: Living product document (HTML hub) _(Engineering)_</li>
+<li>[/] ProductDocGenerator: emit docs/devdash/index.html with tabs _(Engineering)_</li>
+<li>[ ] ProductTabView: render the living doc in-app _(Engineering)_</li>
+</ul>
+<hr>
+<h2>Refine the parts that hurt — _pending_</h2>
+<p><strong>Purpose:</strong> Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.</p>
+<blockquote><p>Sort the friction list by frequency × pain. Fix the top 3. Stop. Use it again.</p></blockquote>
+<h3>Questions (0/4 answered)</h3>
+<p><strong>What's the #1 friction point — and is it about correctness, speed, or ergonomics?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>Are you fixing real friction, or rebuilding because you're bored?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What would make this 50% better in daily use?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What can you delete — features you added that you don't use?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<h3>Exit criteria</h3>
+<ul>
+<li>[ ] Top 3 friction points fixed</li>
+<li>[ ] Unused features deleted (yes, deleted)</li>
+<li>[ ] Tool still solves the original itch</li>
+</ul>
+<h3>Tasks</h3>
+<ul>
+<li>[ ] Initiative: Bugs & paper cuts _(Engineering)_</li>
+<li>[ ] Suggest-tasks prompt should reference user's saved guiding-question answers _(Engineering)_</li>
+<li>[ ] Per-task Run-with-Claude needs a visible button (not hover-only) _(Design)_</li>
+<li>[ ] Health check defaults handle pnpm/yarn/bun/python _(Engineering)_</li>
+<li>[ ] Stage advance should warn when validation checks failing _(Engineering)_</li>
+<li>[ ] Streaming chat replies should render markdown _(Engineering)_</li>
+<li>[ ] Roadmap freshness should detect newly-answered questions, not just file mtime _(Engineering)_</li>
+<li>[ ] Initiative: Missing UX affordances _(Design)_</li>
+<li>[ ] GitHub issues read-mirror in unified task list _(Engineering)_</li>
+<li>[ ] Drag-to-reorder tasks within a stage _(Engineering)_</li>
+<li>[ ] Per-task notes UI _(Design)_</li>
+<li>[ ] Run-all-suggestions button after a suggest run _(Engineering)_</li>
+<li>[ ] AI assist per doc section _(Engineering)_</li>
+<li>[ ] Per-section editor inside the Product tab (vs hopping to Files) _(Design)_</li>
+</ul>
+<hr>
+<h2>Maybe share it — _pending_</h2>
+<p><strong>Purpose:</strong> Optional. If it's useful to others without contorting your life, share it. If sharing means meetings, support, and feature debates — don't.</p>
+<blockquote><p>Share at the level you can sustain. A README and a tweet is fine. Anything more is a commitment, treat it as one.</p></blockquote>
+<h3>Questions (0/5 answered)</h3>
+<p><strong>Is sharing this going to obligate you (PRs, issues, support)?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>What's the smallest possible share — gist, tweet, README, package?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>Who would actually find this useful — not theoretical, real people?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>Are you ready to say no to feature requests that aren't your itch?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<p><strong>Or — should you just keep it private and free?</strong></p>
+<blockquote><p>_unanswered_</p></blockquote>
+<h3>Exit criteria</h3>
+<ul>
+<li>[ ] Decision made: keep private, or share at level X</li>
+<li>[ ] If sharing: README written, repo public, audience told</li>
+<li>[ ] If keeping private: that's also a valid endpoint — close the project</li>
+</ul>
+<h3>Tasks</h3>
+<ul>
+<li>[ ] Initiative: Future bets _(Engineering)_</li>
+<li>[ ] Custom user templates (.devdash/templates/<id>.yaml) _(Engineering)_</li>
+<li>[ ] Provider spending APIs (Stripe usage / Vercel billing) _(Research)_</li>
+<li>[ ] Spawn agentic Claude session for task (vs current claude -p one-shot) _(Engineering)_</li>
+<li>[ ] Cost guardrails — token / dollar caps per project _(Engineering)_</li>
+</ul>
+<hr>
+<p>_Last updated: 2026-05-10T18:21:19Z_</p>
+</body>
+</html>
+  </section>
+  <section id="tab-initiatives" class="tab-pane">
+    <div class="card">
+<h3>Initiative: Dogfood dev-dash on dev-dash itself</h3>
+<p class="meta">0/2 tasks complete · Ops</p>
+<p>Use the dashboard for a week, capture friction in this list before adding new features. Children = milestones.</p>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill current">In progress</span></td><td>Apply personal-tool template + populate task DB</td><td class="meta">Ops</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Use dev-dash for a week and file friction items</td><td class="meta">Research</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Initiative: Bugs &amp; paper cuts</h3>
+<p class="meta">0/6 tasks complete · Engineering</p>
+<p>Polish + correctness items found during dogfooding. Mostly engineering.</p>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill pending">Open</span></td><td>Suggest-tasks prompt should reference user's saved guiding-question answers</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Per-task Run-with-Claude needs a visible button (not hover-only)</td><td class="meta">Design</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Health check defaults handle pnpm/yarn/bun/python</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Stage advance should warn when validation checks failing</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Streaming chat replies should render markdown</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Roadmap freshness should detect newly-answered questions, not just file mtime</td><td class="meta">Engineering</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Initiative: Missing UX affordances</h3>
+<p class="meta">0/4 tasks complete · Design</p>
+<p>Functionality the model already supports but UI doesn't expose. Mostly design + engineering.</p>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill pending">Open</span></td><td>GitHub issues read-mirror in unified task list</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Drag-to-reorder tasks within a stage</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Per-task notes UI</td><td class="meta">Design</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Run-all-suggestions button after a suggest run</td><td class="meta">Engineering</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Initiative: Future bets</h3>
+<p class="meta">0/4 tasks complete · Engineering</p>
+<p>Larger unscoped bets. Don't start until current stage is complete and there's signal these are worth it.</p>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill pending">Open</span></td><td>Custom user templates (.devdash/templates/&lt;id&gt;.yaml)</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Provider spending APIs (Stripe usage / Vercel billing)</td><td class="meta">Research</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Spawn agentic Claude session for task (vs current claude -p one-shot)</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Cost guardrails — token / dollar caps per project</td><td class="meta">Engineering</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Initiative: QA &amp; verification pass</h3>
+<p class="meta">0/10 tasks complete · QA</p>
+<p>Manual verification of every flow in the dashboard. Each child is a discrete test case.</p>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill pending">Open</span></td><td>Verify chat sheet auto-fills question + persists across restarts</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test session detail view from both Home and Claude tab</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify ROADMAP.md generation matches stage state across all mutations</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test legacy root-level ROADMAP.md cleanup on first regeneration</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Run provider detection against 5+ real projects, verify accuracy</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test validation runner on a real project</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify legacy todos.json migration to tasks.json</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test back/forward navigation across all selection types</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify Suggest-tasks parser robustness across TASK: line variations</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify Swift / Apple platform project detection</td><td class="meta">QA</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Initiative: Living product document (HTML hub)</h3>
+<p class="meta">0/4 tasks complete · Engineering</p>
+<p>HTML living document at docs/devdash/index.html with tabs for Roadmap, Initiatives, Goals/KPIs, Ideas, 1-pager, PRDs, Documents. Markdown-source-of-truth, regenerated HTML.</p>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill current">In progress</span></td><td>ProductDocGenerator: emit docs/devdash/index.html with tabs</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>ProductTabView: render the living doc in-app</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>AI assist per doc section</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Per-section editor inside the Product tab (vs hopping to Files)</td><td class="meta">Design</td></tr>
+</tbody></table>
+</div>
+  </section>
+  <section id="tab-goals" class="tab-pane">
+    <!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>:root { color-scheme: light dark; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 28px 36px;
+    max-width: 820px;
+    color: -apple-system-text;
+}
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin-top: 1.6em; margin-bottom: 0.5em; }
+h1 { font-size: 1.9em; border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding-bottom: 0.3em; }
+h2 { font-size: 1.45em; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); padding-bottom: 0.25em; }
+h3 { font-size: 1.15em; }
+p { margin: 0.5em 0 0.9em; }
+a { color: -apple-system-blue; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+}
+pre {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+}
+pre code { background: transparent; padding: 0; font-size: 12px; }
+blockquote {
+    margin: 0.6em 0;
+    padding: 0.4em 0.9em;
+    border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+    color: color-mix(in srgb, currentColor 75%, transparent);
+}
+ul, ol { padding-left: 1.5em; margin: 0.4em 0 0.9em; }
+li { margin: 0.15em 0; }
+hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent); margin: 1.6em 0; }</style>
+</head>
+<body>
+<h1>dev-dash — Goals & KPIs</h1>
+<h2>North-star metric</h2>
+<p>_The one number that tells you the project is healthy._</p>
+<h2>Quarter goals</h2>
+<ul>
+<li>_Goal 1_</li>
+<li>_Goal 2_</li>
+<li>_Goal 3_</li>
+</ul>
+<h2>Tracked KPIs</h2>
+<p>| Metric | Current | Target | Notes | | --- | --- | --- | --- | | _e.g. weekly active users_ | _?_ | _?_ | _?_ |</p>
+</body>
+</html>
+  </section>
+  <section id="tab-ideas" class="tab-pane">
+    <!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>:root { color-scheme: light dark; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 28px 36px;
+    max-width: 820px;
+    color: -apple-system-text;
+}
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin-top: 1.6em; margin-bottom: 0.5em; }
+h1 { font-size: 1.9em; border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding-bottom: 0.3em; }
+h2 { font-size: 1.45em; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); padding-bottom: 0.25em; }
+h3 { font-size: 1.15em; }
+p { margin: 0.5em 0 0.9em; }
+a { color: -apple-system-blue; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+}
+pre {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+}
+pre code { background: transparent; padding: 0; font-size: 12px; }
+blockquote {
+    margin: 0.6em 0;
+    padding: 0.4em 0.9em;
+    border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+    color: color-mix(in srgb, currentColor 75%, transparent);
+}
+ul, ol { padding-left: 1.5em; margin: 0.4em 0 0.9em; }
+li { margin: 0.15em 0; }
+hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent); margin: 1.6em 0; }</style>
+</head>
+<body>
+<h1>Ideas</h1>
+<p>_Parking lot for things you don't want to lose track of but aren't ready to commit to. Promote to a task or PRD when an idea is ripe._</p>
+<h2>Maybe later</h2>
+<ul>
+<li>_Idea 1_</li>
+<li>_Idea 2_</li>
+</ul>
+</body>
+</html>
+  </section>
+  <section id="tab-prds" class="tab-pane">
+    <p class="empty">No PRDs yet. Add markdown files to docs/devdash/prds/.</p>
+  </section>
+  <section id="tab-documents" class="tab-pane">
+    <p class="empty">No documents yet. Drop architecture notes, decision logs, etc. into docs/devdash/documents/.</p>
+  </section>
+  </div>
+  <script>
+    (function() {
+      var btns = document.querySelectorAll('nav.tabs .tab');
+      var panes = document.querySelectorAll('.tab-pane');
+      btns.forEach(function(b) {
+        b.addEventListener('click', function() {
+          btns.forEach(function(x) { x.classList.remove('active'); });
+          panes.forEach(function(p) { p.classList.remove('active'); });
+          b.classList.add('active');
+          var t = document.getElementById('tab-' + b.dataset.tab);
+          if (t) t.classList.add('active');
+          if (history && history.replaceState) {
+            history.replaceState(null, '', '#' + b.dataset.tab);
+          }
+        });
+      });
+      // Open from hash if present
+      var hash = (location.hash || '').replace('#', '');
+      if (hash) {
+        var b = document.querySelector('nav.tabs .tab[data-tab="' + hash + '"]');
+        if (b) b.click();
+      }
+    })();
+  </script>
+</body>
+</html>
