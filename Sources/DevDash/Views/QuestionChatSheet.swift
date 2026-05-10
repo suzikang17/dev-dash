@@ -40,7 +40,17 @@ struct QuestionChatSheet: View {
         .frame(minWidth: 640, idealWidth: 720, minHeight: 520, idealHeight: 640)
         .onAppear {
             messages = QuestionChatStore.read(projectPath, stageId: stage.id, question: question)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { inputFocused = true }
+            // First open with no prior conversation — auto-send the question
+            // as the kickoff so Claude responds immediately with project + stage
+            // context already attached.
+            if messages.isEmpty {
+                draft = question
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    send()
+                }
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { inputFocused = true }
+            }
         }
         .onDisappear {
             streamTask?.cancel()

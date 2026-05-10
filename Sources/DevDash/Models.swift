@@ -170,9 +170,14 @@ struct Todo: Identifiable, Codable, Hashable {
 // MARK: - Structured tasks (v2: stage + category + source)
 
 enum TaskCategory: String, Codable, CaseIterable, Hashable {
-    case engineering, design, content, marketing, distribution, ops, research, other
+    case engineering, design, content, marketing, distribution, ops, research, qa, other
 
-    var label: String { rawValue.capitalized }
+    var label: String {
+        switch self {
+        case .qa: return "QA"
+        default: return rawValue.capitalized
+        }
+    }
     var systemImage: String {
         switch self {
         case .engineering: return "hammer"
@@ -182,6 +187,7 @@ enum TaskCategory: String, Codable, CaseIterable, Hashable {
         case .distribution: return "shippingbox"
         case .ops: return "gearshape.2"
         case .research: return "magnifyingglass"
+        case .qa: return "checkmark.shield"
         case .other: return "circle.dashed"
         }
     }
@@ -194,6 +200,7 @@ enum TaskCategory: String, Codable, CaseIterable, Hashable {
         case .distribution: return "teal"
         case .ops: return "gray"
         case .research: return "indigo"
+        case .qa: return "red"
         case .other: return "secondary"
         }
     }

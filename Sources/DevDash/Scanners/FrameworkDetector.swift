@@ -23,6 +23,10 @@ enum FrameworkDetector {
         "Bun": "#fbf0df",
         "Go": "#00add8",
         "Rust": "#dea584",
+        "Swift Package": "#f05138",
+        "macOS App": "#f05138",
+        "iOS App": "#0a84ff",
+        "Xcode": "#147efb",
         "MongoDB": "#47a248",
         "PostgreSQL": "#336791",
         "Redis": "#dc382d",
@@ -115,6 +119,8 @@ enum FrameworkDetector {
         if fm.fileExists(atPath: "\(path)/pyproject.toml") || fm.fileExists(atPath: "\(path)/requirements.txt") {
             return "Python"
         }
+        // Swift / Apple platforms
+        if let swiftFramework = detectSwiftFramework(at: path) { return swiftFramework }
         return "Unknown"
     }
 
@@ -126,11 +132,45 @@ enum FrameworkDetector {
             ("pyproject.toml", "python"),
             ("requirements.txt", "python"),
             ("Cargo.toml", "rust"),
-            ("Gemfile", "ruby")
+            ("Gemfile", "ruby"),
+            ("Package.swift", "swift")
         ]
         for (file, stack) in checks where fm.fileExists(atPath: "\(path)/\(file)") {
             return stack
         }
+        // Xcode projects/workspaces are directories with extensions; scan for them.
+        if let entries = try? fm.contentsOfDirectory(atPath: path) {
+            if entries.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) {
+                return "swift"
+            }
+        }
         return nil
+    }
+
+    /// Inspect Package.swift / xcodeproj sibling to choose between
+    /// "Swift Package", "macOS App", "iOS App", or "Xcode" (mixed/unknown).
+    private static func detectSwiftFramework(at path: String) -> String? {
+        let fm = FileManager.default
+        let pkgSwift = "\(path)/Package.swift"
+        let hasPkg = fm.fileExists(atPath: pkgSwift)
+        let hasXcode: Bool
+        if let entries = try? fm.contentsOfDirectory(atPath: path) {
+            hasXcode = entries.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") })
+        } else {
+            hasXcode = false
+        }
+        guard hasPkg || hasXcode else { return nil }
+
+        if hasPkg, let raw = try? String(contentsOfFile: pkgSwift, encoding: .utf8) {
+            // Crude but adequate platform sniff. .iOS / .macOS / .tvOS / etc.
+            let hasIOS = raw.contains(".iOS(") || raw.contains(".iOS,")
+            let hasMac = raw.contains(".macOS(") || raw.contains(".macOS,")
+            if hasIOS && !hasMac { return "iOS App" }
+            if hasMac && !hasIOS { return "macOS App" }
+            // Has .executable product → likely an app, otherwise a library.
+            if raw.contains(".executable(") { return "macOS App" }
+            return "Swift Package"
+        }
+        return "Xcode"
     }
 }
