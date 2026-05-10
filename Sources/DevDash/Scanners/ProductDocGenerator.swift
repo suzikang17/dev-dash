@@ -476,7 +476,7 @@ enum ProductDocGenerator {
               <li>☐ <em>Goal 2</em></li>
               <li>☐ <em>Goal 3</em></li>
             </ul>
-            <button data-action="dom-insert-template" data-template="checklist-item" data-target="ul.checklist" class="add-btn" contenteditable="false">+ Add goal</button>
+            \(ProductDocAssets.addBtn(label: "+ Add goal", html: "<li>☐ <em>New goal</em></li>"))
 
             <h3>Tracked KPIs</h3>
             <div class="kpi-grid kpi-tracked">
@@ -499,7 +499,7 @@ enum ProductDocGenerator {
                 <div class="k-delta">—</div>
               </div>
             </div>
-            <button data-action="dom-append-template" data-template="kpi" data-target=".kpi-tracked" class="add-btn" contenteditable="false">+ Add KPI tile</button>
+            \(ProductDocAssets.addBtn(label: "+ Add KPI tile", html: "<div class=\"kpi\"><div class=\"k-label\">New KPI</div><div class=\"k-value\">—</div><div class=\"k-target\">target: —</div><div class=\"k-delta\">—</div></div>"))
 
             <h3>Detailed metrics</h3>
             <table>
@@ -509,7 +509,7 @@ enum ProductDocGenerator {
                 <tr><td><em>activation rate</em></td><td>—</td><td>—</td><td>—</td></tr>
               </tbody>
             </table>
-            <button data-action="dom-append-template" data-template="metric-row" data-target="tbody" class="add-btn" contenteditable="false">+ Add metric</button>
+            \(ProductDocAssets.addBtn(label: "+ Add metric", html: "<tr><td><em>new metric</em></td><td>—</td><td>—</td><td>—</td></tr>"))
             """
         case .ideas:
             return """
