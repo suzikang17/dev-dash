@@ -468,7 +468,7 @@ enum ProductDocGenerator {
               <li>☐ <em>Goal 2</em></li>
               <li>☐ <em>Goal 3</em></li>
             </ul>
-            <button data-action="dom-insert-template" data-template="checklist-item" data-target="ul.checklist" class="add-btn">+ Add goal</button>
+            <button data-action="dom-insert-template" data-template="checklist-item" data-target="ul.checklist" class="add-btn" contenteditable="false">+ Add goal</button>
 
             <h3>Tracked KPIs</h3>
             <div class="kpi-grid">
@@ -491,7 +491,7 @@ enum ProductDocGenerator {
                 <div class="k-delta">—</div>
               </div>
             </div>
-            <button data-action="dom-insert-template" data-template="kpi" data-target=".kpi-grid:nth-of-type(2)" class="add-btn">+ Add KPI tile</button>
+            <button data-action="dom-insert-template" data-template="kpi" data-target=".kpi-grid:nth-of-type(2)" class="add-btn" contenteditable="false">+ Add KPI tile</button>
 
             <h3>Detailed metrics</h3>
             <table>
@@ -501,7 +501,7 @@ enum ProductDocGenerator {
                 <tr><td><em>activation rate</em></td><td>—</td><td>—</td><td>—</td></tr>
               </tbody>
             </table>
-            <button data-action="dom-append-template" data-template="metric-row" data-target="tbody" class="add-btn">+ Add metric</button>
+            <button data-action="dom-append-template" data-template="metric-row" data-target="tbody" class="add-btn" contenteditable="false">+ Add metric</button>
             """
         case .ideas:
             return """
@@ -517,17 +517,17 @@ enum ProductDocGenerator {
                 <h4>Quick wins <span class="meta">low effort, real value</span></h4>
                 <div class="item"><span class="tag">eng</span> <em>Idea 1</em></div>
                 <div class="item"><span class="tag">design</span> <em>Idea 2</em></div>
-                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=quick-wins]" class="add-btn">+ Idea</button>
+                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=quick-wins]" class="add-btn" contenteditable="false">+ Idea</button>
               </div>
               <div class="col" data-col="big-bets">
                 <h4>Big bets <span class="meta">larger investment</span></h4>
                 <div class="item"><span class="tag">research</span> <em>Idea 3</em></div>
-                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=big-bets]" class="add-btn">+ Idea</button>
+                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=big-bets]" class="add-btn" contenteditable="false">+ Idea</button>
               </div>
               <div class="col" data-col="maybe-later">
                 <h4>Maybe later <span class="meta">parked</span></h4>
                 <div class="item"><span class="tag">marketing</span> <em>Idea 4</em></div>
-                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=maybe-later]" class="add-btn">+ Idea</button>
+                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=maybe-later]" class="add-btn" contenteditable="false">+ Idea</button>
               </div>
             </div>
             """

@@ -224,6 +224,9 @@ struct ProductWebView: NSViewRepresentable {
             btn.dataset.action = 'dom-append-template';
             btn.dataset.template = template;
             btn.dataset.target = target;
+            // Critical: section is contenteditable, so without this the click
+            // just places the caret inside the button label.
+            btn.contentEditable = 'false';
             return btn;
           }
           function tagWith(el, attr, prefix) {
@@ -273,8 +276,8 @@ struct ProductWebView: NSViewRepresentable {
       }
 
       attachEditing(document);
-      attachActions();
       autoInject(document);
+      attachActions();   // must run after autoInject so injected buttons get handlers
       // Re-attach after tab switches (panes are still in DOM but new buttons may exist)
       document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
         b.addEventListener('click', function() {
