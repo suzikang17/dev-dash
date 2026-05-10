@@ -113,6 +113,30 @@ struct ProductWebView: NSViewRepresentable {
         setTimeout(function() { el.classList.remove('is-saved'); }, 1500);
       }
 
+      // Client-side template library used by data-action="dom-insert-template".
+      // Each template is a plain HTML string. Adding more here is the way to
+      // expand what users can scaffold inside any editable section.
+      var templates = {
+        'kpi': '<div class="kpi"><div class="k-label">New metric</div><div class="k-value">—</div><div class="k-target">target: —</div><div class="k-delta">—</div></div>',
+        'idea-card': '<div class="item"><span class="tag">new</span> <em>New idea — describe it</em></div>',
+        'risk-row': '<tr><td><em>New risk</em></td><td><span class="pill warn">Med</span></td><td><span class="pill risk">High</span></td><td><em>mitigation</em></td></tr>',
+        'metric-row': '<tr><td><em>New metric</em></td><td>—</td><td>—</td><td>—</td></tr>',
+        'decision-entry': '<div class="card"><div class="doc-head"><h3 style="margin:0">D-### · <em>title</em></h3><span class="doc-status meta"><span class="pill warn">Draft</span></span></div><h4>Context</h4><p><em>What forced the decision.</em></p><h4>Decision</h4><p><strong>Picked: …</strong> <em>Why.</em></p></div>',
+        'feature-card': '<div class="card"><h3>New feature</h3><p><em>One sentence.</em></p></div>',
+        'milestone': '<li><div class="t-meta">Week ?</div><div class="t-title">New milestone</div><p><em>Description.</em></p></li>',
+        'checklist-item': '<li>☐ <em>New item</em></li>',
+        'kpi-tile': '<div class="kpi"><div class="k-label">New KPI</div><div class="k-value">—</div><div class="k-target">target: —</div></div>'
+      };
+
+      function findEditableAncestor(el) {
+        var cur = el;
+        while (cur && cur !== document.body) {
+          if (cur.dataset && cur.dataset.sectionFile) return cur;
+          cur = cur.parentElement;
+        }
+        return null;
+      }
+
       // Action routing — any element with [data-action] posts a payload.
       function attachActions() {
         document.querySelectorAll('[data-action]').forEach(function(el) {
@@ -120,8 +144,47 @@ struct ProductWebView: NSViewRepresentable {
           el.dataset.actionAttached = 'true';
           el.addEventListener('click', function(e) {
             e.preventDefault();
-            var payload = { action: el.dataset.action };
-            // Dump every data-* attr on the element into the payload
+            var act = el.dataset.action;
+
+            // Client-side template insertion (no native round-trip needed).
+            if (act === 'dom-insert-template' || act === 'dom-append-template') {
+              var tplKey = el.dataset.template;
+              var targetSel = el.dataset.target;
+              var html = templates[tplKey];
+              if (!html) { console.warn('unknown template', tplKey); return; }
+              var section = findEditableAncestor(el);
+              if (!section) return;
+              var target = targetSel ? section.querySelector(targetSel) : el.parentElement;
+              if (!target) return;
+              var wrap = document.createElement('div');
+              wrap.innerHTML = html.trim();
+              var node = wrap.firstChild;
+              if (act === 'dom-append-template') {
+                target.appendChild(node);
+              } else {
+                target.insertBefore(node, el);
+              }
+              section.classList.add('is-dirty');
+              save(section);
+              return;
+            }
+
+            // Client-side delete: remove a marked element + save.
+            if (act === 'dom-remove-closest') {
+              var sel = el.dataset.target;
+              var sec = findEditableAncestor(el);
+              if (!sec || !sel) return;
+              var victim = el.closest(sel);
+              if (victim) {
+                victim.remove();
+                sec.classList.add('is-dirty');
+                save(sec);
+              }
+              return;
+            }
+
+            // Anything else → native side-effect.
+            var payload = { action: act };
             Object.keys(el.dataset).forEach(function(k) {
               if (k === 'action' || k === 'actionAttached') return;
               payload[k] = el.dataset[k];

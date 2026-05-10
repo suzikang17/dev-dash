@@ -65,6 +65,9 @@ final class DashboardStore: ObservableObject {
     @Published var openSessionId: String? = nil
     /// Path the FilesTab should open. Set then switch detailTab to .files.
     @Published var pendingFilePath: String? = nil
+    /// Open a TaskDetailSheet for this task. Set to nil to dismiss.
+    @Published var openTaskId: String? = nil
+    @Published var openTaskProjectPath: String? = nil
     private var digestTask: Task<Void, Never>?
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta

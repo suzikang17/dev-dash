@@ -27,8 +27,7 @@ enum ProductDocGenerator {
         .init(id: "initiatives",  label: "Initiatives",  source: .generatedHtml(file: "initiatives.html")),
         .init(id: "goals",        label: "Goals & KPIs", source: .userHtml(file: "goals.html")),
         .init(id: "ideas",        label: "Ideas",        source: .userHtml(file: "ideas.html")),
-        .init(id: "prds",         label: "PRDs",         source: .userFolder(rel: "prds")),
-        .init(id: "documents",    label: "Documents",    source: .userFolder(rel: "documents"))
+        .init(id: "artifacts",    label: "Artifacts",    source: .artifactsBrowser)
     ]
 
     struct DocTab {
@@ -41,7 +40,20 @@ enum ProductDocGenerator {
         case userHtml(file: String)        // sections/<file>; user-authored
         case generatedHtml(file: String)   // sections/<file>; we own it
         case userFolder(rel: String)       // collection of .html files
+        case artifactsBrowser              // grouped view of every artifact folder
     }
+
+    /// Folders the generator reads from. Each maps to a label used in the
+    /// Artifacts browser. Order is render order.
+    static let artifactFolders: [(rel: String, label: String, hint: String)] = [
+        ("prd",        "PRDs",                 "Product requirements docs."),
+        ("plans",      "Implementation Plans", "Milestones, timelines, risks."),
+        ("status",     "Status Reports",       "Weekly snapshots."),
+        ("decisions",  "Decisions",            "Append-only decision log."),
+        ("concepts",   "Concept Explainers",   "How something works, for the team."),
+        ("retros",     "Retrospectives",       "What went well, what didn't, what's next."),
+        ("docs",       "Documents",            "Catch-all narrative docs.")
+    ]
 
     @discardableResult
     static func generate(
@@ -54,8 +66,12 @@ enum ProductDocGenerator {
         let folder = folderPath(for: projectPath)
         let sectionsFolder = "\(folder)/sections"
         try? FileManager.default.createDirectory(atPath: sectionsFolder, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(atPath: "\(folder)/prds", withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(atPath: "\(folder)/documents", withIntermediateDirectories: true)
+        // Migrate legacy folders from earlier builds → singular / shorter names.
+        migrateLegacyFolder(from: "\(folder)/prds", to: "\(folder)/prd")
+        migrateLegacyFolder(from: "\(folder)/documents", to: "\(folder)/docs")
+        for (rel, _, _) in artifactFolders {
+            try? FileManager.default.createDirectory(atPath: "\(folder)/\(rel)", withIntermediateDirectories: true)
+        }
 
         // User-authored stubs — only scaffold when missing.
         scaffold(at: "\(sectionsFolder)/overview.html", with: stub(.overview(projectName: projectName)))
@@ -150,7 +166,50 @@ enum ProductDocGenerator {
             return "<p class=\"empty\">No content yet — derived from project state.</p>"
         case .userFolder(let rel):
             return readFolder(at: "\(folderPath(for: projectPath))/\(rel)", relRoot: rel, emptyMsg: emptyMsg(for: rel))
+        case .artifactsBrowser:
+            return renderArtifactsBrowser(projectPath: projectPath)
         }
+    }
+
+    /// One section per artifact folder, each as a collapsible group with
+    /// the file list inside. Empty folders still render so users see what
+    /// types exist.
+    private static func renderArtifactsBrowser(projectPath: String) -> String {
+        var out: [String] = []
+        for (rel, label, hint) in artifactFolders {
+            let folder = "\(folderPath(for: projectPath))/\(rel)"
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: folder))?
+                .filter { $0.hasSuffix(".html") }.sorted() ?? []
+            out.append("<details class=\"card\"\(files.isEmpty ? "" : " open")>")
+            out.append("  <summary><strong>\(escapeHTML(label))</strong> <span class=\"meta\">\(escapeHTML(rel))/ · \(files.count)</span></summary>")
+            out.append("  <p class=\"meta\" style=\"margin-top:6px\">\(escapeHTML(hint))</p>")
+            if files.isEmpty {
+                out.append("  <p class=\"empty\">None yet. Use the toolbar pencil menu → New \(escapeHTML(String(label.dropLast())))…</p>")
+            } else {
+                out.append("  <div class=\"file-list\">")
+                for f in files {
+                    let path = "\(folder)/\(f)"
+                    let body = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+                    let title = extractTitle(from: body) ?? (f as NSString).deletingPathExtension
+                    let relFile = "\(rel)/\(f)"
+                    out.append("""
+                      <details class="card" style="margin-left:8px">
+                        <summary><strong>\(escapeHTML(title))</strong> <span class="meta">\(escapeHTML(f))</span></summary>
+                        <div class="embed" data-section-file="\(relFile)">\(body)</div>
+                      </details>
+                    """)
+                }
+                out.append("  </div>")
+            }
+            out.append("</details>")
+        }
+        return out.joined(separator: "\n")
+    }
+
+    private static func migrateLegacyFolder(from oldPath: String, to newPath: String) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: oldPath), !fm.fileExists(atPath: newPath) else { return }
+        try? fm.moveItem(atPath: oldPath, toPath: newPath)
     }
 
     private static func emptyMsg(for rel: String) -> String {
@@ -409,6 +468,7 @@ enum ProductDocGenerator {
               <li>☐ <em>Goal 2</em></li>
               <li>☐ <em>Goal 3</em></li>
             </ul>
+            <button data-action="dom-insert-template" data-template="checklist-item" data-target="ul.checklist" class="add-btn">+ Add goal</button>
 
             <h3>Tracked KPIs</h3>
             <div class="kpi-grid">
@@ -431,6 +491,7 @@ enum ProductDocGenerator {
                 <div class="k-delta">—</div>
               </div>
             </div>
+            <button data-action="dom-insert-template" data-template="kpi" data-target=".kpi-grid:nth-of-type(2)" class="add-btn">+ Add KPI tile</button>
 
             <h3>Detailed metrics</h3>
             <table>
@@ -440,6 +501,7 @@ enum ProductDocGenerator {
                 <tr><td><em>activation rate</em></td><td>—</td><td>—</td><td>—</td></tr>
               </tbody>
             </table>
+            <button data-action="dom-append-template" data-template="metric-row" data-target="tbody" class="add-btn">+ Add metric</button>
             """
         case .ideas:
             return """
@@ -451,18 +513,21 @@ enum ProductDocGenerator {
             <p class="meta">Promote to a task (Tasks tab) or a PRD (Product → New PRD) when an idea is ripe.</p>
 
             <div class="board">
-              <div class="col">
+              <div class="col" data-col="quick-wins">
                 <h4>Quick wins <span class="meta">low effort, real value</span></h4>
                 <div class="item"><span class="tag">eng</span> <em>Idea 1</em></div>
                 <div class="item"><span class="tag">design</span> <em>Idea 2</em></div>
+                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=quick-wins]" class="add-btn">+ Idea</button>
               </div>
-              <div class="col">
+              <div class="col" data-col="big-bets">
                 <h4>Big bets <span class="meta">larger investment</span></h4>
                 <div class="item"><span class="tag">research</span> <em>Idea 3</em></div>
+                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=big-bets]" class="add-btn">+ Idea</button>
               </div>
-              <div class="col">
+              <div class="col" data-col="maybe-later">
                 <h4>Maybe later <span class="meta">parked</span></h4>
                 <div class="item"><span class="tag">marketing</span> <em>Idea 4</em></div>
+                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=maybe-later]" class="add-btn">+ Idea</button>
               </div>
             </div>
             """
@@ -487,8 +552,12 @@ enum ProductDocGenerator {
         }
         var folder: String {
             switch self {
-            case .prd: return "prds"
-            default:   return "documents"
+            case .prd:                return "prd"
+            case .implementationPlan: return "plans"
+            case .statusReport:       return "status"
+            case .decisionLog:        return "decisions"
+            case .conceptExplainer:   return "concepts"
+            case .retrospective:      return "retros"
             }
         }
         var defaultSlug: String {
@@ -922,6 +991,12 @@ enum ProductDocGenerator {
       .empty { color: var(--muted); font-style: italic; padding: 14px 0; }
       details > summary { cursor: pointer; padding: 6px 0; }
 
+      /* Inline add buttons (data-action="dom-insert-template" etc.) */
+      .add-btn { background: transparent; border: 1px dashed var(--border); color: var(--muted);
+                 padding: 6px 12px; border-radius: 6px; font: inherit; font-size: 12px;
+                 cursor: pointer; margin: 6px 0; }
+      .add-btn:hover { color: var(--accent); border-color: var(--accent); }
+
       /* Bar chart (vanilla, no JS) */
       .bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; padding: 8px 0; }
       .bars .bar { flex: 1; background: color-mix(in srgb, var(--accent) 60%, transparent);
@@ -970,3 +1045,4 @@ enum ProductDocGenerator {
         return out
     }
 }
+
