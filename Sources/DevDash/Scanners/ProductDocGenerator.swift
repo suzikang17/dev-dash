@@ -513,6 +513,16 @@ enum ProductDocGenerator {
             \(ProductDocAssets.addBtn(label: "+ Add metric", html: "<tr><td><em>new metric</em></td><td>—</td><td>—</td><td>—</td></tr>"))
             """
         case .ideas:
+            let ideaCardHTML = "<div class=\"item\"><span class=\"tag\">new</span> <em>New idea — describe it</em></div>"
+            func ideaBtn() -> String {
+                let esc = ideaCardHTML
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "'", with: "\\'")
+                    .replacingOccurrences(of: "\"", with: "&quot;")
+                return """
+                <button class="add-btn" contenteditable="false" @click="$el.insertAdjacentHTML('beforebegin', '\(esc)'); window.devdashMarkDirty($el)">+ Idea</button>
+                """
+            }
             return """
             <div class="doc-head">
               <h2>Ideas</h2>
@@ -526,17 +536,17 @@ enum ProductDocGenerator {
                 <h4>Quick wins <span class="meta">low effort, real value</span></h4>
                 <div class="item"><span class="tag">eng</span> <em>Idea 1</em></div>
                 <div class="item"><span class="tag">design</span> <em>Idea 2</em></div>
-                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=quick-wins]" class="add-btn" contenteditable="false">+ Idea</button>
+                \(ideaBtn())
               </div>
               <div class="col" data-col="big-bets">
                 <h4>Big bets <span class="meta">larger investment</span></h4>
                 <div class="item"><span class="tag">research</span> <em>Idea 3</em></div>
-                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=big-bets]" class="add-btn" contenteditable="false">+ Idea</button>
+                \(ideaBtn())
               </div>
               <div class="col" data-col="maybe-later">
                 <h4>Maybe later <span class="meta">parked</span></h4>
                 <div class="item"><span class="tag">marketing</span> <em>Idea 4</em></div>
-                <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=maybe-later]" class="add-btn" contenteditable="false">+ Idea</button>
+                \(ideaBtn())
               </div>
             </div>
             """
