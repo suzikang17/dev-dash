@@ -57,18 +57,27 @@ struct ProductTabView: View {
             .buttonStyle(.borderless)
             .help("Open in default browser")
             Menu {
-                Button("Edit overview") { openFile("\(project.path)/docs/devdash/sections/overview.html") }
-                Button("Edit goals & KPIs") { openFile("\(project.path)/docs/devdash/sections/goals.html") }
-                Button("Edit ideas") { openFile("\(project.path)/docs/devdash/sections/ideas.html") }
+                Section("Edit shell sections") {
+                    Button("Edit overview") { openFile("\(project.path)/docs/devdash/sections/overview.html") }
+                    Button("Edit goals & KPIs") { openFile("\(project.path)/docs/devdash/sections/goals.html") }
+                    Button("Edit ideas") { openFile("\(project.path)/docs/devdash/sections/ideas.html") }
+                }
                 Divider()
-                Button("New PRD…") { newDoc(at: "\(project.path)/docs/devdash/prds", suggested: "prd-feature.html") }
-                Button("New document…") { newDoc(at: "\(project.path)/docs/devdash/documents", suggested: "doc.html") }
+                Section("New artifact") {
+                    ForEach(ProductDocGenerator.DocType.allCases) { dt in
+                        Button(dt.label) { spawnTemplate(dt, project: project) }
+                    }
+                    Divider()
+                    Button("Blank document…") {
+                        newBlankDoc(at: "\(project.path)/docs/devdash/documents", suggested: "doc.html", project: project)
+                    }
+                }
             } label: {
                 Image(systemName: "pencil.and.outline")
             }
             .menuStyle(.borderlessButton)
             .frame(width: 32)
-            .help("Edit sections")
+            .help("Edit sections / scaffold a new HTML artifact")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -108,22 +117,48 @@ struct ProductTabView: View {
         store.detailTab = .files
     }
 
-    private func newDoc(at folder: String, suggested: String) {
+    /// Scaffold a rich HTML artifact from a template type, then open it.
+    private func spawnTemplate(_ type: ProductDocGenerator.DocType, project: Project) {
+        let folder = "\(project.path)/docs/devdash/\(type.folder)"
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-        let target = "\(folder)/\(suggested)"
-        if !FileManager.default.fileExists(atPath: target) {
-            let title = (suggested as NSString).deletingPathExtension
-            let stub = """
-            <h2>\(title)</h2>
-            <p class="meta"><em>Drafted by DevDash. Edit me at <code>\(target)</code>.</em></p>
-
-            <div class="card">
-              <h3>Section</h3>
-              <p>Write your content here.</p>
-            </div>
-            """
-            try? stub.write(toFile: target, atomically: true, encoding: .utf8)
-        }
+        let target = uniquePath(folder: folder, slug: type.defaultSlug)
+        let html = ProductDocGenerator.template(type, projectName: project.name)
+        try? html.write(toFile: target, atomically: true, encoding: .utf8)
+        // Re-render so the embedded folder card lists it immediately.
+        store.regenerateRoadmap(for: project.path)
         openFile(target)
+    }
+
+    private func newBlankDoc(at folder: String, suggested: String, project: Project) {
+        try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        let target = uniquePath(folder: folder, slug: suggested)
+        let title = (suggested as NSString).deletingPathExtension
+        let stub = """
+        <div class="doc-head">
+          <h2>\(title)</h2>
+          <span class="doc-status meta">Edit me at <code>\(target)</code></span>
+        </div>
+
+        <div class="card">
+          <p>Write your content here.</p>
+        </div>
+        """
+        try? stub.write(toFile: target, atomically: true, encoding: .utf8)
+        store.regenerateRoadmap(for: project.path)
+        openFile(target)
+    }
+
+    /// Return a path that doesn't collide with existing files in the folder
+    /// by appending -2, -3, … if needed.
+    private func uniquePath(folder: String, slug: String) -> String {
+        let target = "\(folder)/\(slug)"
+        if !FileManager.default.fileExists(atPath: target) { return target }
+        let base = (slug as NSString).deletingPathExtension
+        let ext  = (slug as NSString).pathExtension
+        for i in 2...100 {
+            let candidate = "\(folder)/\(base)-\(i).\(ext)"
+            if !FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        return target  // fall back; will overwrite
     }
 }
