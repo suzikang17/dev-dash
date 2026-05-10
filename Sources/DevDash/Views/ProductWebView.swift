@@ -137,6 +137,30 @@ struct ProductWebView: NSViewRepresentable {
         'kpi-tile': '<div class="kpi"><div class="k-label">New KPI</div><div class="k-value">—</div><div class="k-target">target: —</div></div>'
       };
 
+      // Inject small ✕ buttons on every removable item. Each closes its
+      // closest matching container via dom-remove-closest. Idempotent —
+      // never adds a second ✕ if one already exists. Re-runnable on any
+      // subtree, so new templates get × buttons too.
+      function injectRemovesIn(scope) {
+        if (!scope) return;
+        function attach(el, targetSel) {
+          if (el.querySelector(':scope > .rm-btn')) return;
+          var rm = document.createElement('button');
+          rm.className = 'rm-btn';
+          rm.textContent = '✕';
+          rm.title = 'Remove';
+          rm.contentEditable = 'false';
+          rm.dataset.action = 'dom-remove-closest';
+          rm.dataset.target = targetSel;
+          var cs = getComputedStyle(el);
+          if (cs.position === 'static') el.style.position = 'relative';
+          el.appendChild(rm);
+        }
+        scope.querySelectorAll('.kpi').forEach(function(t) { attach(t, '.kpi'); });
+        scope.querySelectorAll('.board .item').forEach(function(t) { attach(t, '.item'); });
+        scope.querySelectorAll('.triage-card').forEach(function(t) { attach(t, '.triage-card'); });
+      }
+
       function findEditableAncestor(el) {
         var cur = el;
         while (cur && cur !== document.body) {
@@ -176,6 +200,8 @@ struct ProductWebView: NSViewRepresentable {
           } else {
             target.insertBefore(node, btn);
           }
+          // Newly inserted nodes need their own ✕ if applicable.
+          injectRemovesIn(target);
           section.classList.add('is-dirty');
           save(section);
           return;
@@ -276,6 +302,8 @@ struct ProductWebView: NSViewRepresentable {
             return btn;
           }
           function uid(prefix) { return prefix + Math.random().toString(36).slice(2, 9); }
+
+          injectRemovesIn(sec);
 
           // .kpi-grid → "+ Add KPI" sibling button after the grid
           sec.querySelectorAll('.kpi-grid').forEach(function(grid) {

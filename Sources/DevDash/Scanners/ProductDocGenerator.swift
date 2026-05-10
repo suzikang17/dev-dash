@@ -1037,6 +1037,14 @@ enum ProductDocGenerator {
                  cursor: pointer; margin: 6px 0; }
       .add-btn:hover { color: var(--accent); border-color: var(--accent); }
 
+      /* Inline remove (✕) buttons injected on .kpi / .item / .triage-card */
+      .rm-btn { position: absolute; top: 4px; right: 4px; background: transparent;
+                border: 0; color: var(--muted); font-size: 11px; line-height: 1;
+                padding: 2px 5px; border-radius: 3px; cursor: pointer;
+                opacity: 0; transition: opacity 0.12s, color 0.12s, background 0.12s; }
+      .kpi:hover .rm-btn, .item:hover .rm-btn, .triage-card:hover .rm-btn { opacity: 1; }
+      .rm-btn:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+
       /* Triage board */
       .triage-controls { display: flex; gap: 6px; margin: 12px 0; }
       .triage-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
