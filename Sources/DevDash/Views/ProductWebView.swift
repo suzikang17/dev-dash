@@ -26,6 +26,11 @@ struct ProductWebView: NSViewRepresentable {
         ))
         config.userContentController = controller
         let wv = WKWebView(frame: .zero, configuration: config)
+        // Enable Web Inspector so right-click → Inspect Element works.
+        // Open Safari → Develop menu → DevDash → <page> for full devtools.
+        if #available(macOS 13.3, *) {
+            wv.isInspectable = true
+        }
         wv.loadFileURL(url, allowingReadAccessTo: docsRoot)
         context.coordinator.lastReloadToken = reloadToken
         return wv
@@ -141,65 +146,102 @@ struct ProductWebView: NSViewRepresentable {
         return null;
       }
 
-      // Action routing — any element with [data-action] posts a payload.
-      function attachActions() {
-        document.querySelectorAll('[data-action]').forEach(function(el) {
-          if (el.dataset.actionAttached) return;
-          el.dataset.actionAttached = 'true';
-          el.addEventListener('click', function(e) {
-            e.preventDefault();
-            var act = el.dataset.action;
+      // Single document-level click delegate. Works for every [data-action]
+      // button regardless of when it was added to the DOM (no per-element
+      // attach race). Always preventDefault so contenteditable focus
+      // shenanigans never bubble up.
+      document.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-action]');
+        console.log('[devdash] click target:', e.target, 'matched data-action btn:', btn);
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var act = btn.dataset.action;
+        console.log('[devdash] handling action:', act, 'data:', JSON.stringify(btn.dataset));
 
-            // Client-side template insertion (no native round-trip needed).
-            if (act === 'dom-insert-template' || act === 'dom-append-template') {
-              var tplKey = el.dataset.template;
-              var targetSel = el.dataset.target;
-              var html = templates[tplKey];
-              if (!html) { console.warn('unknown template', tplKey); return; }
-              var section = findEditableAncestor(el);
-              if (!section) return;
-              var target = targetSel ? section.querySelector(targetSel) : el.parentElement;
-              if (!target) return;
-              var wrap = document.createElement('div');
-              wrap.innerHTML = html.trim();
-              var node = wrap.firstChild;
-              if (act === 'dom-append-template' || !target.contains(el)) {
-                // Append when explicitly asked, OR fall back to append when
-                // the button isn't a child of the target (insertBefore would
-                // throw NotFoundError otherwise).
-                target.appendChild(node);
-              } else {
-                target.insertBefore(node, el);
-              }
-              section.classList.add('is-dirty');
-              save(section);
-              return;
-            }
+        if (act === 'dom-insert-template' || act === 'dom-append-template') {
+          var tplKey = btn.dataset.template;
+          var targetSel = btn.dataset.target;
+          var html = templates[tplKey];
+          if (!html) { console.warn('unknown template', tplKey); return; }
+          var section = findEditableAncestor(btn);
+          if (!section) return;
+          var target = targetSel ? section.querySelector(targetSel) : btn.parentElement;
+          if (!target) { console.warn('target not found:', targetSel); return; }
+          var wrap = document.createElement('div');
+          wrap.innerHTML = html.trim();
+          var node = wrap.firstChild;
+          if (act === 'dom-append-template' || !target.contains(btn)) {
+            target.appendChild(node);
+          } else {
+            target.insertBefore(node, btn);
+          }
+          section.classList.add('is-dirty');
+          save(section);
+          return;
+        }
 
-            // Client-side delete: remove a marked element + save.
-            if (act === 'dom-remove-closest') {
-              var sel = el.dataset.target;
-              var sec = findEditableAncestor(el);
-              if (!sec || !sel) return;
-              var victim = el.closest(sel);
-              if (victim) {
-                victim.remove();
-                sec.classList.add('is-dirty');
-                save(sec);
-              }
-              return;
-            }
+        if (act === 'dom-remove-closest') {
+          var sel = btn.dataset.target;
+          var sec = findEditableAncestor(btn);
+          if (!sec || !sel) return;
+          var victim = btn.closest(sel);
+          if (victim) {
+            victim.remove();
+            sec.classList.add('is-dirty');
+            save(sec);
+          }
+          return;
+        }
 
-            // Anything else → native side-effect.
-            var payload = { action: act };
-            Object.keys(el.dataset).forEach(function(k) {
-              if (k === 'action' || k === 'actionAttached') return;
-              payload[k] = el.dataset[k];
+        if (act === 'triage-add') {
+          var section2 = findEditableAncestor(btn);
+          if (!section2) return;
+          var col = btn.dataset.col || 'now';
+          var list = section2.querySelector('[data-droplist="' + col + '"]');
+          if (!list) return;
+          var card = document.createElement('div');
+          card.className = 'triage-card';
+          card.contentEditable = 'true';
+          card.dataset.triageId = 't-' + Math.random().toString(36).slice(2, 9);
+          card.innerHTML = '<div class="t-title">New ticket</div><div class="t-tags"><span class="tag">untagged</span></div>';
+          list.appendChild(card);
+          attachTriage(list);
+          updateCounts(list.closest('.triage-cols'));
+          section2.classList.add('is-dirty');
+          save(section2);
+          return;
+        }
+
+        if (act === 'triage-export-md') {
+          var section3 = findEditableAncestor(btn);
+          if (!section3) return;
+          var lines = ['# Triage'];
+          section3.querySelectorAll('.triage-col').forEach(function(col) {
+            var title = (col.querySelector('h4') || {}).textContent || '';
+            lines.push('');
+            lines.push('## ' + title.replace(/\\d+$/, '').trim());
+            col.querySelectorAll('.triage-card').forEach(function(card) {
+              var t = (card.querySelector('.t-title') || {}).textContent || '';
+              lines.push('- ' + t.trim());
             });
-            post(payload);
           });
+          var md = lines.join('\\n');
+          if (navigator.clipboard) navigator.clipboard.writeText(md);
+          var orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = orig; }, 1200);
+          return;
+        }
+
+        // Fallthrough → native handler.
+        var payload = { action: act };
+        Object.keys(btn.dataset).forEach(function(k) {
+          if (k === 'action') return;
+          payload[k] = btn.dataset[k];
         });
-      }
+        post(payload);
+      }, true);   // capture phase so we beat any bubbling
 
       // Inject the editing/saving CSS once
       if (!document.getElementById('devdash-bridge-style')) {
@@ -233,19 +275,15 @@ struct ProductWebView: NSViewRepresentable {
             btn.contentEditable = 'false';
             return btn;
           }
-          function tagWith(el, attr, prefix) {
-            if (el.dataset[attr]) return el.dataset[attr];
-            var id = prefix + Math.random().toString(36).slice(2, 9);
-            el.setAttribute('data-' + attr.replace(/([A-Z])/g, '-$1').toLowerCase(), id);
-            return id;
-          }
+          function uid(prefix) { return prefix + Math.random().toString(36).slice(2, 9); }
 
           // .kpi-grid → "+ Add KPI" sibling button after the grid
           sec.querySelectorAll('.kpi-grid').forEach(function(grid) {
             if (grid.dataset.autobtn) return;
             grid.dataset.autobtn = '1';
-            var id = tagWith(grid, 'kgridId', 'kg-');
-            var btn = makeBtn('+ Add KPI', 'kpi', '[data-k-grid-id="' + id + '"]');
+            var id = uid('kg-');
+            grid.setAttribute('data-kg-id', id);
+            var btn = makeBtn('+ Add KPI', 'kpi', '[data-kg-id="' + id + '"]');
             grid.parentNode.insertBefore(btn, grid.nextSibling);
           });
 
@@ -253,8 +291,9 @@ struct ProductWebView: NSViewRepresentable {
           sec.querySelectorAll('ul.checklist').forEach(function(ul) {
             if (ul.dataset.autobtn) return;
             ul.dataset.autobtn = '1';
-            var id = tagWith(ul, 'clId', 'cl-');
-            var btn = makeBtn('+ Add item', 'checklist-item', '[data-c-l-id="' + id + '"]');
+            var id = uid('cl-');
+            ul.setAttribute('data-cl-id', id);
+            var btn = makeBtn('+ Add item', 'checklist-item', '[data-cl-id="' + id + '"]');
             ul.parentNode.insertBefore(btn, ul.nextSibling);
           });
 
@@ -262,8 +301,9 @@ struct ProductWebView: NSViewRepresentable {
           sec.querySelectorAll('.board .col').forEach(function(col) {
             if (col.dataset.autobtn) return;
             col.dataset.autobtn = '1';
-            var id = tagWith(col, 'colId', 'col-');
-            var btn = makeBtn('+ Idea', 'idea-card', '[data-col-id="' + id + '"]');
+            var id = uid('bc-');
+            col.setAttribute('data-bc-id', id);
+            var btn = makeBtn('+ Idea', 'idea-card', '[data-bc-id="' + id + '"]');
             col.appendChild(btn);
           });
 
@@ -271,9 +311,10 @@ struct ProductWebView: NSViewRepresentable {
           sec.querySelectorAll('table tbody').forEach(function(tbody) {
             if (tbody.dataset.autobtn) return;
             tbody.dataset.autobtn = '1';
-            var id = tagWith(tbody, 'tbId', 'tb-');
+            var id = uid('tb-');
+            tbody.setAttribute('data-tb-id', id);
             var table = tbody.closest('table');
-            var btn = makeBtn('+ Add row', 'metric-row', '[data-t-b-id="' + id + '"]');
+            var btn = makeBtn('+ Add row', 'metric-row', '[data-tb-id="' + id + '"]');
             (table || tbody).parentNode.insertBefore(btn, (table || tbody).nextSibling);
           });
         });
@@ -360,71 +401,24 @@ struct ProductWebView: NSViewRepresentable {
         });
       }
 
-      // Triage-specific actions
-      document.addEventListener('click', function(e) {
-        var btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        var act = btn.dataset.action;
-
-        if (act === 'triage-add') {
-          var section = findEditableAncestor(btn);
-          if (!section) return;
-          var col = btn.dataset.col || 'now';
-          var list = section.querySelector('[data-droplist="' + col + '"]');
-          if (!list) return;
-          var card = document.createElement('div');
-          card.className = 'triage-card';
-          card.contentEditable = 'true';
-          card.dataset.triageId = 't-' + Math.random().toString(36).slice(2, 9);
-          card.innerHTML = '<div class="t-title">New ticket</div><div class="t-tags"><span class="tag">untagged</span></div>';
-          list.appendChild(card);
-          attachTriage(list);
-          updateCounts(list.closest('.triage-cols'));
-          section.classList.add('is-dirty');
-          save(section);
-          e.preventDefault();
-          return;
-        }
-
-        if (act === 'triage-export-md') {
-          var section = findEditableAncestor(btn);
-          if (!section) return;
-          var lines = ['# Triage'];
-          section.querySelectorAll('.triage-col').forEach(function(col) {
-            var title = (col.querySelector('h4') || {}).textContent || '';
-            lines.push('');
-            lines.push('## ' + title.replace(/\\d+$/, '').trim());
-            col.querySelectorAll('.triage-card').forEach(function(card) {
-              var t = (card.querySelector('.t-title') || {}).textContent || '';
-              lines.push('- ' + t.trim());
-            });
-          });
-          var md = lines.join('\\n');
-          if (navigator.clipboard) navigator.clipboard.writeText(md);
-          btn.textContent = 'Copied!';
-          setTimeout(function() { btn.textContent = 'Copy as Markdown'; }, 1200);
-          e.preventDefault();
-          return;
-        }
-      });
-
       attachEditing(document);
       autoInject(document);
       attachTriage(document);
-      attachActions();   // must run after autoInject so injected buttons get handlers
-      // Initialize counts on any boards present
       document.querySelectorAll('.triage-cols').forEach(updateCounts);
-      // Re-attach after tab switches (panes are still in DOM but new buttons may exist)
+      // Re-attach after tab switches. The doc-level click delegate works
+      // for any new button, but we still need to mark new sections
+      // contenteditable + auto-inject add-buttons inside them.
       document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
         b.addEventListener('click', function() {
           setTimeout(function() {
             attachEditing(document);
             autoInject(document);
-            attachActions();
+            attachTriage(document);
           }, 30);
         });
       });
     })();
     """
 }
+
 

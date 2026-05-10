@@ -142,6 +142,9 @@ enum ProductDocGenerator {
         let path = indexPath(for: projectPath)
         do {
             try html.write(toFile: path, atomically: true, encoding: .utf8)
+            // Refresh the queryable manifest each time the index page is
+            // rebuilt — keeps .index.json in sync with what's on disk.
+            DocIndexGenerator.generate(projectPath: projectPath)
             return path
         } catch {
             return nil
@@ -471,7 +474,7 @@ enum ProductDocGenerator {
             <button data-action="dom-insert-template" data-template="checklist-item" data-target="ul.checklist" class="add-btn" contenteditable="false">+ Add goal</button>
 
             <h3>Tracked KPIs</h3>
-            <div class="kpi-grid">
+            <div class="kpi-grid kpi-tracked">
               <div class="kpi">
                 <div class="k-label">Activation</div>
                 <div class="k-value">—</div>
@@ -491,7 +494,7 @@ enum ProductDocGenerator {
                 <div class="k-delta">—</div>
               </div>
             </div>
-            <button data-action="dom-insert-template" data-template="kpi" data-target=".kpi-grid:nth-of-type(2)" class="add-btn" contenteditable="false">+ Add KPI tile</button>
+            <button data-action="dom-append-template" data-template="kpi" data-target=".kpi-tracked" class="add-btn" contenteditable="false">+ Add KPI tile</button>
 
             <h3>Detailed metrics</h3>
             <table>
@@ -1072,25 +1075,21 @@ enum ProductDocGenerator {
     private static let tabScript = """
     <script>
       (function() {
+        // No URL fragment manipulation — file:// origin treats each fragment
+        // as a unique origin and WKWebView blocks the navigation, which
+        // looks like the page reverting to Overview.
         var btns = document.querySelectorAll('nav.tabs .tab');
         var panes = document.querySelectorAll('.tab-pane');
         btns.forEach(function(b) {
-          b.addEventListener('click', function() {
+          b.addEventListener('click', function(e) {
+            e.preventDefault();
             btns.forEach(function(x) { x.classList.remove('active'); });
             panes.forEach(function(p) { p.classList.remove('active'); });
             b.classList.add('active');
             var t = document.getElementById('tab-' + b.dataset.tab);
             if (t) t.classList.add('active');
-            if (history && history.replaceState) {
-              history.replaceState(null, '', '#' + b.dataset.tab);
-            }
           });
         });
-        var hash = (location.hash || '').replace('#', '');
-        if (hash) {
-          var b = document.querySelector('nav.tabs .tab[data-tab="' + hash + '"]');
-          if (b) b.click();
-        }
       })();
     </script>
     """

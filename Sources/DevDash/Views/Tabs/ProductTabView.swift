@@ -112,11 +112,13 @@ struct ProductTabView: View {
 
     /// Bridge handler: write the edited HTML back to its source file.
     /// Doesn't trigger a regen — that would clobber the cursor mid-edit.
+    /// Refreshes the queryable manifest so cross-doc filters stay current.
     private func saveSection(projectPath: String, rel: String, html: String) {
         let target = "\(projectPath)/docs/devdash/\(rel)"
         let dir = (target as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try? html.write(toFile: target, atomically: true, encoding: .utf8)
+        DocIndexGenerator.generate(projectPath: projectPath)
     }
 
     /// Bridge handler: route data-action clicks to native side-effects.
