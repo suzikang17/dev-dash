@@ -703,16 +703,58 @@ final class DashboardStore: ObservableObject {
         let actionLine = allowEdits
             ? "Investigate the codebase, design an approach, and make the changes."
             : "Investigate the codebase and explain what you'd change. Do NOT modify any files."
+
+        let phasePreamble: String
+        if let existing = task.phases, !existing.isEmpty {
+            let list = existing.joined(separator: ", ")
+            phasePreamble = """
+            This task has pre-configured phases: \(list)
+            Use these phases in order. Announce each with exactly: [PHASE: <name>]
+            """
+        } else {
+            let hint = task.category == .engineering
+                ? "\nCommon engineering phases: Explore, Code, Test, QA — adapt as needed."
+                : ""
+            phasePreamble = """
+            Before starting, decide which phases make sense for this specific task.\(hint)
+            Not every task needs the same phases. Choose what fits.
+            Announce your planned phases with exactly: [PHASES: Phase1, Phase2, ...]
+            Then begin executing. Announce each phase as you start it with: [PHASE: <name>]
+            """
+        }
+
+        let testPhase = allowEdits ? """
+
+            Final step — always required:
+            [PHASE: Write Tests]
+            Write a manual test checklist to: .devdash/manual-tests/\(task.id).md
+            Cover: happy path, edge cases, things a human should click/verify.
+            Format: markdown checkbox list grouped by area.
+            If no UI is involved, cover API contracts, data correctness, and error paths.
+            """ : ""
+
         let prompt = """
+        \(phasePreamble)
+
         I'm working on the project \(projectName). Help me complete this task.
 
         Task: \(task.title)
         Category: \(task.category.label)
         \(task.notes.map { "Notes: \($0)" } ?? "")
 
-        \(actionLine)
+        \(actionLine)\(testPhase)
         """
-        await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: allowEdits, kind: .taskExecution)
+
+        try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .ai)
+        try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .open)
+
+        await runClaude(
+            prompt: prompt,
+            projectPath: projectPath,
+            allowEdits: allowEdits,
+            kind: .taskExecution,
+            linkedTaskId: task.id
+        )
     }
 
     /// Ask claude -p to suggest tasks for the current stage given the
@@ -813,6 +855,53 @@ final class DashboardStore: ObservableObject {
         return out
     }
 
+    func markTaskDone(projectPath: String, taskId: String) async {
+        try? TaskStore.setStatus(projectPath: projectPath, id: taskId, status: .done)
+        try? TaskStore.setOwner(projectPath: projectPath, id: taskId, owner: .none)
+        guard let task = tasksV2(for: projectPath).first(where: { $0.id == taskId }) else { return }
+        await generateTaskReleaseNote(task, projectPath: projectPath)
+    }
+
+    private func generateTaskReleaseNote(_ task: TaskItem, projectPath: String) async {
+        let projectName = URL(fileURLWithPath: projectPath).lastPathComponent
+        let fmt = ISO8601DateFormatter()
+        let since = fmt.string(from: task.startedAt ?? task.createdAt)
+        let gitLog = await ShellRunner.run("/bin/zsh", args: ["-ic",
+            "cd \(shellQuote(projectPath)) && git log --oneline --since='\(since)' | head -20"
+        ]) ?? "(no commits)"
+
+        let phases = task.completedPhases.isEmpty ? "none recorded" : task.completedPhases.joined(separator: " → ")
+        let dateStr = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .none)
+
+        let prompt = """
+        Generate a concise release note (1–3 sentences) for this completed task.
+        Write ONLY the release note text — no preamble, no explanation.
+
+        Task: \(task.title)
+        Category: \(task.category.label)
+        \(task.notes.map { "Notes: \($0)" } ?? "")
+        Phases completed: \(phases)
+
+        Recent commits since task started:
+        \(gitLog)
+
+        Then append the release note to .devdash/release-notes.md in this format (include the header):
+        ## \(task.title)
+        _\(dateStr) · \(task.category.label)_
+
+        <your 1-3 sentence summary here>
+
+        If no commits exist, summarize from the task notes and phases instead.
+        """
+
+        await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: true,
+                        kind: .releaseNotes, linkedTaskId: task.id)
+    }
+
+    private func shellQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    }
+
     // MARK: - Recent commits feed
 
     @Published var recentCommits: [RecentCommit] = []
@@ -861,7 +950,8 @@ final class DashboardStore: ObservableObject {
         claudeTasks[projectPath]?.first { $0.status == .running }
     }
 
-    func runClaude(prompt: String, projectPath: String, allowEdits: Bool, kind: ClaudeTask.Kind = .general) async {
+    func runClaude(prompt: String, projectPath: String, allowEdits: Bool,
+                   kind: ClaudeTask.Kind = .general, linkedTaskId: String? = nil) async {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -877,6 +967,7 @@ final class DashboardStore: ObservableObject {
             status: .running,
             sessionId: nil
         )
+        task.linkedTaskId = linkedTaskId
 
         var arr = claudeTasks[projectPath] ?? []
         arr.insert(task, at: 0)
@@ -912,6 +1003,10 @@ final class DashboardStore: ObservableObject {
                         arr[idx].status = .completed
                     }
                     self?.claudeTasks[path] = arr
+                    if let tid = arr[idx].linkedTaskId {
+                        try? TaskStore.setHasAIRun(projectPath: path, id: tid)
+                        try? TaskStore.setOwner(projectPath: path, id: tid, owner: .human)
+                    }
                 }
                 self?.runningClaude.removeValue(forKey: taskId)
             }
