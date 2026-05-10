@@ -50,7 +50,8 @@ enum TaskStore {
         category: TaskCategory = .other,
         stage: String? = nil,
         notes: String? = nil,
-        source: TaskSource = .local
+        source: TaskSource = .local,
+        parentId: String? = nil
     ) throws -> TaskItem {
         var tasks = read(projectPath)
         let task = TaskItem(
@@ -64,11 +65,38 @@ enum TaskStore {
             createdAt: Date(),
             startedAt: nil,
             completedAt: nil,
-            ghIssueURL: nil
+            ghIssueURL: nil,
+            parentId: parentId
         )
         tasks.append(task)
         try write(projectPath, tasks: tasks)
         return task
+    }
+
+    /// Set or clear the parent of a task. Walks up the existing tree to make
+    /// sure newParentId isn't a descendant of `id` — prevents cycles.
+    static func setParent(projectPath: String, id: String, newParentId: String?) throws {
+        var tasks = read(projectPath)
+        guard tasks.contains(where: { $0.id == id }) else { return }
+        if let newParent = newParentId {
+            // Cycle guard: walk newParent's ancestors; if we ever hit `id`, abort.
+            var cursor: String? = newParent
+            var seen = Set<String>()
+            while let c = cursor {
+                if c == id { return }   // would create a cycle — silently no-op
+                if seen.contains(c) { break }
+                seen.insert(c)
+                cursor = tasks.first(where: { $0.id == c })?.parentId
+            }
+        }
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[idx].parentId = newParentId
+        try write(projectPath, tasks: tasks)
+    }
+
+    /// Returns true if `id` has any children in the project's task list.
+    static func hasChildren(projectPath: String, id: String) -> Bool {
+        read(projectPath).contains { $0.parentId == id }
     }
 
     static func update(projectPath: String, _ updated: TaskItem) throws {

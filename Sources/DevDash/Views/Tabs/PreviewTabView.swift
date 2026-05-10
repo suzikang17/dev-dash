@@ -5,12 +5,20 @@ struct PreviewTabView: View {
     @EnvironmentObject var store: DashboardStore
     @StateObject private var holder = WebViewHolder()
 
+    private func isAppleProject(_ project: Project) -> Bool {
+        ["macOS App", "iOS App", "Swift Package", "Xcode"].contains(project.framework)
+    }
+
     var body: some View {
         let proj = store.project(for: store.selection)
         let projectServices: [Service] = proj.map { store.services(for: $0.path) } ?? []
         let svc: Service? = store.service(for: store.selection)
 
-        if let svc = svc,
+        // Apple platforms get a different preview (no localhost URL).
+        if let proj = proj, isAppleProject(proj), svc == nil {
+            AppleAppPreview(project: proj)
+                .environmentObject(store)
+        } else if let svc = svc,
            let urlString = svc.url,
            let url = URL(string: urlString) {
             VStack(spacing: 0) {

@@ -471,37 +471,42 @@ struct TasksTabView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 24)
         } else if let template = template {
-            // Group by stage in template order, then unstaged at the bottom
+            // Group by stage in template order. Within a stage, render only
+            // root-level tasks; their descendants are rendered indented by
+            // TaskTreeNode.
             ForEach(template.stages) { s in
-                let inStage = tasks.filter { $0.stage == s.id }
-                if !inStage.isEmpty {
+                let rootsInStage = tasks.filter { $0.parentId == nil && $0.stage == s.id }
+                let totalInStage = tasks.filter { $0.stage == s.id }.count
+                if !rootsInStage.isEmpty {
                     let isCurrent = s.id == currentStageId
                     TaskGroupCard(
                         title: s.title,
                         systemImage: isCurrent ? "play.circle.fill" : "circle",
-                        count: inStage.count
+                        count: totalInStage
                     ) {
-                        ForEach(inStage) { t in
-                            TaskLine(task: t, projectPath: project.path)
-                            if t.id != inStage.last?.id { Divider() }
+                        ForEach(rootsInStage) { t in
+                            TaskTreeNode(task: t, projectPath: project.path, depth: 0, allTasks: tasks)
+                            if t.id != rootsInStage.last?.id { Divider() }
                         }
                     }
                 }
             }
-            let unstaged = tasks.filter { $0.stage == nil }
-            if !unstaged.isEmpty {
-                TaskGroupCard(title: "Unstaged", systemImage: "tray", count: unstaged.count) {
-                    ForEach(unstaged) { t in
-                        TaskLine(task: t, projectPath: project.path)
-                        if t.id != unstaged.last?.id { Divider() }
+            let unstagedRoots = tasks.filter { $0.parentId == nil && $0.stage == nil }
+            let unstagedTotal = tasks.filter { $0.stage == nil }.count
+            if !unstagedRoots.isEmpty {
+                TaskGroupCard(title: "Unstaged", systemImage: "tray", count: unstagedTotal) {
+                    ForEach(unstagedRoots) { t in
+                        TaskTreeNode(task: t, projectPath: project.path, depth: 0, allTasks: tasks)
+                        if t.id != unstagedRoots.last?.id { Divider() }
                     }
                 }
             }
         } else {
+            let roots = tasks.filter { $0.parentId == nil }
             TaskGroupCard(title: "Tasks", systemImage: "checklist", count: tasks.count) {
-                ForEach(tasks) { t in
-                    TaskLine(task: t, projectPath: project.path)
-                    if t.id != tasks.last?.id { Divider() }
+                ForEach(roots) { t in
+                    TaskTreeNode(task: t, projectPath: project.path, depth: 0, allTasks: tasks)
+                    if t.id != roots.last?.id { Divider() }
                 }
             }
         }
@@ -892,9 +897,57 @@ private struct TaskGroupCard<Content: View>: View {
     }
 }
 
+/// Recursive tree row. Renders the task plus its descendants indented.
+/// Depth caps visual indent at 3 levels so wide trees don't shrink to nothing.
+private struct TaskTreeNode: View {
+    let task: TaskItem
+    let projectPath: String
+    let depth: Int
+    let allTasks: [TaskItem]
+
+    @EnvironmentObject var store: DashboardStore
+    @State private var expanded = true
+
+    private var children: [TaskItem] {
+        allTasks.filter { $0.parentId == task.id }
+    }
+
+    private var visualDepth: Int { min(depth, 3) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                if !children.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .frame(width: 12)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear.frame(width: 12)
+                }
+                TaskLine(task: task, projectPath: projectPath, allTasks: allTasks, isParent: !children.isEmpty)
+            }
+            .padding(.leading, CGFloat(visualDepth) * 16)
+            if expanded {
+                ForEach(children) { c in
+                    Divider().padding(.leading, CGFloat(visualDepth + 1) * 16)
+                    TaskTreeNode(task: c, projectPath: projectPath, depth: depth + 1, allTasks: allTasks)
+                }
+            }
+        }
+    }
+}
+
 private struct TaskLine: View {
     let task: TaskItem
     let projectPath: String
+    var allTasks: [TaskItem] = []
+    var isParent: Bool = false
     @EnvironmentObject var store: DashboardStore
     @State private var hover = false
 
@@ -940,6 +993,24 @@ private struct TaskLine: View {
                         store.setTaskStatus(projectPath: projectPath, id: task.id, status: .skipped)
                     }
                     Divider()
+                    Section("Hierarchy") {
+                        if task.parentId != nil {
+                            Button {
+                                store.setTaskParent(projectPath: projectPath, id: task.id, newParentId: nil)
+                            } label: { Label("Promote to top-level", systemImage: "arrow.up.to.line") }
+                        }
+                        let candidates = allTasks.filter { $0.id != task.id && !isDescendant($0.id, ancestorOf: task.id) }
+                        if !candidates.isEmpty {
+                            Menu("Move under…") {
+                                ForEach(candidates) { p in
+                                    Button(p.title) {
+                                        store.setTaskParent(projectPath: projectPath, id: task.id, newParentId: p.id)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Divider()
                     Section("Claude") {
                         Button {
                             Task {
@@ -967,6 +1038,21 @@ private struct TaskLine: View {
         }
         .padding(.vertical, 6)
         .onHover { hover = $0 }
+    }
+
+    /// Walk children of `ancestorId` down the tree; return true if `id`
+    /// is anywhere in that subtree. Prevents circular reparenting.
+    private func isDescendant(_ id: String, ancestorOf maybeAncestor: String) -> Bool {
+        // Children of maybeAncestor — does any descend to id?
+        var stack = allTasks.filter { $0.parentId == maybeAncestor }.map { $0.id }
+        var seen = Set<String>()
+        while let cur = stack.popLast() {
+            if cur == id { return true }
+            if seen.contains(cur) { continue }
+            seen.insert(cur)
+            stack.append(contentsOf: allTasks.filter { $0.parentId == cur }.map { $0.id })
+        }
+        return false
     }
 
     private var statusIcon: String {

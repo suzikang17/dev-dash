@@ -244,6 +244,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var startedAt: Date?
     var completedAt: Date?
     var ghIssueURL: URL?
+    /// Optional parent task id. Top-level tasks have parentId=nil. A parent
+    /// with children behaves as the "initiative" / "feature" grouping.
+    var parentId: String? = nil
 }
 
 /// Per-project metadata persisted to `.devdash/project.json`. Drives stage

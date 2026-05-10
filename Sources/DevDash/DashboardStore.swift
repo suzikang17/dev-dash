@@ -515,13 +515,14 @@ final class DashboardStore: ObservableObject {
         title: String,
         category: TaskCategory = .other,
         stage: String? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        parentId: String? = nil
     ) {
         do {
             _ = try TaskStore.add(
                 projectPath: projectPath, title: title,
                 category: category, stage: stage, notes: notes,
-                source: .local
+                source: .local, parentId: parentId
             )
             projectTasks[projectPath] = TaskStore.read(projectPath)
             todoError = nil
@@ -529,6 +530,20 @@ final class DashboardStore: ObservableObject {
         } catch {
             todoError = "Couldn't add task: \(error.localizedDescription)"
         }
+    }
+
+    func setTaskParent(projectPath: String, id: String, newParentId: String?) {
+        try? TaskStore.setParent(projectPath: projectPath, id: id, newParentId: newParentId)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
+    }
+
+    func childTasks(of parentId: String, in projectPath: String) -> [TaskItem] {
+        tasksV2(for: projectPath).filter { $0.parentId == parentId }
+    }
+
+    func rootTasks(stage: String?, in projectPath: String) -> [TaskItem] {
+        tasksV2(for: projectPath).filter { $0.parentId == nil && $0.stage == stage }
     }
 
     func setTaskStatus(projectPath: String, id: String, status: TaskStatus) {
