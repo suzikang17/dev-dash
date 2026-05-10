@@ -87,14 +87,51 @@ struct ProductTabView: View {
     @ViewBuilder
     private func content(project: Project) -> some View {
         let path = ProductDocGenerator.indexPath(for: project.path)
+        let docsRoot = URL(fileURLWithPath: ProductDocGenerator.folderPath(for: project.path))
         if FileManager.default.fileExists(atPath: path) {
-            FileWebView(fileURL: URL(fileURLWithPath: path))
+            ProductWebView(
+                url: URL(fileURLWithPath: path),
+                docsRoot: docsRoot,
+                onSave: { rel, html in
+                    saveSection(projectPath: project.path, rel: rel, html: html)
+                },
+                onAction: { payload in
+                    handleAction(project: project, payload: payload)
+                }
+            )
         } else {
             VStack(spacing: 8) {
                 ProgressView()
                 Text("Generating…").foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Bridge handler: write the edited HTML back to its source file.
+    /// Doesn't trigger a regen — that would clobber the cursor mid-edit.
+    private func saveSection(projectPath: String, rel: String, html: String) {
+        let target = "\(projectPath)/docs/devdash/\(rel)"
+        let dir = (target as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? html.write(toFile: target, atomically: true, encoding: .utf8)
+    }
+
+    /// Bridge handler: route data-action clicks to native side-effects.
+    private func handleAction(project: Project, payload: [String: Any]) {
+        guard let action = payload["action"] as? String else { return }
+        switch action {
+        case "open-file":
+            if let path = payload["path"] as? String {
+                openFile(path)
+            }
+        case "open-task":
+            store.detailTab = .tasks
+        case "regenerate":
+            store.regenerateRoadmap(for: project.path)
+            lastRegenAt = Date()
+        default:
+            break
         }
     }
 

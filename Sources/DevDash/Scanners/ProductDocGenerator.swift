@@ -136,14 +136,20 @@ enum ProductDocGenerator {
 
     private static func readSection(tab: DocTab, projectPath: String) -> String {
         switch tab.source {
-        case .userHtml(let file), .generatedHtml(let file):
+        case .userHtml(let file):
+            let path = "\(folderPath(for: projectPath))/sections/\(file)"
+            let body: String = (try? String(contentsOfFile: path, encoding: .utf8))
+                ?? "<p class=\"empty\">No content yet. Click here and start typing.</p>"
+            // Wrap in an editable container so the bridge JS marks it contenteditable.
+            return "<div data-section-file=\"sections/\(file)\">\(body)</div>"
+        case .generatedHtml(let file):
             let path = "\(folderPath(for: projectPath))/sections/\(file)"
             if let body = try? String(contentsOfFile: path, encoding: .utf8) {
                 return body
             }
-            return "<p class=\"empty\">No content yet. Edit <code>sections/\(escapeHTML(file))</code>.</p>"
+            return "<p class=\"empty\">No content yet — derived from project state.</p>"
         case .userFolder(let rel):
-            return readFolder(at: "\(folderPath(for: projectPath))/\(rel)", emptyMsg: emptyMsg(for: rel))
+            return readFolder(at: "\(folderPath(for: projectPath))/\(rel)", relRoot: rel, emptyMsg: emptyMsg(for: rel))
         }
     }
 
@@ -155,7 +161,7 @@ enum ProductDocGenerator {
         }
     }
 
-    private static func readFolder(at folder: String, emptyMsg: String) -> String {
+    private static func readFolder(at folder: String, relRoot: String, emptyMsg: String) -> String {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(atPath: folder) else {
             return "<p class=\"empty\">\(escapeHTML(emptyMsg))</p>"
@@ -169,10 +175,11 @@ enum ProductDocGenerator {
             let path = "\(folder)/\(f)"
             let body = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
             let title = extractTitle(from: body) ?? (f as NSString).deletingPathExtension
+            let rel = "\(relRoot)/\(f)"
             out.append("""
-              <details class="card">
+              <details class="card" open>
                 <summary><strong>\(escapeHTML(title))</strong> <span class="meta">\(escapeHTML(f))</span></summary>
-                <div class="embed">\(body)</div>
+                <div class="embed" data-section-file="\(rel)">\(body)</div>
               </details>
             """)
         }
