@@ -42,12 +42,12 @@ enum ClaudeRunner {
 
         if bin == "/bin/zsh" {
             // Compose a single shell line that locates and invokes claude
-            let inner = "claude -p \(shellQuote(prompt)) --output-format text"
+            let inner = "claude -p \(shellQuote(prompt)) --output-format stream-json"
                 + (allowEdits ? " --dangerously-skip-permissions" : " --allowedTools \"Read,Glob,Grep,LS,Bash\"")
             shellCmd = "cd \(shellQuote(cwd)) && \(inner)"
             args = ["-ic", shellCmd!]
         } else {
-            args = ["-p", prompt, "--output-format", "text"]
+            args = ["-p", prompt, "--output-format", "stream-json"]
             if allowEdits {
                 args.append("--dangerously-skip-permissions")
             } else {
