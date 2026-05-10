@@ -60,6 +60,13 @@ extension Templates {
                     "Core happy path works end-to-end",
                     "Deployed somewhere reachable",
                     "1+ user has used it without you sitting next to them"
+                ],
+                validationChecks: [
+                    .init(id: "build", name: "Build", stageId: "mvp",
+                          command: "if [ -f package.json ]; then npm run build 2>&1; elif [ -f Package.swift ]; then swift build 2>&1; elif [ -f Cargo.toml ]; then cargo build 2>&1; elif [ -f go.mod ]; then go build ./... 2>&1; else echo 'no build configured' && exit 1; fi"),
+                    .init(id: "test", name: "Tests", stageId: "mvp",
+                          command: "if [ -f package.json ]; then npm test 2>&1; elif [ -f Package.swift ]; then swift test 2>&1; elif [ -f Cargo.toml ]; then cargo test 2>&1; elif [ -f go.mod ]; then go test ./... 2>&1; else echo 'no tests configured' && exit 1; fi",
+                          timeoutSeconds: 300)
                 ]
             ),
             .init(
@@ -78,6 +85,15 @@ extension Templates {
                     "Activation metric defined and instrumented",
                     "5+ users have completed the core flow without help",
                     "Top 3 friction points identified and fixed"
+                ],
+                validationChecks: [
+                    .init(id: "build", name: "Build", stageId: "refine",
+                          command: "if [ -f package.json ]; then npm run build 2>&1; elif [ -f Package.swift ]; then swift build 2>&1; elif [ -f Cargo.toml ]; then cargo build 2>&1; elif [ -f go.mod ]; then go build ./... 2>&1; else echo 'no build configured' && exit 1; fi"),
+                    .init(id: "test", name: "Tests", stageId: "refine",
+                          command: "if [ -f package.json ]; then npm test 2>&1; elif [ -f Package.swift ]; then swift test 2>&1; elif [ -f Cargo.toml ]; then cargo test 2>&1; elif [ -f go.mod ]; then go test ./... 2>&1; else echo 'no tests configured' && exit 1; fi",
+                          timeoutSeconds: 300),
+                    .init(id: "lint", name: "Lint", stageId: "refine",
+                          command: "if [ -f package.json ] && jq -e '.scripts.lint' package.json >/dev/null 2>&1; then npm run lint 2>&1; else echo 'no lint configured' && exit 0; fi")
                 ]
             ),
             .init(

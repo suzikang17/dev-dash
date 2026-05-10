@@ -222,6 +222,10 @@ struct TasksTabView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
             }
 
+            if !stage.validationChecks.isEmpty {
+                ValidationSection(projectPath: project.path, checks: stage.validationChecks)
+            }
+
             HStack(spacing: 8) {
                 Button {
                     Task {
@@ -309,12 +313,15 @@ struct TasksTabView: View {
                 }
                 Spacer()
                 Button {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                    store.pendingFilePath = path
+                    store.detailTab = .files
                 } label: {
-                    Image(systemName: "arrow.up.forward.app")
+                    Label("Open", systemImage: "doc.text")
+                        .font(.system(size: 11))
                 }
-                .buttonStyle(.borderless)
-                .help("Open roadmap")
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open roadmap in Files tab")
                 Button {
                     Task {
                         await store.suggestRoadmapUpdate(projectPath: project.path)
@@ -437,6 +444,153 @@ struct TasksTabView: View {
                     if t.id != tasks.last?.id { Divider() }
                 }
             }
+        }
+    }
+}
+
+/// Stage validation checks — pass/fail badges with run + expand-to-tail.
+private struct ValidationSection: View {
+    let projectPath: String
+    let checks: [HealthCheckSpec]
+    @EnvironmentObject var store: DashboardStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Label("Validation", systemImage: "checkmark.shield")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundColor(.secondary)
+                if let summary = store.healthSummary(for: projectPath) {
+                    Text(verbatim: "\(summary.passed)/\(summary.total) passed")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundColor(summary.passed == summary.total ? .green : .secondary)
+                }
+                Spacer()
+                Button {
+                    Task { await store.runAllHealthChecks(for: projectPath) }
+                } label: {
+                    Label("Run all", systemImage: "play.fill")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            ForEach(checks, id: \.id) { check in
+                ValidationRow(projectPath: projectPath, check: check)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+    }
+}
+
+private struct ValidationRow: View {
+    let projectPath: String
+    let check: HealthCheckSpec
+    @EnvironmentObject var store: DashboardStore
+    @State private var expanded = false
+
+    var body: some View {
+        let status = store.healthStatus(check.id, for: projectPath)
+        let result = store.lastHealthResult(check.id, for: projectPath)
+
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                statusBadge(status)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(check.name)
+                        .font(.system(size: 12, weight: .medium))
+                    Text(check.command)
+                        .font(.system(size: 10).monospaced())
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+                if let r = result {
+                    Text(timeAgo(r.finishedAt))
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
+                Button {
+                    Task { await store.runHealthCheck(check, for: projectPath) }
+                } label: {
+                    Image(systemName: status == .running ? "stop.circle" : "play.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(status == .running)
+
+                if result != nil {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            if expanded, let r = result {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 12) {
+                        Text(verbatim: "exit \(r.exitCode)")
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundColor(r.passed ? .green : .red)
+                        Text(verbatim: "\(r.durationSeconds)s")
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundColor(.secondary)
+                        if r.timedOut {
+                            Text("timed out")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    if !r.stdoutTail.isEmpty {
+                        outputBlock("stdout", text: r.stdoutTail)
+                    }
+                    if !r.stderrTail.isEmpty {
+                        outputBlock("stderr", text: r.stderrTail)
+                    }
+                }
+                .padding(.leading, 24)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusBadge(_ status: HealthCheckStatus) -> some View {
+        switch status {
+        case .running:
+            ProgressView().controlSize(.small).frame(width: 14)
+        case .passed:
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+        case .failed:
+            Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+        case .unknown:
+            Image(systemName: "circle").foregroundColor(.secondary)
+        }
+    }
+
+    private func outputBlock(_ label: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold).monospaced())
+                .foregroundColor(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(text)
+                    .font(.system(size: 10, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(6)
+            }
+            .background(Color(NSColor.textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .frame(maxHeight: 120)
         }
     }
 }

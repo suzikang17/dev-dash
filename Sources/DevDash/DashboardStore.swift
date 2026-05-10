@@ -63,11 +63,15 @@ final class DashboardStore: ObservableObject {
     )
     @Published var sessionDigests: [String: SessionDigest] = [:]
     @Published var openSessionId: String? = nil
+    /// Path the FilesTab should open. Set then switch detailTab to .files.
+    @Published var pendingFilePath: String? = nil
     private var digestTask: Task<Void, Never>?
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
     @Published var projectTasks: [String: [TaskItem]] = [:]   // path → tasks
     @Published var projectProviders: [String: [Provider]] = [:]   // path → providers
+    @Published var projectHealth: [String: [String: HealthRunResult]] = [:]   // path → checkId → result
+    @Published var runningHealthChecks: Set<String> = []   // "<path>:<checkId>"
 
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
@@ -432,17 +436,21 @@ final class DashboardStore: ObservableObject {
             var metaMap: [String: ProjectMeta] = [:]
             var taskMap: [String: [TaskItem]] = [:]
             var providerMap: [String: [Provider]] = [:]
+            var healthMap: [String: [String: HealthRunResult]] = [:]
             for path in paths {
                 metaMap[path] = ProjectMetaStore.read(path)
                 let tasks = TaskStore.read(path)
                 if !tasks.isEmpty { taskMap[path] = tasks }
                 let providers = ProviderStore.refresh(path)
                 if !providers.isEmpty { providerMap[path] = providers }
+                let health = HealthStore.read(path)
+                if !health.isEmpty { healthMap[path] = health }
             }
             await MainActor.run {
                 self?.projectMeta = metaMap
                 self?.projectTasks = taskMap
                 self?.projectProviders = providerMap
+                self?.projectHealth = healthMap
             }
         }
     }
@@ -593,6 +601,61 @@ final class DashboardStore: ObservableObject {
 
     func totalMonthlyCost(for projectPath: String) -> Double? {
         ProviderStore.totalMonthlyCost(providers(for: projectPath))
+    }
+
+    // MARK: - Validation / health checks
+
+    /// All template-defined checks for the project, scoped to the current
+    /// stage when a template is applied (project-wide checks always included).
+    func healthChecks(for projectPath: String) -> [HealthCheckSpec] {
+        guard let template = template(for: projectPath) else { return [] }
+        let currentStageId = meta(for: projectPath).currentStageId
+        var out: [HealthCheckSpec] = []
+        for stage in template.stages {
+            // Only surface checks for the current stage in v1 to keep the UI focused.
+            if stage.id == currentStageId {
+                out.append(contentsOf: stage.validationChecks)
+            }
+        }
+        return out
+    }
+
+    func lastHealthResult(_ checkId: String, for projectPath: String) -> HealthRunResult? {
+        projectHealth[projectPath]?[checkId]
+    }
+
+    func healthStatus(_ checkId: String, for projectPath: String) -> HealthCheckStatus {
+        if runningHealthChecks.contains("\(projectPath):\(checkId)") { return .running }
+        guard let r = lastHealthResult(checkId, for: projectPath) else { return .unknown }
+        return r.passed ? .passed : .failed
+    }
+
+    /// Pass/fail summary for the current stage's checks. nil if no checks defined.
+    func healthSummary(for projectPath: String) -> (passed: Int, total: Int)? {
+        let checks = healthChecks(for: projectPath)
+        guard !checks.isEmpty else { return nil }
+        let passed = checks.filter {
+            lastHealthResult($0.id, for: projectPath)?.passed == true
+        }.count
+        return (passed, checks.count)
+    }
+
+    func runHealthCheck(_ check: HealthCheckSpec, for projectPath: String) async {
+        let key = "\(projectPath):\(check.id)"
+        runningHealthChecks.insert(key)
+        defer { runningHealthChecks.remove(key) }
+
+        let result = await HealthCheckRunner.run(check, projectPath: projectPath)
+        try? HealthStore.record(result, for: projectPath)
+        var current = projectHealth[projectPath] ?? [:]
+        current[check.id] = result
+        projectHealth[projectPath] = current
+    }
+
+    func runAllHealthChecks(for projectPath: String) async {
+        for check in healthChecks(for: projectPath) {
+            await runHealthCheck(check, for: projectPath)
+        }
     }
 
     // MARK: - AI hooks (manual, on-demand)

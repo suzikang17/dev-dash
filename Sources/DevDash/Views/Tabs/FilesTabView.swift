@@ -17,13 +17,23 @@ struct FilesTabView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
             }
-            .onAppear { loadTree(for: project.path) }
+            .onAppear {
+                loadTree(for: project.path)
+                consumePendingFile()
+            }
             .onChange(of: project.path) { _, newPath in loadTree(for: newPath) }
+            .onChange(of: store.pendingFilePath) { _, _ in consumePendingFile() }
         } else {
             Text("Select a project to browse its files")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func consumePendingFile() {
+        guard let path = store.pendingFilePath else { return }
+        selectedPath = path
+        store.pendingFilePath = nil
     }
 
     private func loadTree(for path: String) {

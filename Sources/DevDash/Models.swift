@@ -282,6 +282,73 @@ struct TemplateStage: Identifiable, Hashable {
     let methodology: String       // stage-level philosophy
     let guidingQuestions: [String]
     let exitCriteria: [String]
+    let validationChecks: [HealthCheckSpec]   // sensible defaults per stage
+
+    init(
+        id: String,
+        title: String,
+        purpose: String,
+        methodology: String,
+        guidingQuestions: [String],
+        exitCriteria: [String],
+        validationChecks: [HealthCheckSpec] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.purpose = purpose
+        self.methodology = methodology
+        self.guidingQuestions = guidingQuestions
+        self.exitCriteria = exitCriteria
+        self.validationChecks = validationChecks
+    }
+}
+
+// MARK: - Validation / health checks
+
+/// Template-defined check spec — the command to run for a given stage.
+/// Intentionally constrained to template-defined commands for v1 (no
+/// user-editable shell field) to keep the security surface tight.
+struct HealthCheckSpec: Hashable {
+    let id: String        // stable id, e.g. "build", "test", "lighthouse"
+    let name: String      // human label, e.g. "Build"
+    let stageId: String?  // nil = project-wide
+    let command: String   // shell command run via /bin/zsh -ic
+    let timeoutSeconds: Int
+    let expectedExit: Int32
+
+    init(
+        id: String,
+        name: String,
+        stageId: String? = nil,
+        command: String,
+        timeoutSeconds: Int = 120,
+        expectedExit: Int32 = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.stageId = stageId
+        self.command = command
+        self.timeoutSeconds = timeoutSeconds
+        self.expectedExit = expectedExit
+    }
+}
+
+struct HealthRunResult: Codable, Hashable {
+    let checkId: String
+    let stageId: String?
+    let command: String
+    let startedAt: Date
+    let finishedAt: Date
+    let exitCode: Int32
+    let timedOut: Bool
+    let stdoutTail: String
+    let stderrTail: String
+    var passed: Bool { !timedOut && exitCode == 0 }
+    var durationSeconds: Int { max(0, Int(finishedAt.timeIntervalSince(startedAt))) }
+}
+
+enum HealthCheckStatus: String, Hashable {
+    case unknown, running, passed, failed
 }
 
 // MARK: - Providers (third-party services used by a project)
