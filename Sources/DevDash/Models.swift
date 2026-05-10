@@ -429,29 +429,38 @@ struct ClaudeTask: Identifiable, Hashable {
     }
 
     enum Kind: String, Codable {
-        case general, recap, releaseNotes
+        case general, recap, releaseNotes, taskExecution, taskSuggestion, roadmapUpdate
 
         var label: String {
             switch self {
-            case .general: return "Task"
-            case .recap: return "Recap"
-            case .releaseNotes: return "Release notes"
+            case .general:        return "Task"
+            case .recap:          return "Recap"
+            case .releaseNotes:   return "Release notes"
+            case .taskExecution:  return "Run task"
+            case .taskSuggestion: return "Suggest tasks"
+            case .roadmapUpdate:  return "Roadmap update"
             }
         }
 
         var systemImage: String {
             switch self {
-            case .general: return "sparkles"
-            case .recap: return "newspaper"
-            case .releaseNotes: return "tag"
+            case .general:        return "sparkles"
+            case .recap:          return "newspaper"
+            case .releaseNotes:   return "tag"
+            case .taskExecution:  return "play.circle"
+            case .taskSuggestion: return "lightbulb"
+            case .roadmapUpdate:  return "map"
             }
         }
 
         var tint: String {
             switch self {
-            case .general: return "purple"
-            case .recap: return "indigo"
-            case .releaseNotes: return "teal"
+            case .general:        return "purple"
+            case .recap:          return "indigo"
+            case .releaseNotes:   return "teal"
+            case .taskExecution:  return "blue"
+            case .taskSuggestion: return "orange"
+            case .roadmapUpdate:  return "green"
             }
         }
     }

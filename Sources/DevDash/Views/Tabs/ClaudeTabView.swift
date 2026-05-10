@@ -285,9 +285,12 @@ private struct ClaudeTaskCard: View {
 
     private func tintColor(_ kind: ClaudeTask.Kind) -> Color {
         switch kind {
-        case .general: return .purple
-        case .recap: return .indigo
-        case .releaseNotes: return .teal
+        case .general:        return .purple
+        case .recap:          return .indigo
+        case .releaseNotes:   return .teal
+        case .taskExecution:  return .blue
+        case .taskSuggestion: return .orange
+        case .roadmapUpdate:  return .green
         }
     }
 }

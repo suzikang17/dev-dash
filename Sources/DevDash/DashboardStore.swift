@@ -565,6 +565,127 @@ final class DashboardStore: ObservableObject {
         ProviderStore.totalMonthlyCost(providers(for: projectPath))
     }
 
+    // MARK: - AI hooks (manual, on-demand)
+
+    /// Run claude -p against a single task. Streams into the Claude tab.
+    /// Default is read-only ("explain, don't change") so this is safe to
+    /// click without thinking. Pass allowEdits=true to actually let Claude
+    /// modify files.
+    func runForTask(_ task: TaskItem, projectPath: String, allowEdits: Bool) async {
+        let projectName = URL(fileURLWithPath: projectPath).lastPathComponent
+        let actionLine = allowEdits
+            ? "Investigate the codebase, design an approach, and make the changes."
+            : "Investigate the codebase and explain what you'd change. Do NOT modify any files."
+        let prompt = """
+        I'm working on the project \(projectName). Help me complete this task.
+
+        Task: \(task.title)
+        Category: \(task.category.label)
+        \(task.notes.map { "Notes: \($0)" } ?? "")
+
+        \(actionLine)
+        """
+        await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: allowEdits, kind: .taskExecution)
+    }
+
+    /// Ask claude -p to suggest tasks for the current stage given the
+    /// methodology + existing tasks. Output is plain markdown bullets.
+    func suggestTasksForStage(projectPath: String, template: LaunchTemplate, stage: TemplateStage) async {
+        let existing = tasksV2(for: projectPath)
+            .filter { $0.stage == stage.id }
+            .map { "- \($0.title) [\($0.status.label)]" }
+            .joined(separator: "\n")
+        let questions = stage.guidingQuestions.map { "- \($0)" }.joined(separator: "\n")
+        let criteria = stage.exitCriteria.map { "- \($0)" }.joined(separator: "\n")
+
+        let prompt = """
+        You're a product launch coach. Suggest concrete next tasks for the current stage.
+
+        Project methodology: \(template.name)
+        Methodology overview: \(template.methodology)
+
+        Current stage: \(stage.title)
+        Stage purpose: \(stage.purpose)
+        Stage methodology: \(stage.methodology)
+
+        Guiding questions for this stage:
+        \(questions)
+
+        Exit criteria to advance:
+        \(criteria)
+
+        Existing tasks I already have for this stage:
+        \(existing.isEmpty ? "(none yet)" : existing)
+
+        Suggest 3-6 concrete next tasks aligned with this stage's exit criteria \
+        and methodology. Don't repeat existing tasks. Don't suggest generic \
+        best-practice tasks — be specific to this stage. Format each suggestion \
+        on its own line as exactly: `TASK: <title>` (so the UI can parse them).
+        """
+        await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: false, kind: .taskSuggestion)
+    }
+
+    /// Ask claude -p for a suggested roadmap diff given the current roadmap +
+    /// recent commits + recently-completed tasks.
+    func suggestRoadmapUpdate(projectPath: String) async {
+        guard let roadmapPath = self.roadmapPath(for: projectPath) else {
+            todoError = "No roadmap found. Add ROADMAP.md or docs/roadmap.md to the project root."
+            return
+        }
+        guard let roadmap = try? String(contentsOfFile: roadmapPath, encoding: .utf8) else {
+            todoError = "Couldn't read \(roadmapPath)."
+            return
+        }
+        let projectCommits = recentCommits.filter { $0.projectPath == projectPath }.prefix(20)
+        let commitLines = projectCommits.map { "- \($0.shortHash) \($0.subject)" }.joined(separator: "\n")
+        let doneTasks = tasksV2(for: projectPath)
+            .filter { $0.status == .done }
+            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+            .prefix(20)
+            .map { "- \($0.title)" }
+            .joined(separator: "\n")
+
+        let prompt = """
+        Here's the current roadmap for the project. Below it, recent commits and \
+        recently-completed tasks. Suggest a *minimal diff* to the roadmap so it \
+        reflects current reality — mark items that look complete, note new \
+        directions implied by the commits, and call out anything that looks \
+        like scope drift.
+
+        Don't rewrite the roadmap. Output a unified diff (---/+++/@@/-/+) so I \
+        can review and apply hunks selectively. If something is genuinely \
+        unclear, leave it and call it out at the bottom.
+
+        Current roadmap (\(URL(fileURLWithPath: roadmapPath).lastPathComponent)):
+        ```markdown
+        \(roadmap)
+        ```
+
+        Recent commits:
+        \(commitLines.isEmpty ? "(no recent commits)" : commitLines)
+
+        Recently-completed tasks:
+        \(doneTasks.isEmpty ? "(none)" : doneTasks)
+        """
+        await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: false, kind: .roadmapUpdate)
+    }
+
+    /// Parse `TASK: <title>` lines out of a Claude task suggestion run.
+    /// Returns just the titles in the order they appeared.
+    func parseSuggestedTasks(from claudeTaskId: UUID, projectPath: String) -> [String] {
+        let arr = claudeTasks[projectPath] ?? []
+        guard let task = arr.first(where: { $0.id == claudeTaskId }) else { return [] }
+        var out: [String] = []
+        for line in task.output {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let r = trimmed.range(of: #"^TASK:\s*"#, options: .regularExpression) {
+                let title = String(trimmed[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+                if !title.isEmpty { out.append(title) }
+            }
+        }
+        return out
+    }
+
     // MARK: - Recent commits feed
 
     @Published var recentCommits: [RecentCommit] = []

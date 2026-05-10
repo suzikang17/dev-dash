@@ -224,12 +224,25 @@ struct TasksTabView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
             }
 
-            if let next = nextStage {
-                let allChecked = stage.exitCriteria.allSatisfy {
-                    meta.checkedExitCriteria.contains("\(stage.id):\($0)")
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        await store.suggestTasksForStage(projectPath: project.path, template: template, stage: stage)
+                        store.detailTab = .claude
+                    }
+                } label: {
+                    Label("Suggest tasks", systemImage: "lightbulb")
                 }
-                HStack(spacing: 8) {
-                    Spacer()
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .help("Ask Claude to suggest concrete tasks for this stage")
+
+                Spacer()
+
+                if let next = nextStage {
+                    let allChecked = stage.exitCriteria.allSatisfy {
+                        meta.checkedExitCriteria.contains("\(stage.id):\($0)")
+                    }
                     Button {
                         store.setStage(next.id, for: project.path)
                     } label: {
@@ -305,16 +318,17 @@ struct TasksTabView: View {
                 .buttonStyle(.borderless)
                 .help("Open roadmap")
                 Button {
-                    // Placeholder for AI roadmap update suggestion
-                    store.todoError = "Roadmap-update suggestions are coming — wire this to claude -p later."
+                    Task {
+                        await store.suggestRoadmapUpdate(projectPath: project.path)
+                        store.detailTab = .claude
+                    }
                 } label: {
                     Label("Suggest update", systemImage: "sparkles")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(true)
-                .help("Coming soon: AI-generated roadmap diff")
+                .help("Ask Claude for a unified diff of suggested roadmap updates")
             }
             .padding(10)
             .background((stale ? Color.orange : Color.secondary).opacity(0.10))
@@ -504,6 +518,21 @@ private struct TaskLine: View {
                     }
                     Button("Skip") {
                         store.setTaskStatus(projectPath: projectPath, id: task.id, status: .skipped)
+                    }
+                    Divider()
+                    Section("Claude") {
+                        Button {
+                            Task {
+                                await store.runForTask(task, projectPath: projectPath, allowEdits: false)
+                                store.detailTab = .claude
+                            }
+                        } label: { Label("Investigate (read-only)", systemImage: "magnifyingglass") }
+                        Button {
+                            Task {
+                                await store.runForTask(task, projectPath: projectPath, allowEdits: true)
+                                store.detailTab = .claude
+                            }
+                        } label: { Label("Run + edit files", systemImage: "wand.and.stars") }
                     }
                     Divider()
                     Button(role: .destructive) {
