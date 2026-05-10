@@ -13,12 +13,21 @@ enum TaskStore {
         if FileManager.default.fileExists(atPath: path),
            let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
            let tasks = try? decoder.decode([TaskItem].self, from: data) {
-            return tasks
+            // Migrate legacy in_progress tasks to open+ai ownership
+            let migrated = tasks.map { t -> TaskItem in
+                guard t.status == .inProgress else { return t }
+                var m = t
+                m.status = .open
+                if m.owner == .none { m.owner = .ai }
+                m.hasAIRun = true
+                return m
+            }
+            return migrated
         }
         // No tasks.json yet — migrate from legacy todos.json if present.
         let legacy = TodoStore.read(projectPath)
         guard !legacy.isEmpty else { return [] }
-        let migrated: [TaskItem] = legacy.map { todo in
+        let fromLegacy: [TaskItem] = legacy.map { todo in
             TaskItem(
                 id: todo.id,
                 title: todo.text,
@@ -32,6 +41,15 @@ enum TaskStore {
                 completedAt: todo.doneAt.flatMap { ISO8601DateFormatter().date(from: $0) },
                 ghIssueURL: nil
             )
+        }
+        // Migrate legacy in_progress tasks to open+ai ownership
+        let migrated = fromLegacy.map { t -> TaskItem in
+            guard t.status == .inProgress else { return t }
+            var m = t
+            m.status = .open
+            if m.owner == .none { m.owner = .ai }
+            m.hasAIRun = true
+            return m
         }
         try? write(projectPath, tasks: migrated)
         return migrated
@@ -119,6 +137,36 @@ enum TaskStore {
             break
         default:
             break
+        }
+        try write(projectPath, tasks: tasks)
+    }
+
+    static func setOwner(projectPath: String, id: String, owner: TaskOwner) throws {
+        var tasks = read(projectPath)
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[idx].owner = owner
+        try write(projectPath, tasks: tasks)
+    }
+
+    static func setHasAIRun(projectPath: String, id: String) throws {
+        var tasks = read(projectPath)
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[idx].hasAIRun = true
+        try write(projectPath, tasks: tasks)
+    }
+
+    static func setPhases(projectPath: String, id: String, phases: [String]) throws {
+        var tasks = read(projectPath)
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[idx].phases = phases
+        try write(projectPath, tasks: tasks)
+    }
+
+    static func addCompletedPhase(projectPath: String, id: String, phase: String) throws {
+        var tasks = read(projectPath)
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        if !tasks[idx].completedPhases.contains(phase) {
+            tasks[idx].completedPhases.append(phase)
         }
         try write(projectPath, tasks: tasks)
     }
