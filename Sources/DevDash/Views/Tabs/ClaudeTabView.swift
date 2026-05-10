@@ -320,43 +320,57 @@ private struct InlineSectionHeader: View {
 
 private struct ClaudeSessionRow: View {
     let session: ClaudeSession
-    @State private var copied = false
+    @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bubble.left.fill")
-                .foregroundColor(.purple)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.firstUserMessage ?? "(no prompt captured)")
-                    .font(.system(size: 13))
-                    .lineLimit(2)
-                    .foregroundColor(.primary)
-                HStack(spacing: 6) {
-                    Text(session.id.prefix(8) + "…")
-                        .font(.system(size: 10).monospaced())
-                        .foregroundColor(.secondary)
-                    Text("·").foregroundColor(.secondary).font(.system(size: 10))
-                    Text(timeAgo(session.lastActivity))
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    Text("·").foregroundColor(.secondary).font(.system(size: 10))
-                    Text(verbatim: "\(session.messageCount) msgs")
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor(.secondary)
+        Button {
+            store.openSessionId = session.id
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.fill")
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.firstUserMessage ?? "(no prompt captured)")
+                        .font(.system(size: 13))
+                        .lineLimit(2)
+                        .foregroundColor(.primary)
+                    HStack(spacing: 6) {
+                        Text(session.id.prefix(8) + "…")
+                            .font(.system(size: 10).monospaced())
+                            .foregroundColor(.secondary)
+                        Text("·").foregroundColor(.secondary).font(.system(size: 10))
+                        Text(timeAgo(session.lastActivity))
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Text("·").foregroundColor(.secondary).font(.system(size: 10))
+                        if let d = store.digest(for: session.id) {
+                            Text(verbatim: "\(d.tokens.total.formatted()) tok")
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text(verbatim: "\(session.messageCount) msgs")
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 10))
             }
-            Spacer()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
             Button {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString("claude --resume \(session.id)", forType: .string)
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
-            } label: {
-                Label(copied ? "Copied" : "Resume", systemImage: copied ? "checkmark" : "doc.on.clipboard")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            } label: { Label("Copy resume command", systemImage: "doc.on.clipboard") }
+            Button {
+                store.openSessionId = session.id
+            } label: { Label("Open detail", systemImage: "rectangle.expand.vertical") }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

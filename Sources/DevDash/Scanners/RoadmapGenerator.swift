@@ -6,13 +6,21 @@ import Foundation
 /// owns the file. The header makes that explicit.
 enum RoadmapGenerator {
     static let header = "<!-- managed by devdash — edit answers/exit criteria in the dashboard, not this file -->"
+    static let folderRel = "docs/devdash"
 
-    static func filePath(for projectPath: String) -> String {
-        "\(projectPath)/ROADMAP.md"
+    static func folderPath(for projectPath: String) -> String {
+        "\(projectPath)/\(folderRel)"
     }
 
-    /// Generate and write `ROADMAP.md`. Only does anything if a template
-    /// is applied. Returns the written path on success.
+    static func filePath(for projectPath: String) -> String {
+        "\(folderPath(for: projectPath))/ROADMAP.md"
+    }
+
+    /// Legacy locations we'll migrate from on first write.
+    private static let legacyPaths = ["ROADMAP.md"]
+
+    /// Generate and write `docs/devdash/ROADMAP.md`. Only does anything if a
+    /// template is applied. Returns the written path on success.
     @discardableResult
     static func write(
         projectName: String,
@@ -28,19 +36,37 @@ enum RoadmapGenerator {
             tasks: tasks
         )
         let path = filePath(for: projectPath)
-        // If the existing file has the header, we own it. Otherwise — bail
-        // rather than clobber a user-authored ROADMAP.md.
+
+        // Bail if a non-DevDash-managed file already exists at the target.
         if FileManager.default.fileExists(atPath: path),
            let existing = try? String(contentsOfFile: path, encoding: .utf8),
            !existing.contains(header) {
             return nil
         }
+
+        // Ensure docs/devdash/ exists.
+        try? FileManager.default.createDirectory(
+            atPath: folderPath(for: projectPath),
+            withIntermediateDirectories: true
+        )
+
         do {
             try body.write(toFile: path, atomically: true, encoding: .utf8)
-            return path
         } catch {
             return nil
         }
+
+        // Clean up legacy ROADMAP.md at project root if it's a DevDash-managed
+        // copy from before the move; leave user-authored ones alone.
+        for legacy in legacyPaths {
+            let legacyAbs = "\(projectPath)/\(legacy)"
+            guard FileManager.default.fileExists(atPath: legacyAbs),
+                  let existing = try? String(contentsOfFile: legacyAbs, encoding: .utf8),
+                  existing.contains(header) else { continue }
+            try? FileManager.default.removeItem(atPath: legacyAbs)
+        }
+
+        return path
     }
 
     /// Render to a string without writing, e.g. for previewing.

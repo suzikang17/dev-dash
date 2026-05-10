@@ -77,19 +77,12 @@ enum ProjectMetaStore {
         try write(projectPath, meta: meta)
     }
 
-    /// Discover a roadmap document by trying common filenames.
+    /// The roadmap is always `docs/devdash/ROADMAP.md` — DevDash owns this
+    /// path and writes there exclusively. Other ROADMAP-shaped files in the
+    /// project are intentionally ignored.
     static func discoverRoadmap(in projectPath: String) -> String? {
-        let candidates = [
-            "ROADMAP.md", "Roadmap.md", "roadmap.md",
-            "TODO.md", "Todo.md", "todo.md",
-            "docs/ROADMAP.md", "docs/roadmap.md", "docs/todo.md"
-        ]
-        let fm = FileManager.default
-        for c in candidates {
-            let p = "\(projectPath)/\(c)"
-            if fm.fileExists(atPath: p) { return p }
-        }
-        return nil
+        let path = "\(projectPath)/docs/devdash/ROADMAP.md"
+        return FileManager.default.fileExists(atPath: path) ? path : nil
     }
 
     /// Days since the resolved roadmap file was last modified, or nil if no roadmap.

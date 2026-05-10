@@ -351,6 +351,17 @@ enum HealthCheckStatus: String, Hashable {
     case unknown, running, passed, failed
 }
 
+// MARK: - Per-question chats with Claude
+
+struct QuestionChatMessage: Codable, Identifiable, Hashable {
+    let id: String          // uuid
+    let role: Role
+    var content: String
+    let timestamp: Date
+
+    enum Role: String, Codable, Hashable { case user, assistant }
+}
+
 // MARK: - Providers (third-party services used by a project)
 
 enum ProviderCategory: String, Codable, CaseIterable, Hashable {

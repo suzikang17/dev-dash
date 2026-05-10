@@ -22,6 +22,7 @@ struct TasksTabView: View {
 
                     if let template = store.template(for: project.path) {
                         stageCard(project: project, template: template)
+                        suggestedTasksCard(project: project)
                     } else {
                         templatePickerCard(project: project)
                     }
@@ -174,7 +175,9 @@ struct TasksTabView: View {
                     ForEach(stage.guidingQuestions, id: \.self) { q in
                         QuestionAnswerRow(
                             projectPath: project.path,
-                            stageId: stage.id,
+                            projectName: project.name,
+                            template: template,
+                            stage: stage,
                             question: q,
                             onAddAsTask: {
                                 newTitle = q
@@ -261,6 +264,63 @@ struct TasksTabView: View {
         .background(Color(NSColor.controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.accentColor.opacity(0.4), lineWidth: 0.8))
+    }
+
+    @ViewBuilder
+    private func suggestedTasksCard(project: Project) -> some View {
+        let claudeRuns = store.claudeTasks[project.path] ?? []
+        let latest = claudeRuns.first { $0.kind == .taskSuggestion }
+        let parsed: [String] = latest.map {
+            store.parseSuggestedTasks(from: $0.id, projectPath: project.path)
+        } ?? []
+
+        if let latest = latest {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Label("Suggestions from Claude", systemImage: "lightbulb")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.orange)
+                    if latest.status == .running {
+                        ProgressView().controlSize(.small)
+                        Text("Streaming…")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    } else if !parsed.isEmpty {
+                        Text(verbatim: "\(parsed.count) parsed")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        store.detailTab = .claude
+                    } label: {
+                        Label("Open in Claude tab", systemImage: "arrow.up.forward.app")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                }
+
+                if parsed.isEmpty && latest.status == .completed {
+                    Text("No `TASK:` lines parsed from the response. Open the Claude tab to read the raw output.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(parsed, id: \.self) { suggestion in
+                        SuggestionRow(
+                            suggestion: suggestion,
+                            projectPath: project.path,
+                            stageId: store.meta(for: project.path).currentStageId
+                        )
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 0.5))
+        }
     }
 
     @ViewBuilder
@@ -448,6 +508,53 @@ struct TasksTabView: View {
     }
 }
 
+private struct SuggestionRow: View {
+    let suggestion: String
+    let projectPath: String
+    let stageId: String?
+    @EnvironmentObject var store: DashboardStore
+    @State private var category: TaskCategory = .other
+    @State private var added = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lightbulb.fill")
+                .foregroundColor(.orange)
+                .frame(width: 14)
+            Text(suggestion)
+                .font(.system(size: 12))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(2)
+            Picker("", selection: $category) {
+                ForEach(TaskCategory.allCases, id: \.self) { c in
+                    Label(c.label, systemImage: c.systemImage).tag(c)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 130)
+            .controlSize(.small)
+            .disabled(added)
+
+            Button {
+                store.addTask(
+                    projectPath: projectPath,
+                    title: suggestion,
+                    category: category,
+                    stage: stageId
+                )
+                added = true
+            } label: {
+                Label(added ? "Added" : "Add", systemImage: added ? "checkmark" : "plus")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(added)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 /// Stage validation checks — pass/fail badges with run + expand-to-tail.
 private struct ValidationSection: View {
     let projectPath: String
@@ -599,14 +706,19 @@ private struct ValidationRow: View {
 /// expand to see/edit the answer. Saves on commit (Enter / blur).
 private struct QuestionAnswerRow: View {
     let projectPath: String
-    let stageId: String
+    let projectName: String
+    let template: LaunchTemplate
+    let stage: TemplateStage
     let question: String
     let onAddAsTask: () -> Void
 
     @EnvironmentObject var store: DashboardStore
     @State private var expanded = false
     @State private var draft: String = ""
+    @State private var chatOpen = false
     @FocusState private var focused: Bool
+
+    private var stageId: String { stage.id }
 
     private var current: String {
         store.meta(for: projectPath).answer(for: stageId, question: question)
@@ -659,6 +771,15 @@ private struct QuestionAnswerRow: View {
                 }
                 .buttonStyle(.plain)
 
+                Button {
+                    chatOpen = true
+                } label: {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.purple)
+                }
+                .buttonStyle(.plain)
+                .help("Chat with Claude about this question")
+
                 Button(action: onAddAsTask) {
                     Image(systemName: "plus.circle")
                         .foregroundColor(.accentColor)
@@ -694,6 +815,14 @@ private struct QuestionAnswerRow: View {
                 .padding(.leading, 22)
             }
         }
+        .modifier(ChatSheetModifier(
+            isPresented: $chatOpen,
+            projectPath: projectPath,
+            projectName: projectName,
+            template: template,
+            stage: stage,
+            question: question
+        ))
     }
 
     private func commitIfChanged() {
@@ -707,6 +836,30 @@ private struct QuestionAnswerRow: View {
         commitIfChanged()
         expanded = false
         focused = false
+    }
+}
+
+private extension QuestionAnswerRow {
+    /// Wraps body with the chat sheet. Called via .modifier.
+    struct ChatSheetModifier: ViewModifier {
+        @Binding var isPresented: Bool
+        let projectPath: String
+        let projectName: String
+        let template: LaunchTemplate
+        let stage: TemplateStage
+        let question: String
+
+        func body(content: Content) -> some View {
+            content.sheet(isPresented: $isPresented) {
+                QuestionChatSheet(
+                    projectPath: projectPath,
+                    projectName: projectName,
+                    stage: stage,
+                    template: template,
+                    question: question
+                )
+            }
+        }
     }
 }
 
