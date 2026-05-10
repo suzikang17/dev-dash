@@ -1,0 +1,15 @@
+# Swift / SwiftPM
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+
+# macOS
+.DS_Store
+
+# DevDash local state (todos, recaps, server logs)
+.devdash/
+
+# oh-my-claudecode state
+.omc/
+.claude/
