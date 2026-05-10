@@ -40,12 +40,15 @@ enum ProductDocAssets {
     ///   <ul class="checklist">…</ul>
     ///   <button class="add-btn" @click="...">+ Add item</button>
     ///
-    /// `html` is single-quote-escaped + newline-stripped so it can be embedded
-    /// inline in the Alpine expression attribute value.
+    /// `html` is escaped for both layers it crosses: single-quotes and backslashes
+    /// are escaped for the JS string literal, double-quotes become `&quot;` for
+    /// HTML attribute safety, newlines become spaces. `label` is emitted raw —
+    /// callers must pass static, author-controlled strings (no user input).
     static func addBtn(label: String, html: String) -> String {
         let escaped = html
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "\n", with: " ")
         return """
         <button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '\(escaped)'); window.devdashMarkDirty($el)">\(label)</button>
