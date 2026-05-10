@@ -38,6 +38,8 @@ struct TaskDetailSheet: View {
                     titleEditor
                     metadataRow
                     descriptionEditor
+                    phasesSection
+                    artifactsSection
                     if !children.isEmpty { childrenSection }
                     timeline
                     aiActions
@@ -245,6 +247,79 @@ struct TaskDetailSheet: View {
     }
 
     @ViewBuilder
+    private var phasesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("PHASES")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("+ Add") {
+                    if var t = task {
+                        t.phases = (t.phases ?? []) + ["New phase"]
+                        store.updateTask(projectPath: projectPath, t)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(task == nil)
+            }
+
+            if let phases = task?.phases, !phases.isEmpty {
+                ForEach(Array(phases.enumerated()), id: \.offset) { i, phase in
+                    HStack(spacing: 8) {
+                        Image(systemName: (task?.completedPhases.contains(phase) == true) ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor((task?.completedPhases.contains(phase) == true) ? .green : .secondary)
+                            .frame(width: 14)
+                        Text(phase)
+                            .font(.system(size: 13))
+                        Spacer()
+                        Button {
+                            if var t = task {
+                                var p = t.phases ?? []
+                                p.remove(at: i)
+                                t.phases = p.isEmpty ? nil : p
+                                store.updateTask(projectPath: projectPath, t)
+                            }
+                        } label: { Image(systemName: "xmark").foregroundColor(.secondary) }
+                            .buttonStyle(.borderless).controlSize(.small)
+                    }
+                    .padding(.vertical, 2)
+                }
+            } else {
+                Text("Let AI decide phases for this task")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var artifactsSection: some View {
+        let testsPath = "\(projectPath)/.devdash/manual-tests/\(task?.id ?? "").md"
+        let hasTests = FileManager.default.fileExists(atPath: testsPath)
+
+        if hasTests {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("MANUAL TESTS")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(.secondary)
+                Button {
+                    store.pendingFilePath = testsPath
+                    store.detailTab = .files
+                    dismiss()
+                } label: {
+                    Label("Open test checklist", systemImage: "checklist")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var aiActions: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("CLAUDE")
@@ -285,6 +360,14 @@ struct TaskDetailSheet: View {
                     .buttonStyle(.bordered)
             }
             Spacer()
+            if let t = task, t.status != .done {
+                Button {
+                    Task { await store.markTaskDone(projectPath: projectPath, taskId: t.id) }
+                    dismiss()
+                } label: { Label("Mark Done", systemImage: "checkmark.circle") }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
+            }
             Button("Cancel") { dismiss() }
                 .buttonStyle(.bordered)
             Button("Save") { saveAndDismiss() }
