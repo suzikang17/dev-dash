@@ -5,7 +5,7 @@ import Foundation
 /// tool's help) creates the actual tasks; nothing is auto-dumped into their
 /// list.
 enum Templates {
-    static let all: [LaunchTemplate] = [saasMvp, library, marketingSite]
+    static let all: [LaunchTemplate] = [saasMvp, personalTool, marketingSite]
 
     static func find(_ id: String?) -> LaunchTemplate? {
         guard let id = id else { return nil }
@@ -121,100 +121,103 @@ extension Templates {
         ]
     )
 
-    static let library = LaunchTemplate(
-        id: "library",
-        name: "Open Source Library",
-        summary: "Bones → polish → release → adoption. Optimized for code quality, docs, and discoverability.",
+    static let personalTool = LaunchTemplate(
+        id: "personal-tool",
+        name: "Personal Tool",
+        summary: "A tool for you, first. Itch → sketch → live with it → refine → maybe share. No marketing, no users, no stress — just build the thing you wish existed.",
         methodology: """
-        The README is the product. Names matter more than internals. Ship \
-        small, document obsessively, and let adoption pull the roadmap.
+        You are the user. Build for yourself, use it daily, fix what actually \
+        annoys you (not what you imagine will annoy other people). Resist \
+        polishing for an audience that doesn't exist. If it ends up useful \
+        to others, that's a bonus — not the goal.
         """,
         stages: [
             .init(
-                id: "shape",
-                title: "Shape the API",
-                purpose: "Get the public surface right before you build the internals — names are the hardest part.",
-                methodology: "Write the README before the code. The example is the spec.",
+                id: "itch",
+                title: "Identify the itch",
+                purpose: "Pin down the recurring annoyance. Personal tools work when they fix something real for you, not something speculative.",
+                methodology: "If you can't name the moment of annoyance, you don't have an itch yet — you have a curiosity. Wait for the itch.",
                 guidingQuestions: [
-                    "What's the 30-second pitch?",
-                    "What does the simplest example look like?",
-                    "What names did you almost pick — and why are these better?",
-                    "Which license fits (MIT / Apache / BSD / something else)?",
-                    "What's NOT in the v0 surface (be specific)?"
+                    "What's the specific moment that annoys you?",
+                    "How often does it happen — daily, weekly, monthly?",
+                    "What's your current workaround — and why is it bad enough to replace?",
+                    "Is this actually a tool problem, or a habit problem?",
+                    "What's the rough shape of the fix in your head?"
                 ],
                 exitCriteria: [
-                    "README pitch + minimal example written",
-                    "Public API sketched in one file",
-                    "License decided"
+                    "The annoyance written in one sentence",
+                    "Frequency known (you've actually counted, not guessed)",
+                    "Rough shape of the fix sketched"
                 ]
             ),
             .init(
-                id: "build",
-                title: "Build it",
-                purpose: "Implement the API; tests prove it works.",
-                methodology: "Tests at the public surface, not the internals. Internals can change.",
+                id: "sketch",
+                title: "Sketch the smallest version",
+                purpose: "Build the crappiest possible version that solves the itch. No polish. No edge cases. No options. Make it work for you, today, in your one workflow.",
+                methodology: "Hardcode everything. Skip auth. Skip config. Skip UI niceties. The goal is to use it, not to ship it.",
                 guidingQuestions: [
-                    "What's the smallest implementation that passes the example?",
-                    "What edge cases must work (and which can wait)?",
-                    "What's the test strategy — unit, integration, snapshot?",
-                    "What's CI doing — lint, test, build, publish?"
+                    "What's the dumbest possible version that works?",
+                    "What can be hardcoded for now (paths, names, choices)?",
+                    "What's the one workflow it must support?",
+                    "What's NOT in v0 (write it down so you don't sneak it in)?",
+                    "Where will it live — local script, menu bar app, web page on localhost?"
                 ],
                 exitCriteria: [
-                    "Core API implemented",
-                    "Test coverage on the public surface",
-                    "CI green"
+                    "It runs on your machine",
+                    "It solves the itch in your one workflow",
+                    "You haven't added a single feature beyond the itch"
                 ]
             ),
             .init(
-                id: "polish",
-                title: "Polish",
-                purpose: "Docs, examples, error messages — the things that make people not give up.",
-                methodology: "Every error message should suggest the fix. Every example should be paste-runnable.",
+                id: "live-with-it",
+                title: "Live with it",
+                purpose: "Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.",
+                methodology: "Don't open the editor for 1-2 weeks. Just use it. Take notes when something annoys you. The notes become the refine list.",
                 guidingQuestions: [
-                    "Are error messages actionable, or just descriptive?",
-                    "Do you have basic / common / advanced examples?",
-                    "Is there a CHANGELOG and what's the versioning scheme?",
-                    "Where will users find docs (README, docs site, both)?"
+                    "Have you actually used it for the original itch this week?",
+                    "What new annoyances have you noticed (be specific)?",
+                    "What feature did you almost add — and is the urge real or imagined?",
+                    "What's missing that genuinely blocks you, vs. nice-to-have?"
                 ],
                 exitCriteria: [
-                    "README has full feature coverage",
-                    "Error messages are actionable",
-                    "3+ working examples",
-                    "Changelog started"
+                    "Used daily/weekly for at least 1-2 weeks",
+                    "Friction list written (real annoyances, not imagined ones)",
+                    "Nothing added during this stage"
                 ]
             ),
             .init(
-                id: "release",
-                title: "Release",
-                purpose: "Ship 1.0 (or 0.1) and tell people.",
-                methodology: "Pick channels by audience, not by reach. Library users live in different places than SaaS users.",
+                id: "refine",
+                title: "Refine the parts that hurt",
+                purpose: "Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.",
+                methodology: "Sort the friction list by frequency × pain. Fix the top 3. Stop. Use it again.",
                 guidingQuestions: [
-                    "What version makes sense — 0.1, 0.x, or 1.0?",
-                    "Where does your audience read about libraries (HN, Reddit, lobste.rs, lang-specific aggregators)?",
-                    "What's the announcement story?",
-                    "Where do issues / questions go?"
+                    "What's the #1 friction point — and is it about correctness, speed, or ergonomics?",
+                    "Are you fixing real friction, or rebuilding because you're bored?",
+                    "What would make this 50% better in daily use?",
+                    "What can you delete — features you added that you don't use?"
                 ],
                 exitCriteria: [
-                    "Tagged release",
-                    "Published to package registry",
-                    "Announcement post written and shared"
+                    "Top 3 friction points fixed",
+                    "Unused features deleted (yes, deleted)",
+                    "Tool still solves the original itch"
                 ]
             ),
             .init(
-                id: "maintain",
-                title: "Maintain & grow",
-                purpose: "Respond to issues, ship features users actually need, build trust over time.",
-                methodology: "Triage cadence > triage quality. Predictable beats thorough.",
+                id: "maybe-share",
+                title: "Maybe share it",
+                purpose: "Optional. If it's useful to others without contorting your life, share it. If sharing means meetings, support, and feature debates — don't.",
+                methodology: "Share at the level you can sustain. A README and a tweet is fine. Anything more is a commitment, treat it as one.",
                 guidingQuestions: [
-                    "What's your issue triage cadence?",
-                    "How will external contributions get reviewed?",
-                    "What's on the public roadmap?",
-                    "What feature requests should you say no to?"
+                    "Is sharing this going to obligate you (PRs, issues, support)?",
+                    "What's the smallest possible share — gist, tweet, README, package?",
+                    "Who would actually find this useful — not theoretical, real people?",
+                    "Are you ready to say no to feature requests that aren't your itch?",
+                    "Or — should you just keep it private and free?"
                 ],
                 exitCriteria: [
-                    "Issue triage cadence defined",
-                    "1+ external contributor",
-                    "Roadmap published"
+                    "Decision made: keep private, or share at level X",
+                    "If sharing: README written, repo public, audience told",
+                    "If keeping private: that's also a valid endpoint — close the project"
                 ]
             )
         ]

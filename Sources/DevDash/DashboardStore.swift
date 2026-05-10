@@ -67,6 +67,7 @@ final class DashboardStore: ObservableObject {
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
     @Published var projectTasks: [String: [TaskItem]] = [:]   // path → tasks
+    @Published var projectProviders: [String: [Provider]] = [:]   // path → providers
 
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
@@ -423,20 +424,25 @@ final class DashboardStore: ObservableObject {
         projectTasks[projectPath] ?? []
     }
 
-    /// Initial load — pulls meta + tasks for every project (cheap reads).
+    /// Initial load — pulls meta + tasks + providers for every project.
+    /// Detection runs once per project here; subsequent edits hit just one path.
     func loadProjectMetaAndTasks() {
         let paths = projects.map { $0.path }
         Task.detached(priority: .utility) { [weak self] in
             var metaMap: [String: ProjectMeta] = [:]
             var taskMap: [String: [TaskItem]] = [:]
+            var providerMap: [String: [Provider]] = [:]
             for path in paths {
                 metaMap[path] = ProjectMetaStore.read(path)
                 let tasks = TaskStore.read(path)
                 if !tasks.isEmpty { taskMap[path] = tasks }
+                let providers = ProviderStore.refresh(path)
+                if !providers.isEmpty { providerMap[path] = providers }
             }
             await MainActor.run {
                 self?.projectMeta = metaMap
                 self?.projectTasks = taskMap
+                self?.projectProviders = providerMap
             }
         }
     }
@@ -512,6 +518,51 @@ final class DashboardStore: ObservableObject {
 
     func roadmapPath(for projectPath: String) -> String? {
         ProjectMetaStore.discoverRoadmap(in: projectPath)
+    }
+
+    // MARK: - Providers
+
+    func providers(for projectPath: String) -> [Provider] {
+        projectProviders[projectPath] ?? []
+    }
+
+    func refreshProviders(for projectPath: String) {
+        let merged = ProviderStore.refresh(projectPath)
+        projectProviders[projectPath] = merged
+    }
+
+    func addProvider(
+        projectPath: String,
+        name: String,
+        category: ProviderCategory,
+        dashboardURL: URL? = nil,
+        monthlyEstimateUSD: Double? = nil,
+        notes: String? = nil
+    ) {
+        do {
+            _ = try ProviderStore.add(
+                projectPath: projectPath, name: name, category: category,
+                dashboardURL: dashboardURL, monthlyEstimateUSD: monthlyEstimateUSD,
+                notes: notes
+            )
+            projectProviders[projectPath] = ProviderStore.read(projectPath)
+        } catch {
+            todoError = "Couldn't add provider: \(error.localizedDescription)"
+        }
+    }
+
+    func updateProvider(projectPath: String, _ provider: Provider) {
+        try? ProviderStore.update(projectPath, provider)
+        projectProviders[projectPath] = ProviderStore.read(projectPath)
+    }
+
+    func deleteProvider(projectPath: String, id: String) {
+        try? ProviderStore.delete(projectPath, id: id)
+        projectProviders[projectPath] = ProviderStore.read(projectPath)
+    }
+
+    func totalMonthlyCost(for projectPath: String) -> Double? {
+        ProviderStore.totalMonthlyCost(providers(for: projectPath))
     }
 
     // MARK: - Recent commits feed

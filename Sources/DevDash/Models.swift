@@ -279,6 +279,61 @@ struct TemplateStage: Identifiable, Hashable {
     let exitCriteria: [String]
 }
 
+// MARK: - Providers (third-party services used by a project)
+
+enum ProviderCategory: String, Codable, CaseIterable, Hashable {
+    case hosting, database, payments, email, ai, analytics, auth, monitoring, storage, cdn, search, other
+
+    var label: String { rawValue.capitalized }
+
+    var systemImage: String {
+        switch self {
+        case .hosting: return "cloud"
+        case .database: return "cylinder.split.1x2"
+        case .payments: return "creditcard"
+        case .email: return "envelope"
+        case .ai: return "sparkles"
+        case .analytics: return "chart.bar"
+        case .auth: return "key"
+        case .monitoring: return "waveform.path.ecg"
+        case .storage: return "externaldrive"
+        case .cdn: return "globe.americas"
+        case .search: return "magnifyingglass"
+        case .other: return "circle.dashed"
+        }
+    }
+}
+
+enum ProviderDetectionSource: Codable, Hashable {
+    case packageJSON(name: String)
+    case envFile(key: String)
+    case manual
+
+    var label: String {
+        switch self {
+        case .packageJSON(let n): return "package.json: \(n)"
+        case .envFile(let k):     return ".env: \(k)"
+        case .manual:             return "manual"
+        }
+    }
+
+    var isManual: Bool {
+        if case .manual = self { return true }
+        return false
+    }
+}
+
+struct Provider: Identifiable, Codable, Hashable {
+    let id: String
+    var name: String
+    var category: ProviderCategory
+    var detectedFrom: ProviderDetectionSource
+    var dashboardURL: URL?
+    var monthlyEstimateUSD: Double?
+    var notes: String?
+    var addedAt: Date
+}
+
 struct Issue: Identifiable, Hashable {
     let number: Int
     let title: String
