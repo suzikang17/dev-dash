@@ -571,6 +571,15 @@ final class DashboardStore: ObservableObject {
         regenerateRoadmap(for: projectPath)
     }
 
+    func setTaskOwner(projectPath: String, id: String, owner: TaskOwner) {
+        try? TaskStore.setOwner(projectPath: projectPath, id: id, owner: owner)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+    }
+
+    func reloadTasks(for projectPath: String) {
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+    }
+
     func deleteTask(projectPath: String, id: String) {
         try? TaskStore.delete(projectPath: projectPath, id: id)
         projectTasks[projectPath] = TaskStore.read(projectPath)
