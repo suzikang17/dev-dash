@@ -208,12 +208,81 @@ struct ProductWebView: NSViewRepresentable {
         document.head.appendChild(style);
       }
 
+      // Auto-inject + Add buttons for known structural patterns so that
+      // sections scaffolded before this feature shipped still get the
+      // affordance. The buttons are appended in-DOM only on first sight;
+      // they'll persist into the file once the user makes any edit.
+      function autoInject(scope) {
+        (scope || document).querySelectorAll('[data-section-file]').forEach(function(sec) {
+          if (sec.dataset.autoinjected) return;
+          sec.dataset.autoinjected = 'true';
+
+          function makeBtn(label, template, target) {
+            var btn = document.createElement('button');
+            btn.className = 'add-btn';
+            btn.textContent = label;
+            btn.dataset.action = 'dom-append-template';
+            btn.dataset.template = template;
+            btn.dataset.target = target;
+            return btn;
+          }
+          function tagWith(el, attr, prefix) {
+            if (el.dataset[attr]) return el.dataset[attr];
+            var id = prefix + Math.random().toString(36).slice(2, 9);
+            el.setAttribute('data-' + attr.replace(/([A-Z])/g, '-$1').toLowerCase(), id);
+            return id;
+          }
+
+          // .kpi-grid → "+ Add KPI" sibling button after the grid
+          sec.querySelectorAll('.kpi-grid').forEach(function(grid) {
+            if (grid.dataset.autobtn) return;
+            grid.dataset.autobtn = '1';
+            var id = tagWith(grid, 'kgridId', 'kg-');
+            var btn = makeBtn('+ Add KPI', 'kpi', '[data-k-grid-id="' + id + '"]');
+            grid.parentNode.insertBefore(btn, grid.nextSibling);
+          });
+
+          // ul.checklist → "+ Add item"
+          sec.querySelectorAll('ul.checklist').forEach(function(ul) {
+            if (ul.dataset.autobtn) return;
+            ul.dataset.autobtn = '1';
+            var id = tagWith(ul, 'clId', 'cl-');
+            var btn = makeBtn('+ Add item', 'checklist-item', '[data-c-l-id="' + id + '"]');
+            ul.parentNode.insertBefore(btn, ul.nextSibling);
+          });
+
+          // .board .col → "+ Idea" inside each column
+          sec.querySelectorAll('.board .col').forEach(function(col) {
+            if (col.dataset.autobtn) return;
+            col.dataset.autobtn = '1';
+            var id = tagWith(col, 'colId', 'col-');
+            var btn = makeBtn('+ Idea', 'idea-card', '[data-col-id="' + id + '"]');
+            col.appendChild(btn);
+          });
+
+          // table tbody → "+ Add row"
+          sec.querySelectorAll('table tbody').forEach(function(tbody) {
+            if (tbody.dataset.autobtn) return;
+            tbody.dataset.autobtn = '1';
+            var id = tagWith(tbody, 'tbId', 'tb-');
+            var table = tbody.closest('table');
+            var btn = makeBtn('+ Add row', 'metric-row', '[data-t-b-id="' + id + '"]');
+            (table || tbody).parentNode.insertBefore(btn, (table || tbody).nextSibling);
+          });
+        });
+      }
+
       attachEditing(document);
       attachActions();
+      autoInject(document);
       // Re-attach after tab switches (panes are still in DOM but new buttons may exist)
       document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
         b.addEventListener('click', function() {
-          setTimeout(function() { attachEditing(document); attachActions(); }, 30);
+          setTimeout(function() {
+            attachEditing(document);
+            autoInject(document);
+            attachActions();
+          }, 30);
         });
       });
     })();
