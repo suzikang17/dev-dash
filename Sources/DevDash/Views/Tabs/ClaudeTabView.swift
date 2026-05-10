@@ -239,6 +239,14 @@ private struct ClaudeTaskCard: View {
             }
 
             if expanded {
+                if let phases = task.phases, !phases.isEmpty {
+                    PhaseStepperView(
+                        phases: phases,
+                        currentPhase: task.currentPhase,
+                        completedPhases: task.completedPhases
+                    )
+                    .padding(.bottom, 4)
+                }
                 if task.output.isEmpty {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -391,5 +399,46 @@ private struct EmptyStateClaude: View {
                 .frame(maxWidth: 420)
         }
         .frame(maxWidth: .infinity, minHeight: 240)
+    }
+}
+
+private struct PhaseStepperView: View {
+    let phases: [String]
+    let currentPhase: String?
+    let completedPhases: [String]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(Array(phases.enumerated()), id: \.offset) { i, phase in
+                    let isDone = completedPhases.contains(phase)
+                    let isCurrent = phase == currentPhase
+
+                    HStack(spacing: 4) {
+                        Text(isDone ? "✓ \(phase)" : phase)
+                            .font(.system(size: 10, weight: isCurrent ? .semibold : .regular))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(
+                                isDone ? Color.green.opacity(0.15) :
+                                isCurrent ? Color.blue.opacity(0.18) :
+                                Color.secondary.opacity(0.10)
+                            )
+                            .foregroundColor(
+                                isDone ? .green :
+                                isCurrent ? .blue :
+                                .secondary
+                            )
+                            .clipShape(Capsule())
+                            .overlay(isCurrent ? Capsule().stroke(Color.blue.opacity(0.4), lineWidth: 0.8) : nil)
+
+                        if i < phases.count - 1 {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8))
+                                .foregroundColor(.secondary.opacity(0.5))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
