@@ -13,6 +13,7 @@ struct TasksTabView: View {
     @State private var newStage: String? = nil
     @State private var showTemplatePicker = false
     @FocusState private var addFocused: Bool
+    @AppStorage("taskViewMode") private var viewMode: String = "board"
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -39,18 +40,26 @@ struct TasksTabView: View {
                             .cornerRadius(8)
                     }
 
-                    addBar(project: project)
+                    if viewMode == "board" {
+                        KanbanBoardView(project: project)
+                            .environmentObject(store)
+                    } else {
+                        addBar(project: project)
 
-                    taskList(project: project)
+                        taskList(project: project)
 
-                    let issues = store.tasks(for: project.path)?.issues ?? []
-                    if !issues.isEmpty {
-                        TaskGroupCard(title: "GitHub Issues", systemImage: "exclamationmark.bubble", count: issues.count) {
-                            ForEach(issues) { iss in
-                                IssueRow(issue: iss)
-                                if iss.id != issues.last?.id { Divider() }
+                        let issues = store.tasks(for: project.path)?.issues ?? []
+                        if !issues.isEmpty {
+                            TaskGroupCard(title: "GitHub Issues", systemImage: "exclamationmark.bubble", count: issues.count) {
+                                ForEach(issues) { iss in
+                                    IssueRow(issue: iss)
+                                    if iss.id != issues.last?.id { Divider() }
+                                }
                             }
                         }
+
+                        MyQueueView(project: project)
+                            .environmentObject(store)
                     }
                 }
                 .padding(20)
@@ -80,6 +89,14 @@ struct TasksTabView: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
+            Picker("View", selection: $viewMode) {
+                Label("Board", systemImage: "square.grid.3x3").tag("board")
+                Label("My Queue", systemImage: "person.fill").tag("queue")
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 160)
+            .labelsHidden()
+
             Button {
                 Task { await store.refreshIssues() }
             } label: {
@@ -1152,6 +1169,195 @@ private struct IssueRow: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - My Queue placeholder (Task 8)
+
+private struct MyQueueView: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    var body: some View {
+        Text("My Queue — coming in Task 8")
+            .foregroundColor(.secondary)
+    }
+}
+
+// MARK: - Kanban board
+
+private struct KanbanBoardView: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+
+    private var allTasks: [TaskItem] { store.tasksV2(for: project.path) }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(KanbanColumn.allCases, id: \.self) { col in
+                    KanbanColumnView(
+                        column: col,
+                        tasks: allTasks.filter { $0.kanbanColumn == col },
+                        projectPath: project.path
+                    )
+                    .environmentObject(store)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+}
+
+private struct KanbanColumnView: View {
+    let column: KanbanColumn
+    let tasks: [TaskItem]
+    let projectPath: String
+    @EnvironmentObject var store: DashboardStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Circle()
+                    .fill(columnColor)
+                    .frame(width: 8, height: 8)
+                Text(column.label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.4)
+                Spacer()
+                Text(verbatim: "\(tasks.count)")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(columnColor.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+
+            VStack(spacing: 6) {
+                ForEach(tasks.filter { $0.parentId == nil }) { task in
+                    KanbanCard(task: task, projectPath: projectPath, columnColor: columnColor)
+                        .environmentObject(store)
+                }
+            }
+
+            if tasks.isEmpty {
+                Text("Empty")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 16)
+            }
+        }
+        .frame(width: 200)
+        .padding(6)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var columnColor: Color {
+        switch column {
+        case .backlog:   return .secondary
+        case .speccing:  return .green
+        case .aiWorking: return .blue
+        case .blocked:   return .orange
+        case .reviewQA:  return .purple
+        case .done:      return .green.opacity(0.6)
+        }
+    }
+}
+
+private struct KanbanCard: View {
+    let task: TaskItem
+    let projectPath: String
+    let columnColor: Color
+    @EnvironmentObject var store: DashboardStore
+    @State private var hover = false
+
+    private var runningClaudeTask: ClaudeTask? {
+        store.claudeTasks[projectPath]?.first {
+            $0.linkedTaskId == task.id && $0.status == .running
+        }
+    }
+
+    var body: some View {
+        Button {
+            store.openTaskId = task.id
+            store.openTaskProjectPath = projectPath
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(task.title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(3)
+
+                if let ct = runningClaudeTask, let phase = ct.currentPhase {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.mini)
+                        Text("⚡ \(phase)")
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue)
+                    }
+                }
+
+                if FileManager.default.fileExists(atPath: "\(projectPath)/.devdash/manual-tests/\(task.id).md") {
+                    Label("Tests ready", systemImage: "checklist")
+                        .font(.system(size: 9))
+                        .foregroundColor(.purple)
+                }
+
+                HStack(spacing: 4) {
+                    CategoryChip(category: task.category)
+                    Spacer()
+                    if task.status == .done {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 11))
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                hover ? columnColor.opacity(0.6) : Color(NSColor.separatorColor),
+                lineWidth: hover ? 1 : 0.5
+            ))
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Investigate (read-only)") {
+                Task { await store.runForTask(task, projectPath: projectPath, allowEdits: false) }
+            }
+            Button("Run + edit files") {
+                Task { await store.runForTask(task, projectPath: projectPath, allowEdits: true) }
+            }
+            Divider()
+            Button("Move to Backlog") {
+                try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .none)
+                try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .open)
+                reloadTasks()
+            }
+            Button("Mark Blocked") {
+                try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .blocked)
+                try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .human)
+                reloadTasks()
+            }
+            Button("Mark Done") {
+                Task { await store.markTaskDone(projectPath: projectPath, taskId: task.id) }
+                reloadTasks()
+            }
+            Divider()
+            Button(role: .destructive) {
+                store.deleteTask(projectPath: projectPath, id: task.id)
+            } label: { Text("Delete") }
+        }
+        .onHover { hover = $0 }
+    }
+
+    private func reloadTasks() {
+        store.projectTasks[projectPath] = TaskStore.read(projectPath)
     }
 }
 
