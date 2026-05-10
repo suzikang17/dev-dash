@@ -96,6 +96,7 @@ struct TaskDetailSheet: View {
             switch status {
             case .open: return .secondary
             case .inProgress: return .blue
+            case .blocked: return .orange
             case .done: return .green
             case .skipped: return .secondary.opacity(0.6)
             }
@@ -331,6 +332,7 @@ struct TaskDetailSheet: View {
         switch status {
         case .open: return "circle"
         case .inProgress: return "circle.dotted"
+        case .blocked: return "exclamationmark.circle"
         case .done: return "checkmark.circle.fill"
         case .skipped: return "minus.circle"
         }
@@ -340,6 +342,7 @@ struct TaskDetailSheet: View {
         switch s {
         case .open: return "circle"
         case .inProgress: return "circle.dotted"
+        case .blocked: return "exclamationmark.circle"
         case .done: return "checkmark.circle.fill"
         case .skipped: return "minus.circle"
         }
@@ -349,6 +352,7 @@ struct TaskDetailSheet: View {
         switch s {
         case .open: return .secondary
         case .inProgress: return .blue
+        case .blocked: return .orange
         case .done: return .green
         case .skipped: return .secondary.opacity(0.6)
         }

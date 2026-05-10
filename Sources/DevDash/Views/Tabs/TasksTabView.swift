@@ -1069,6 +1069,7 @@ private struct TaskLine: View {
         switch task.status {
         case .open: return "circle"
         case .inProgress: return "circle.dotted"
+        case .blocked: return "exclamationmark.circle"
         case .done: return "checkmark.circle.fill"
         case .skipped: return "minus.circle"
         }
@@ -1078,6 +1079,7 @@ private struct TaskLine: View {
         switch task.status {
         case .open: return .secondary
         case .inProgress: return .blue
+        case .blocked: return .orange
         case .done: return .green
         case .skipped: return .secondary.opacity(0.6)
         }

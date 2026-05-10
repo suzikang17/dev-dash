@@ -389,6 +389,7 @@ enum ProductDocGenerator {
         switch status {
         case .done:       return "<span class=\"pill done\">Done</span>"
         case .inProgress: return "<span class=\"pill current\">In progress</span>"
+        case .blocked:    return "<span class=\"pill blocked\">Blocked</span>"
         case .skipped:    return "<span class=\"pill\">Skipped</span>"
         case .open:       return "<span class=\"pill pending\">Open</span>"
         }

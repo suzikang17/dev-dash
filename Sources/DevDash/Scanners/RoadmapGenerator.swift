@@ -173,6 +173,7 @@ enum RoadmapGenerator {
                     case .done:       mark = "[x]"
                     case .skipped:    mark = "[~]"
                     case .inProgress: mark = "[/]"
+                    case .blocked:    mark = "[!]"
                     case .open:       mark = "[ ]"
                     }
                     out.append("- \(mark) \(t.title) _(\(t.category.label))_")
@@ -194,6 +195,7 @@ enum RoadmapGenerator {
                 case .done:       mark = "[x]"
                 case .skipped:    mark = "[~]"
                 case .inProgress: mark = "[/]"
+                case .blocked:    mark = "[!]"
                 case .open:       mark = "[ ]"
                 }
                 out.append("- \(mark) \(t.title) _(\(t.category.label))_")

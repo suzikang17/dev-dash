@@ -220,14 +220,45 @@ enum TaskSource: String, Codable, Hashable {
 }
 
 enum TaskStatus: String, Codable, Hashable {
-    case open, inProgress = "in_progress", done, skipped
+    case open
+    case inProgress = "in_progress"   // legacy — migrated to open+ai in TaskStore
+    case blocked
+    case done
+    case skipped
 
     var label: String {
         switch self {
-        case .open: return "Open"
-        case .inProgress: return "In progress"
-        case .done: return "Done"
-        case .skipped: return "Skipped"
+        case .open:       return "Open"
+        case .inProgress: return "In Progress"
+        case .blocked:    return "Blocked"
+        case .done:       return "Done"
+        case .skipped:    return "Skipped"
+        }
+    }
+}
+
+enum TaskOwner: String, Codable, Hashable {
+    case human, ai, none
+}
+
+enum KanbanColumn: String, CaseIterable {
+    case backlog, speccing, aiWorking, blocked, reviewQA, done
+
+    var label: String {
+        switch self {
+        case .backlog:   return "Backlog"
+        case .speccing:  return "Speccing"
+        case .aiWorking: return "AI Working"
+        case .blocked:   return "Blocked"
+        case .reviewQA:  return "Review & QA"
+        case .done:      return "Done"
+        }
+    }
+
+    var ownerIsHuman: Bool {
+        switch self {
+        case .backlog, .speccing, .blocked, .reviewQA: return true
+        case .aiWorking, .done: return false
         }
     }
 }
@@ -247,6 +278,42 @@ struct TaskItem: Identifiable, Codable, Hashable {
     /// Optional parent task id. Top-level tasks have parentId=nil. A parent
     /// with children behaves as the "initiative" / "feature" grouping.
     var parentId: String? = nil
+    var owner: TaskOwner = .none
+    var hasAIRun: Bool = false
+    var phases: [String]? = nil
+    var completedPhases: [String] = []
+
+    var kanbanColumn: KanbanColumn {
+        switch (status, owner, hasAIRun) {
+        case (.done, _, _):                          return .done
+        case (.blocked, _, _):                       return .blocked
+        case (.open, .ai, _), (.inProgress, _, _):   return .aiWorking
+        case (.open, .human, false):                 return .speccing
+        case (.open, .human, true):                  return .reviewQA
+        default:                                     return .backlog
+        }
+    }
+}
+
+struct LiveFileEvent: Identifiable, Hashable {
+    let id = UUID()
+    let path: String
+    let operation: Operation
+    let timestamp: Date
+
+    enum Operation {
+        case read, write, edit
+        var systemImage: String {
+            switch self {
+            case .read:  return "eye"
+            case .write: return "square.and.pencil"
+            case .edit:  return "pencil"
+            }
+        }
+        var label: String {
+            switch self { case .read: return "read"; case .write: return "write"; case .edit: return "edit" }
+        }
+    }
 }
 
 /// Per-project metadata persisted to `.devdash/project.json`. Drives stage
@@ -259,12 +326,13 @@ struct ProjectMeta: Codable, Hashable {
     var stageAnswers: [String: [String: String]]  // stageId → question → answer
     var roadmapPath: String?              // resolved at first scan
     var roadmapLastSeenMtime: Date?
+    var notes: String?
     var updatedAt: Date
 
     static let empty = ProjectMeta(
         templateId: nil, currentStageId: nil, stageStartedAt: nil,
         checkedExitCriteria: [], stageAnswers: [:], roadmapPath: nil,
-        roadmapLastSeenMtime: nil, updatedAt: Date()
+        roadmapLastSeenMtime: nil, notes: nil, updatedAt: Date()
     )
 
     func answer(for stageId: String, question: String) -> String {
@@ -375,7 +443,7 @@ struct QuestionChatMessage: Codable, Identifiable, Hashable {
 // MARK: - Providers (third-party services used by a project)
 
 enum ProviderCategory: String, Codable, CaseIterable, Hashable {
-    case hosting, database, payments, email, ai, analytics, auth, monitoring, storage, cdn, search, other
+    case hosting, database, payments, email, ai, analytics, auth, monitoring, storage, cdn, search, proxy, other
 
     var label: String { rawValue.capitalized }
 
@@ -392,6 +460,7 @@ enum ProviderCategory: String, Codable, CaseIterable, Hashable {
         case .storage: return "externaldrive"
         case .cdn: return "globe.americas"
         case .search: return "magnifyingglass"
+        case .proxy: return "network"
         case .other: return "circle.dashed"
         }
     }
@@ -518,6 +587,12 @@ struct ClaudeTask: Identifiable, Hashable {
     var finishedAt: Date?
     var status: ClaudeTaskStatus
     var sessionId: String? // captured from claude output if available
+    var currentPhase: String? = nil
+    var completedPhases: [String] = []
+    var phases: [String]? = nil
+    var liveFiles: [LiveFileEvent] = []
+    var liveCommands: [String] = []
+    var linkedTaskId: String? = nil
 
     enum ClaudeTaskStatus: String {
         case running, completed, failed, cancelled
