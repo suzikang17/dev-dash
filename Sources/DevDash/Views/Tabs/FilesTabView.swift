@@ -9,20 +9,25 @@ struct FilesTabView: View {
 
     var body: some View {
         if let project = store.project(for: store.selection) {
-            HSplitView {
-                treePane(project: project)
-                    .frame(minWidth: 200, idealWidth: 280, maxWidth: 480)
-                    .background(Color(NSColor.controlBackgroundColor))
-                contentPane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(NSColor.textBackgroundColor))
+            VStack(spacing: 0) {
+                if let running = store.runningTask(for: project.path), !running.liveFiles.isEmpty {
+                    LiveFilesSection(task: running)
+                }
+                HSplitView {
+                    treePane(project: project)
+                        .frame(minWidth: 200, idealWidth: 280, maxWidth: 480)
+                        .background(Color(NSColor.controlBackgroundColor))
+                    contentPane
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(NSColor.textBackgroundColor))
+                }
+                .onAppear {
+                    loadTree(for: project.path)
+                    consumePendingFile()
+                }
+                .onChange(of: project.path) { _, newPath in loadTree(for: newPath) }
+                .onChange(of: store.pendingFilePath) { _, _ in consumePendingFile() }
             }
-            .onAppear {
-                loadTree(for: project.path)
-                consumePendingFile()
-            }
-            .onChange(of: project.path) { _, newPath in loadTree(for: newPath) }
-            .onChange(of: store.pendingFilePath) { _, _ in consumePendingFile() }
         } else {
             Text("Select a project to browse its files")
                 .foregroundColor(.secondary)
@@ -365,5 +370,48 @@ struct FileContentView: View {
 
     private func byteCountFormatted(_ size: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+    }
+}
+
+private struct LiveFilesSection: View {
+    let task: ClaudeTask
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Label("Live · \(task.currentPhase ?? "Running")", systemImage: "bolt.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.blue)
+                Spacer()
+                Text(verbatim: "\(task.liveFiles.count) files")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.blue.opacity(0.08))
+
+            ForEach(Array(task.liveFiles.suffix(20))) { event in
+                HStack(spacing: 8) {
+                    Image(systemName: event.operation.systemImage)
+                        .font(.system(size: 10))
+                        .foregroundColor(event.operation == .read ? .secondary : .orange)
+                        .frame(width: 14)
+                    Text(URL(fileURLWithPath: event.path).lastPathComponent)
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                    Text(event.operation.label)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 12).padding(.vertical, 3)
+                Divider()
+            }
+        }
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.3), lineWidth: 0.5))
+        .padding(10)
     }
 }

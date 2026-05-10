@@ -38,6 +38,10 @@ struct LogsTabView: View {
                 .background(.regularMaterial)
                 Divider()
 
+                if let running = store.runningTask(for: project.path), !running.liveCommands.isEmpty {
+                    LiveCommandsSection(task: running)
+                }
+
                 if lines.isEmpty {
                     EmptyLogsView(projectPath: project.path)
                 } else {
@@ -157,5 +161,35 @@ private struct LogScrollView: View {
         if lower.contains("ready") || lower.contains("compiled") || lower.contains("✓") { return .green }
         if lower.contains("local:") || lower.contains("localhost") { return .accentColor }
         return .primary
+    }
+}
+
+private struct LiveCommandsSection: View {
+    let task: ClaudeTask
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Label("Live commands · \(task.currentPhase ?? "Running")", systemImage: "terminal")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.blue)
+                Spacer()
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.blue.opacity(0.08))
+
+            ForEach(Array(task.liveCommands.suffix(10).enumerated()), id: \.offset) { _, cmd in
+                Text(cmd)
+                    .font(.system(size: 11, design: .monospaced))
+                    .lineLimit(2)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+                Divider()
+            }
+        }
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.3), lineWidth: 0.5))
+        .padding(10)
     }
 }
