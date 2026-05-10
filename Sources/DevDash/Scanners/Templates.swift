@@ -5,7 +5,7 @@ import Foundation
 /// tool's help) creates the actual tasks; nothing is auto-dumped into their
 /// list.
 enum Templates {
-    static let all: [LaunchTemplate] = [saasMvp, personalTool, marketingSite]
+    static let all: [LaunchTemplate] = [saasMvp, personalTool, contentSite, marketingSite]
 
     static func find(_ id: String?) -> LaunchTemplate? {
         guard let id = id else { return nil }
@@ -218,6 +218,122 @@ extension Templates {
                     "Decision made: keep private, or share at level X",
                     "If sharing: README written, repo public, audience told",
                     "If keeping private: that's also a valid endpoint — close the project"
+                ]
+            )
+        ]
+    )
+
+    static let contentSite = LaunchTemplate(
+        id: "content-site",
+        name: "Content / Tracker Site",
+        summary: "Niche → build → index → monetize → compound. For blogs, trackers, aggregators, review sites — anything that grows on traffic and monetizes via ads, affiliates, or sponsorship.",
+        methodology: """
+        The site is a content engine, not an app. Pick a niche narrow enough \
+        that you can dominate it. Get pages indexed before you optimize \
+        monetization — no traffic, no revenue. Treat each post as a unit and \
+        compound by replicating what works, not by chasing every topic.
+        """,
+        stages: [
+            .init(
+                id: "niche",
+                title: "Pick the niche & angle",
+                purpose: "Specificity wins. \"Tech blog\" loses. \"Reviews of CLI tools for Mac developers\" wins. Pick a beachhead narrow enough to dominate.",
+                methodology: "Specific niche + clear angle + sustainable interest = compounding. Skip any of those and the site stalls.",
+                guidingQuestions: [
+                    "What topic — specific enough that you can name the reader in one phrase?",
+                    "Who's the reader, exactly (role, situation, what they want from the site)?",
+                    "What angle / POV do you have that existing sites don't?",
+                    "Is this evergreen content or news-cycle? Pick one — they need different stacks.",
+                    "What's the smallest beachhead topic you can own before expanding?",
+                    "Name 3 competitor sites — what do they get wrong, and what do they do well?"
+                ],
+                exitCriteria: [
+                    "Niche written down (specific enough one reader can be named)",
+                    "Reader persona sketched",
+                    "Unique angle / POV stated",
+                    "3 competitor sites studied",
+                    "Beachhead topic chosen"
+                ]
+            ),
+            .init(
+                id: "build",
+                title: "Build the site & content engine",
+                purpose: "Set up the shell and seed it with enough content that the niche is recognizable. The publishing flow matters more than the design.",
+                methodology: "Cadence > volume. A flow you can sustain for 12 months beats a perfect setup you abandon in 3.",
+                guidingQuestions: [
+                    "What stack (static + markdown / Astro / Next / WordPress / something else)?",
+                    "Where does writing happen — markdown in repo, headless CMS, Notion + sync?",
+                    "What's the publishing cadence you can actually sustain (weekly? bi-weekly?)",
+                    "What are the first 5-10 pieces — and do they collectively define the niche?",
+                    "Is SEO foundation in place (sitemap.xml, OG tags, schema markup, semantic HTML)?",
+                    "What's the URL structure — and will you regret it in 2 years?"
+                ],
+                exitCriteria: [
+                    "Site live with 5-10 pieces of content",
+                    "Publishing flow exists end-to-end",
+                    "Sitemap + OG + analytics installed",
+                    "URL structure stable"
+                ]
+            ),
+            .init(
+                id: "index",
+                title: "Get indexed & found",
+                purpose: "Indexing precedes traffic. Get into search consoles and aggregators before optimizing monetization.",
+                methodology: "Backlinks compound; one good link from a niche site beats ten random ones. Patience here pays.",
+                guidingQuestions: [
+                    "Submitted to Google Search Console + Bing Webmaster?",
+                    "What's indexed vs. discovered-but-not-indexed in Search Console?",
+                    "Where could you get 3-5 niche-relevant backlinks (HN, Reddit, niche newsletters, directories)?",
+                    "What internal linking structure makes pages findable from each other?",
+                    "What's the first piece of \"link bait\" content (data study, definitive guide, tool)?",
+                    "What's organic traffic doing week-over-week?"
+                ],
+                exitCriteria: [
+                    "Site verified in Search Console",
+                    "80%+ of pages indexed",
+                    "3+ relevant backlinks",
+                    "Organic traffic measurable"
+                ]
+            ),
+            .init(
+                id: "monetize",
+                title: "Monetize",
+                purpose: "Pick the revenue mechanism that fits the niche, not the one that pays best on average. Affiliate review sites and ad-funded blogs need different layouts.",
+                methodology: "Match monetization to reader intent. Don't bolt ads onto a how-to site without thinking about user flow.",
+                guidingQuestions: [
+                    "Which mechanism fits — display ads, affiliates, sponsorships, paid newsletter, digital products?",
+                    "What's realistic RPM/RPS for your niche (research, not assume)?",
+                    "Display ads: AdSense first, then graduate to Mediavine/Ezoic at threshold (50k sessions/mo)?",
+                    "Affiliates: which programs match the niche (Amazon, niche-specific, SaaS deals)?",
+                    "Are pages designed around the monetization, or fighting it?",
+                    "What's a single \"money page\" you can optimize first?"
+                ],
+                exitCriteria: [
+                    "Monetization live (one mechanism, not three half-done)",
+                    "First $1+ earned",
+                    "1 \"money page\" identified and intentionally designed",
+                    "Tracking set up to attribute revenue per page"
+                ]
+            ),
+            .init(
+                id: "compound",
+                title: "Compound",
+                purpose: "Replicate what works, refresh what's aging, build retention. This is the long game.",
+                methodology: "Top 10% of posts drive 80% of traffic. Find them and make more like them. Refresh evergreen content yearly.",
+                guidingQuestions: [
+                    "Which 5-10 posts are driving most of the traffic — and what do they have in common?",
+                    "Can you make 10 more posts like the top performers?",
+                    "What's the email / RSS retention mechanism (newsletter, follow button, RSS link)?",
+                    "What evergreen pieces are aging and need a refresh?",
+                    "Where's the bottleneck — writing speed, ranking, conversion to revenue?",
+                    "What experiment will you run next, and what would you learn from it?"
+                ],
+                exitCriteria: [
+                    "Sustainable cadence held for 4+ weeks",
+                    "Top performers identified and replicated",
+                    "Retention mechanism live (email or RSS)",
+                    "1 evergreen piece refreshed and showing improvement",
+                    "Bottleneck named — and the next experiment chosen"
                 ]
             )
         ]
