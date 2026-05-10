@@ -17,6 +17,9 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ],
             path: "Sources/DevDash",
+            resources: [
+                .copy("Resources")
+            ],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
