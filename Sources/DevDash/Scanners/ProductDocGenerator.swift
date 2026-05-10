@@ -64,6 +64,9 @@ enum ProductDocGenerator {
         tasks: [TaskItem]
     ) -> String? {
         let folder = folderPath(for: projectPath)
+        // Vendor JS (Alpine + components) into <project>/docs/devdash/.assets/.
+        // Idempotent — only writes when bundled resource differs from disk.
+        ProductDocAssets.writeAssets(to: folder)
         let sectionsFolder = "\(folder)/sections"
         try? FileManager.default.createDirectory(atPath: sectionsFolder, withIntermediateDirectories: true)
         // Migrate legacy folders from earlier builds → singular / shorter names.
@@ -124,6 +127,8 @@ enum ProductDocGenerator {
         <meta charset="utf-8">
         <title>\(escapeHTML(projectName)) — Product</title>
         \(sharedStyles)
+        <script defer src=".assets/devdash-components.js"></script>
+        <script defer src=".assets/alpine.min.js"></script>
         </head>
         <body>
           <div class="wrap">
