@@ -1172,14 +1172,133 @@ private struct IssueRow: View {
     }
 }
 
-// MARK: - My Queue placeholder (Task 8)
+// MARK: - My Queue (Task 8)
 
 private struct MyQueueView: View {
     let project: Project
     @EnvironmentObject var store: DashboardStore
+
+    private var allTasks: [TaskItem] { store.tasksV2(for: project.path) }
+
+    private var humanTasks: [TaskItem] {
+        allTasks
+            .filter { $0.kanbanColumn.ownerIsHuman && $0.status != .done && $0.status != .skipped }
+            .sorted { urgencyScore($0) > urgencyScore($1) }
+    }
+
+    private var aiTasks: [TaskItem] {
+        allTasks.filter { $0.kanbanColumn == .aiWorking }
+    }
+
+    private func urgencyScore(_ t: TaskItem) -> Int {
+        switch t.kanbanColumn {
+        case .blocked:  return 3
+        case .reviewQA: return 2
+        case .speccing: return 1
+        default:        return 0
+        }
+    }
+
     var body: some View {
-        Text("My Queue — coming in Task 8")
-            .foregroundColor(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if humanTasks.isEmpty && aiTasks.isEmpty {
+                    Text("Nothing needs your attention right now.")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 40)
+                }
+
+                if !humanTasks.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Needs you (\(humanTasks.count))", systemImage: "person.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.5)
+                            .foregroundColor(.secondary)
+                        ForEach(humanTasks) { task in
+                            QueueRow(task: task, projectPath: project.path)
+                                .environmentObject(store)
+                        }
+                    }
+                }
+
+                if !aiTasks.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("AI handling (\(aiTasks.count))", systemImage: "sparkles")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.5)
+                            .foregroundColor(.secondary)
+                        ForEach(aiTasks) { task in
+                            QueueRow(task: task, projectPath: project.path, dimmed: true)
+                                .environmentObject(store)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+        }
+    }
+}
+
+private struct QueueRow: View {
+    let task: TaskItem
+    let projectPath: String
+    var dimmed: Bool = false
+    @EnvironmentObject var store: DashboardStore
+
+    private var runningPhase: String? {
+        store.claudeTasks[projectPath]?.first {
+            $0.linkedTaskId == task.id && $0.status == .running
+        }?.currentPhase
+    }
+
+    var body: some View {
+        Button {
+            store.openTaskId = task.id
+            store.openTaskProjectPath = projectPath
+        } label: {
+            HStack(spacing: 10) {
+                Rectangle()
+                    .fill(columnColor)
+                    .frame(width: 3)
+                    .clipShape(Capsule())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(dimmed ? .secondary : .primary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(task.kanbanColumn.label)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        if let phase = runningPhase {
+                            Text("· ⚡ \(phase)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+                Spacer()
+                CategoryChip(category: task.category)
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .opacity(dimmed ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var columnColor: Color {
+        switch task.kanbanColumn {
+        case .blocked:   return .orange
+        case .reviewQA:  return .purple
+        case .speccing:  return .green
+        case .aiWorking: return .blue
+        default:         return .secondary
+        }
     }
 }
 
