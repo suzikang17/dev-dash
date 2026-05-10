@@ -1,0 +1,170 @@
+<h2>Personal Tool</h2>
+<blockquote>You are the user. Build for yourself, use it daily, fix what actually annoys you (not what you imagine will annoy other people). Resist polishing for an audience that doesn't exist. If it ends up useful to others, that's a bonus — not the goal.</blockquote>
+<h3>Progress</h3>
+<ul class="progress">
+<li><span class="pill current">Current</span> <strong>Identify the itch</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Sketch the smallest version</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Live with it</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Refine the parts that hurt</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Maybe share it</strong> <span class="meta">0/3 exit criteria</span></li>
+</ul>
+<div class="card">
+<h3>Identify the itch <span class="pill current">Current</span></h3>
+<p>Pin down the recurring annoyance. Personal tools work when they fix something real for you, not something speculative.</p>
+<blockquote>If you can't name the moment of annoyance, you don't have an itch yet — you have a curiosity. Wait for the itch.</blockquote>
+<h4>Questions <span class="meta">(4/5 answered)</span></h4>
+<p><strong>What's the specific moment that annoys you?</strong></p>
+<blockquote>Switching between many local dev projects and not knowing which is running, on what port, what AI sessions exist, what tasks are pending — context-loss when bouncing between projects daily.</blockquote>
+<p><strong>How often does it happen — daily, weekly, monthly?</strong></p>
+<blockquote>Daily, multiple times per day.</blockquote>
+<p><strong>What's your current workaround — and why is it bad enough to replace?</strong></p>
+<blockquote>Manually checking lsof, opening terminals per project, hunting for resume commands in ~/.claude. Slow and breaks flow.</blockquote>
+<p><strong>Is this actually a tool problem, or a habit problem?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's the rough shape of the fix in your head?</strong></p>
+<blockquote>Native macOS dashboard that auto-discovers running dev servers, shows them with previews, integrates Claude session resume, and tracks per-project tasks/state.</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ The annoyance written in one sentence</li>
+<li>☐ Frequency known (you've actually counted, not guessed)</li>
+<li>☐ Rough shape of the fix sketched</li>
+</ul>
+</div>
+<div class="card">
+<h3>Sketch the smallest version <span class="pill pending">Pending</span></h3>
+<p>Build the crappiest possible version that solves the itch. No polish. No edge cases. No options. Make it work for you, today, in your one workflow.</p>
+<blockquote>Hardcode everything. Skip auth. Skip config. Skip UI niceties. The goal is to use it, not to ship it.</blockquote>
+<h4>Questions <span class="meta">(2/5 answered)</span></h4>
+<p><strong>What's the dumbest possible version that works?</strong></p>
+<blockquote>Sidebar of running services + heatmap home + click to preview localhost URL in WKWebView.</blockquote>
+<p><strong>What can be hardcoded for now (paths, names, choices)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's the one workflow it must support?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's NOT in v0 (write it down so you don't sneak it in)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Where will it live — local script, menu bar app, web page on localhost?</strong></p>
+<blockquote>Native macOS app (SPM executable) with menu bar extra + main window.</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ It runs on your machine</li>
+<li>☐ It solves the itch in your one workflow</li>
+<li>☐ You haven't added a single feature beyond the itch</li>
+</ul>
+<h4>Tasks</h4>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill done">Done</span></td><td>Build native macOS app</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill done">Done</span></td><td>Wire up project tracker</td><td class="meta">Engineering</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Live with it <span class="pill pending">Pending</span></h3>
+<p>Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.</p>
+<blockquote>Don't open the editor for 1-2 weeks. Just use it. Take notes when something annoys you. The notes become the refine list.</blockquote>
+<h4>Questions <span class="meta">(0/4 answered)</span></h4>
+<p><strong>Have you actually used it for the original itch this week?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What new annoyances have you noticed (be specific)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What feature did you almost add — and is the urge real or imagined?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's missing that genuinely blocks you, vs. nice-to-have?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ Used daily/weekly for at least 1-2 weeks</li>
+<li>☐ Friction list written (real annoyances, not imagined ones)</li>
+<li>☐ Nothing added during this stage</li>
+</ul>
+<h4>Tasks</h4>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill current">In progress</span></td><td>Initiative: Dogfood dev-dash on dev-dash itself</td><td class="meta">Ops</td></tr>
+<tr><td><span class="pill current">In progress</span></td><td>Apply personal-tool template + populate task DB</td><td class="meta">Ops</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Use dev-dash for a week and file friction items</td><td class="meta">Research</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Initiative: QA &amp; verification pass</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify chat sheet auto-fills question + persists across restarts</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test session detail view from both Home and Claude tab</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify ROADMAP.md generation matches stage state across all mutations</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test legacy root-level ROADMAP.md cleanup on first regeneration</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Run provider detection against 5+ real projects, verify accuracy</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test validation runner on a real project</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify legacy todos.json migration to tasks.json</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Test back/forward navigation across all selection types</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify Suggest-tasks parser robustness across TASK: line variations</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Verify Swift / Apple platform project detection</td><td class="meta">QA</td></tr>
+<tr><td><span class="pill current">In progress</span></td><td>Initiative: Living product document (HTML hub)</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill current">In progress</span></td><td>ProductDocGenerator: emit docs/devdash/index.html with tabs</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>ProductTabView: render the living doc in-app</td><td class="meta">Engineering</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Refine the parts that hurt <span class="pill pending">Pending</span></h3>
+<p>Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.</p>
+<blockquote>Sort the friction list by frequency × pain. Fix the top 3. Stop. Use it again.</blockquote>
+<h4>Questions <span class="meta">(0/4 answered)</span></h4>
+<p><strong>What's the #1 friction point — and is it about correctness, speed, or ergonomics?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Are you fixing real friction, or rebuilding because you're bored?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What would make this 50% better in daily use?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What can you delete — features you added that you don't use?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ Top 3 friction points fixed</li>
+<li>☐ Unused features deleted (yes, deleted)</li>
+<li>☐ Tool still solves the original itch</li>
+</ul>
+<h4>Tasks</h4>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill pending">Open</span></td><td>Initiative: Bugs &amp; paper cuts</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Suggest-tasks prompt should reference user's saved guiding-question answers</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Per-task Run-with-Claude needs a visible button (not hover-only)</td><td class="meta">Design</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Health check defaults handle pnpm/yarn/bun/python</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Stage advance should warn when validation checks failing</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Streaming chat replies should render markdown</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Roadmap freshness should detect newly-answered questions, not just file mtime</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Initiative: Missing UX affordances</td><td class="meta">Design</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>GitHub issues read-mirror in unified task list</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Drag-to-reorder tasks within a stage</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Per-task notes UI</td><td class="meta">Design</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Run-all-suggestions button after a suggest run</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>AI assist per doc section</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Per-section editor inside the Product tab (vs hopping to Files)</td><td class="meta">Design</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3>Maybe share it <span class="pill pending">Pending</span></h3>
+<p>Optional. If it's useful to others without contorting your life, share it. If sharing means meetings, support, and feature debates — don't.</p>
+<blockquote>Share at the level you can sustain. A README and a tweet is fine. Anything more is a commitment, treat it as one.</blockquote>
+<h4>Questions <span class="meta">(0/5 answered)</span></h4>
+<p><strong>Is sharing this going to obligate you (PRs, issues, support)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's the smallest possible share — gist, tweet, README, package?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Who would actually find this useful — not theoretical, real people?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Are you ready to say no to feature requests that aren't your itch?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Or — should you just keep it private and free?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ Decision made: keep private, or share at level X</li>
+<li>☐ If sharing: README written, repo public, audience told</li>
+<li>☐ If keeping private: that's also a valid endpoint — close the project</li>
+</ul>
+<h4>Tasks</h4>
+<table>
+<thead><tr><th>Status</th><th>Task</th><th>Category</th></tr></thead><tbody>
+<tr><td><span class="pill pending">Open</span></td><td>Initiative: Future bets</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Custom user templates (.devdash/templates/&lt;id&gt;.yaml)</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Provider spending APIs (Stripe usage / Vercel billing)</td><td class="meta">Research</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Spawn agentic Claude session for task (vs current claude -p one-shot)</td><td class="meta">Engineering</td></tr>
+<tr><td><span class="pill pending">Open</span></td><td>Cost guardrails — token / dollar caps per project</td><td class="meta">Engineering</td></tr>
+</tbody></table>
+</div>

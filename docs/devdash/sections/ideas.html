@@ -1,0 +1,25 @@
+<div class="doc-head">
+  <h2>Ideas</h2>
+  <span class="doc-status">Parking lot · <code>sections/ideas.html</code></span>
+</div>
+
+<p class="meta">Promote to a task (Tasks tab) or a PRD (Product → New PRD) when an idea is ripe.</p>
+
+<div class="board">
+  <div class="col" data-col="quick-wins">
+    <h4>Quick wins <span class="meta">low effort, real value</span></h4>
+    <div class="item"><span class="tag">eng</span> <em>Idea 1</em></div>
+    <div class="item"><span class="tag">design</span> <em>Idea 2</em></div>
+    <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=quick-wins]" class="add-btn">+ Idea</button>
+  </div>
+  <div class="col" data-col="big-bets">
+    <h4>Big bets <span class="meta">larger investment</span></h4>
+    <div class="item"><span class="tag">research</span> <em>Idea 3</em></div>
+    <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=big-bets]" class="add-btn">+ Idea</button>
+  </div>
+  <div class="col" data-col="maybe-later">
+    <h4>Maybe later <span class="meta">parked</span></h4>
+    <div class="item"><span class="tag">marketing</span> <em>Idea 4</em></div>
+    <button data-action="dom-append-template" data-template="idea-card" data-target="[data-col=maybe-later]" class="add-btn">+ Idea</button>
+  </div>
+</div>

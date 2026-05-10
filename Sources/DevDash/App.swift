@@ -21,6 +21,15 @@ struct DevDashApp: App {
                             .environmentObject(store)
                     }
                 }
+                .sheet(isPresented: Binding(
+                    get: { store.openTaskId != nil },
+                    set: { if !$0 { store.openTaskId = nil; store.openTaskProjectPath = nil } }
+                )) {
+                    if let id = store.openTaskId, let path = store.openTaskProjectPath {
+                        TaskDetailSheet(projectPath: path, taskId: id)
+                            .environmentObject(store)
+                    }
+                }
                 .task {
                     if store.selection == nil { store.selection = .home }
                     await store.reattachManagedServers()

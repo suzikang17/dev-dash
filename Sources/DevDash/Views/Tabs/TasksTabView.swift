@@ -962,17 +962,27 @@ private struct TaskLine: View {
             }
             .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .font(.system(size: 13))
-                    .strikethrough(task.status == .done)
-                    .foregroundColor(task.status == .done ? .secondary : .primary)
-                if let notes = task.notes, !notes.isEmpty {
-                    Text(notes)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+            Button {
+                store.openTaskId = task.id
+                store.openTaskProjectPath = projectPath
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .font(.system(size: 13))
+                        .strikethrough(task.status == .done)
+                        .foregroundColor(task.status == .done ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let notes = task.notes, !notes.isEmpty {
+                        Text(notes)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
