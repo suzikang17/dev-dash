@@ -93,6 +93,72 @@ struct ClaudeSession: Identifiable, Hashable {
     let firstUserMessage: String?
 }
 
+/// Parsed summary of a single Claude session, cached on disk so we don't
+/// re-read multi-MB JSONLs every refresh.
+struct SessionDigest: Codable, Identifiable, Hashable {
+    let id: String                    // sessionId
+    let projectPath: String
+    let projectName: String
+    let title: String?                // from `ai-title` line if present
+    let firstUserMessage: String?
+    let startedAt: Date?
+    let endedAt: Date?
+    let durationSeconds: Int
+    let userMessageCount: Int
+    let assistantMessageCount: Int
+    let toolCallsByName: [String: Int]
+    let filesTouched: [FileTouch]
+    let commandsRun: [CommandRun]
+    let tokens: TokenUsage
+    let parsedAt: Date
+
+    struct FileTouch: Codable, Hashable {
+        let path: String
+        let reads: Int
+        let writes: Int
+        var total: Int { reads + writes }
+    }
+
+    struct CommandRun: Codable, Hashable {
+        let command: String
+        let timestamp: Date?
+    }
+
+    struct TokenUsage: Codable, Hashable {
+        var input: Int = 0
+        var output: Int = 0
+        var cacheCreate: Int = 0
+        var cacheRead: Int = 0
+        var total: Int { input + output + cacheCreate + cacheRead }
+    }
+}
+
+/// Full ordered transcript of a session, parsed on demand for the detail view.
+struct SessionTranscript {
+    let id: String
+    let projectPath: String
+    let projectName: String
+    let turns: [Turn]
+
+    struct Turn: Identifiable {
+        let id: String
+        let role: Role
+        let timestamp: Date?
+        let blocks: [Block]
+        let tokens: SessionDigest.TokenUsage?
+
+        enum Role: String { case user, assistant, system, tool, attachment }
+    }
+
+    enum Block {
+        case text(String)
+        case thinking(String)
+        case toolUse(name: String, summary: String, fullInput: String)
+        case toolResult(text: String, isError: Bool)
+        case attachment(name: String, content: String)
+    }
+}
+
 struct Todo: Identifiable, Codable, Hashable {
     let id: String
     var text: String

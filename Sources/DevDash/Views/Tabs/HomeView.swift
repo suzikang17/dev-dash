@@ -378,33 +378,55 @@ private struct HomeSessionRow: View {
     @State private var copied = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bubble.left.fill")
-                .foregroundColor(.purple)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.projectName)
-                    .font(.system(size: 13, weight: .medium))
-                Text(timeAgo(session.lastActivity))
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundColor(.secondary)
+        Button {
+            store.openSessionId = session.id
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.fill")
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(session.projectName)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.primary)
+                        if let title = store.digest(for: session.id)?.title {
+                            Text("·").foregroundColor(.secondary).font(.system(size: 11))
+                            Text(title)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Text(timeAgo(session.lastActivity))
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if let d = store.digest(for: session.id) {
+                    Text(verbatim: "\(d.tokens.total.formatted()) tok")
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundColor(.secondary)
+                } else {
+                    Text(verbatim: "\(session.messageCount) msgs")
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
             }
-            Spacer()
-            Text(verbatim: "\(session.messageCount) msgs")
-                .font(.system(size: 11).monospacedDigit())
-                .foregroundColor(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
             Button {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString("claude --resume \(session.id)", forType: .string)
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
-            } label: {
-                Label(copied ? "Copied" : "Resume", systemImage: copied ? "checkmark" : "doc.on.clipboard")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            } label: { Label("Copy resume command", systemImage: "doc.on.clipboard") }
+            Button {
+                store.openSessionId = session.id
+            } label: { Label("Open detail", systemImage: "rectangle.expand.vertical") }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
     }
 }

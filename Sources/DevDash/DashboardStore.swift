@@ -61,6 +61,9 @@ final class DashboardStore: ObservableObject {
     @Published var pinnedProjects: Set<String> = Set(
         UserDefaults.standard.stringArray(forKey: "devdash.pinnedProjects") ?? []
     )
+    @Published var sessionDigests: [String: SessionDigest] = [:]
+    @Published var openSessionId: String? = nil
+    private var digestTask: Task<Void, Never>?
 
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
@@ -327,6 +330,75 @@ final class DashboardStore: ObservableObject {
     }
 
     @Published var todoError: String?
+
+    // MARK: - Claude session digests
+
+    /// Re-parse digests for the current sessions list, using the on-disk cache
+    /// when the JSONL hasn't changed since last parse.
+    func refreshSessionDigests() {
+        digestTask?.cancel()
+        let sess = sessions
+        digestTask = Task.detached(priority: .utility) { [weak self] in
+            let claudeDir = "\(NSHomeDirectory())/.claude/projects"
+            for s in sess {
+                if Task.isCancelled { return }
+                let dirName = s.projectPath.replacingOccurrences(of: "/", with: "-")
+                let jsonl = "\(claudeDir)/\(dirName)/\(s.id).jsonl"
+                let digest: SessionDigest? = {
+                    if let cached = ClaudeSessionParser.cachedDigest(sessionId: s.id, jsonlPath: jsonl) {
+                        return cached
+                    }
+                    if FileManager.default.fileExists(atPath: jsonl) {
+                        let parsed = ClaudeSessionParser.parseDigest(
+                            jsonlPath: jsonl, sessionId: s.id,
+                            projectPath: s.projectPath, projectName: s.projectName
+                        )
+                        if let d = parsed { ClaudeSessionParser.writeCache(d) }
+                        return parsed
+                    }
+                    // Fallback: try to find the JSONL by scanning all dirs (path-encoding edge cases)
+                    if let resolved = Self.resolveJsonlPath(sessionId: s.id) {
+                        let parsed = ClaudeSessionParser.parseDigest(
+                            jsonlPath: resolved, sessionId: s.id,
+                            projectPath: s.projectPath, projectName: s.projectName
+                        )
+                        if let d = parsed { ClaudeSessionParser.writeCache(d) }
+                        return parsed
+                    }
+                    return nil
+                }()
+                if let d = digest {
+                    await MainActor.run { self?.sessionDigests[s.id] = d }
+                }
+            }
+        }
+    }
+
+    func digest(for sessionId: String) -> SessionDigest? { sessionDigests[sessionId] }
+
+    func transcript(for sessionId: String) async -> SessionTranscript? {
+        guard let session = sessions.first(where: { $0.id == sessionId }) else { return nil }
+        let path = Self.resolveJsonlPath(sessionId: sessionId) ?? {
+            let dir = session.projectPath.replacingOccurrences(of: "/", with: "-")
+            return "\(NSHomeDirectory())/.claude/projects/\(dir)/\(sessionId).jsonl"
+        }()
+        return await Task.detached(priority: .userInitiated) {
+            ClaudeSessionParser.parseTranscript(
+                jsonlPath: path, sessionId: sessionId,
+                projectPath: session.projectPath, projectName: session.projectName
+            )
+        }.value
+    }
+
+    nonisolated private static func resolveJsonlPath(sessionId: String) -> String? {
+        let claudeDir = "\(NSHomeDirectory())/.claude/projects"
+        guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: claudeDir) else { return nil }
+        for d in dirs {
+            let candidate = "\(claudeDir)/\(d)/\(sessionId).jsonl"
+            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        return nil
+    }
 
     // MARK: - Recent commits feed
 

@@ -12,6 +12,15 @@ struct DevDashApp: App {
                 .environmentObject(store)
                 .frame(minWidth: 900, minHeight: 600)
                 .preferredColorScheme(.dark)
+                .sheet(isPresented: Binding(
+                    get: { store.openSessionId != nil },
+                    set: { if !$0 { store.openSessionId = nil } }
+                )) {
+                    if let id = store.openSessionId {
+                        SessionDetailView(sessionId: id)
+                            .environmentObject(store)
+                    }
+                }
                 .task {
                     if store.selection == nil { store.selection = .home }
                     await store.reattachManagedServers()
@@ -21,6 +30,7 @@ struct DevDashApp: App {
                     Task { await store.refreshIssues() }
                     store.refreshHeatmaps()
                     store.refreshRecentCommits()
+                    store.refreshSessionDigests()
                 }
         }
         .windowStyle(.titleBar)
