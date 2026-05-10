@@ -58,7 +58,7 @@ struct EmbeddedTerminal: NSViewRepresentable {
 /// Convenience: spawn nvim editing a specific file. Resolves the binary by
 /// looking in common install locations + scanning PATH so fnm/asdf shims work.
 extension EmbeddedTerminal {
-    static func neovim(filePath: String) -> EmbeddedTerminal? {
+    static func neovim(filePath: String, readOnly: Bool = false) -> EmbeddedTerminal? {
         guard let nvim = resolveNvim() else { return nil }
         let dir = (filePath as NSString).deletingLastPathComponent
 
@@ -67,14 +67,20 @@ extension EmbeddedTerminal {
         let swapDir = "\(NSTemporaryDirectory())devdash-nvim-swap"
         try? FileManager.default.createDirectory(atPath: swapDir, withIntermediateDirectories: true)
 
+        var args: [String] = [
+            "-c", "set directory=\(swapDir)//",
+            "-c", "set backupdir=\(swapDir)//",
+            "-c", "set undodir=\(swapDir)//",
+        ]
+        if readOnly {
+            // -R: readonly. nomodifiable belt-and-suspenders so :w fails too.
+            args.append(contentsOf: ["-R", "-c", "set nomodifiable"])
+        }
+        args.append(filePath)
+
         return EmbeddedTerminal(
             executable: nvim,
-            arguments: [
-                "-c", "set directory=\(swapDir)//",
-                "-c", "set backupdir=\(swapDir)//",
-                "-c", "set undodir=\(swapDir)//",
-                filePath
-            ],
+            arguments: args,
             cwd: dir
         )
     }

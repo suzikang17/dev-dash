@@ -15,7 +15,6 @@ struct DetailPaneView: View {
                 case .claude: ClaudeTabView()
                 case .tasks: TasksTabView()
                 case .info: InfoTabView()
-                case .docs: DocsTabView()
                 case .files: FilesTabView()
                 }
             }

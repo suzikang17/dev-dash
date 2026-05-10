@@ -109,20 +109,19 @@ struct FileContentView: View {
     let path: String
     @State private var content: FileTreeScanner.FileContent?
     @State private var loadedPath: String?
-    @State private var renderMode: RenderMode = .auto
+    @State private var renderMode: RenderMode = .nvim
     @State private var editing = false
     @State private var draft: String = ""
     @State private var saveError: String?
 
     enum RenderMode: String, CaseIterable, Identifiable {
-        case auto, source, rendered, nvim
+        case nvim, source, rendered
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .auto: return "Auto"
+            case .nvim: return "nvim"
             case .source: return "Source"
             case .rendered: return "Preview"
-            case .nvim: return "nvim"
             }
         }
     }
@@ -142,7 +141,7 @@ struct FileContentView: View {
     private var isMarkdown: Bool { ["md", "markdown", "mdx"].contains(ext) }
     private var isImage: Bool { ["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "tiff"].contains(ext) }
     private var hasRenderer: Bool { isHtml || isMarkdown || isImage }
-    private var useRendered: Bool { renderMode == .rendered || (renderMode == .auto && hasRenderer) }
+    private var useRendered: Bool { renderMode == .rendered }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -254,7 +253,7 @@ struct FileContentView: View {
                 )
                 .background(Color(NSColor.textBackgroundColor))
             } else if renderMode == .nvim {
-                if let term = EmbeddedTerminal.neovim(filePath: path) {
+                if let term = EmbeddedTerminal.neovim(filePath: path, readOnly: true) {
                     term
                         .background(Color.black)
                         .id(path)

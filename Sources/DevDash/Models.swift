@@ -137,7 +137,7 @@ enum Selection: Hashable {
 }
 
 enum DetailTab: String, CaseIterable, Identifiable {
-    case info, preview, claude, tasks, docs, files, logs
+    case info, preview, claude, tasks, files, logs
     var id: String { rawValue }
 
     var label: String {
@@ -146,7 +146,6 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .preview: return "Preview"
         case .claude: return "Claude"
         case .tasks: return "Tasks"
-        case .docs: return "Docs"
         case .files: return "Files"
         case .logs: return "Logs"
         }
@@ -158,7 +157,6 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .preview: return "globe"
         case .claude: return "sparkles"
         case .tasks: return "checklist"
-        case .docs: return "book"
         case .files: return "folder"
         case .logs: return "terminal"
         }

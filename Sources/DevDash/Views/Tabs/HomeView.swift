@@ -7,6 +7,36 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                let activeWithHeat = store.projects
+                    .filter { (store.heatmaps[$0.path]?.totalCommits ?? 0) > 0 }
+                    .sorted { lhs, rhs in
+                        let lRunning = store.runningPort(for: lhs.path) != nil
+                        let rRunning = store.runningPort(for: rhs.path) != nil
+                        if lRunning != rRunning { return lRunning }
+                        let lc = store.heatmaps[lhs.path]?.totalCommits ?? 0
+                        let rc = store.heatmaps[rhs.path]?.totalCommits ?? 0
+                        return lc > rc
+                    }
+                if !activeWithHeat.isEmpty {
+                    Section(label: "Active Projects", systemImage: "square.grid.3x3") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LazyHStack(alignment: .top, spacing: 10) {
+                                ForEach(activeWithHeat.prefix(40)) { proj in
+                                    if let map = store.heatmaps[proj.path] {
+                                        HeatmapCard(
+                                            project: proj,
+                                            heatmap: map,
+                                            runningPort: store.runningPort(for: proj.path)
+                                        )
+                                        .frame(width: 220)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+
                 StatsRow()
 
                 if !store.recentCommits.isEmpty {
@@ -23,32 +53,6 @@ struct HomeView: View {
                         .background(Color(NSColor.controlBackgroundColor))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
-                    }
-                }
-
-                let activeWithHeat = store.projects
-                    .filter { (store.heatmaps[$0.path]?.totalCommits ?? 0) > 0 }
-                    .sorted { lhs, rhs in
-                        let lRunning = store.runningPort(for: lhs.path) != nil
-                        let rRunning = store.runningPort(for: rhs.path) != nil
-                        if lRunning != rRunning { return lRunning }
-                        let lc = store.heatmaps[lhs.path]?.totalCommits ?? 0
-                        let rc = store.heatmaps[rhs.path]?.totalCommits ?? 0
-                        return lc > rc
-                    }
-                if !activeWithHeat.isEmpty {
-                    Section(label: "Active Projects", systemImage: "square.grid.3x3") {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 10)], spacing: 10) {
-                            ForEach(activeWithHeat.prefix(16)) { proj in
-                                if let map = store.heatmaps[proj.path] {
-                                    HeatmapCard(
-                                        project: proj,
-                                        heatmap: map,
-                                        runningPort: store.runningPort(for: proj.path)
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
 
