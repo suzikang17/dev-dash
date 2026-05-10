@@ -908,7 +908,9 @@ final class DashboardStore: ObservableObject {
                 if var arr = self?.claudeTasks[path],
                    let idx = arr.firstIndex(where: { $0.id == taskId }) {
                     arr[idx].finishedAt = Date()
-                    arr[idx].status = arr[idx].status == .running ? .completed : arr[idx].status
+                    if arr[idx].status != .failed {
+                        arr[idx].status = .completed
+                    }
                     self?.claudeTasks[path] = arr
                 }
                 self?.runningClaude.removeValue(forKey: taskId)
@@ -937,6 +939,13 @@ final class DashboardStore: ObservableObject {
 
     // MARK: - Stream parsing
 
+    private func markRunningTaskFailed(taskId: UUID, path: String) {
+        guard var arr = claudeTasks[path],
+              let idx = arr.firstIndex(where: { $0.id == taskId }) else { return }
+        arr[idx].status = .failed
+        claudeTasks[path] = arr
+    }
+
     private func parseStreamLine(_ line: String, taskId: UUID, path: String) {
         guard let data = line.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -957,7 +966,9 @@ final class DashboardStore: ObservableObject {
                 }
             }
         case "result":
-            break
+            if let exitCode = json["exit_code"] as? Int, exitCode != 0 {
+                markRunningTaskFailed(taskId: taskId, path: path)
+            }
         default:
             break
         }
