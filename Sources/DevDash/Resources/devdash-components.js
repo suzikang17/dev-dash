@@ -22,7 +22,8 @@ document.addEventListener('alpine:init', function () {
             this.cards = [];
           }
         }
-        this.$watch('cards', function () { this.scheduleSave(); }.bind(this), { deep: true });
+        var self = this;
+        this.$watch('cards', function () { self.scheduleSave(); }, { deep: true });
       },
 
       cardsIn: function (col) {
@@ -62,8 +63,7 @@ document.addEventListener('alpine:init', function () {
         });
         if (navigator.clipboard) navigator.clipboard.writeText(lines.join('\n'));
         this.copyLabel = 'Copied!';
-        var self2 = this;
-        setTimeout(function () { self2.copyLabel = 'Copy as Markdown'; }, 1200);
+        setTimeout(function () { self.copyLabel = 'Copy as Markdown'; }, 1200);
       },
 
       scheduleSave: function () {
