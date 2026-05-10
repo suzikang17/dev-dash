@@ -159,31 +159,29 @@ struct TasksTabView: View {
             }
 
             if !stage.guidingQuestions.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Guiding questions", systemImage: "questionmark.circle")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    let answeredCount = stage.guidingQuestions.filter { !meta.answer(for: stage.id, question: $0).isEmpty }.count
+                    HStack(spacing: 6) {
+                        Label("Guiding questions", systemImage: "questionmark.circle")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.6)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(verbatim: "\(answeredCount)/\(stage.guidingQuestions.count) answered")
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
                     ForEach(stage.guidingQuestions, id: \.self) { q in
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 4))
-                                .foregroundColor(.secondary)
-                                .padding(.top, 7)
-                            Text(q)
-                                .font(.system(size: 13))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Button {
+                        QuestionAnswerRow(
+                            projectPath: project.path,
+                            stageId: stage.id,
+                            question: q,
+                            onAddAsTask: {
                                 newTitle = q
                                 newStage = stage.id
                                 addFocused = true
-                            } label: {
-                                Image(systemName: "plus.circle")
-                                    .foregroundColor(.accentColor)
                             }
-                            .buttonStyle(.plain)
-                            .help("Add as task")
-                        }
+                        )
                     }
                 }
                 .padding(12)
@@ -440,6 +438,121 @@ struct TasksTabView: View {
                 }
             }
         }
+    }
+}
+
+/// One guiding question + its persisted answer. Collapsed by default;
+/// expand to see/edit the answer. Saves on commit (Enter / blur).
+private struct QuestionAnswerRow: View {
+    let projectPath: String
+    let stageId: String
+    let question: String
+    let onAddAsTask: () -> Void
+
+    @EnvironmentObject var store: DashboardStore
+    @State private var expanded = false
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    private var current: String {
+        store.meta(for: projectPath).answer(for: stageId, question: question)
+    }
+    private var isAnswered: Bool { !current.isEmpty }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                    if expanded {
+                        draft = current
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true }
+                    } else {
+                        commitIfChanged()
+                    }
+                } label: {
+                    Image(systemName: isAnswered ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 11))
+                        .foregroundColor(isAnswered ? .green : .secondary)
+                        .frame(width: 14)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                    if expanded {
+                        draft = current
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true }
+                    } else {
+                        commitIfChanged()
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(question)
+                            .font(.system(size: 13))
+                            .foregroundColor(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .multilineTextAlignment(.leading)
+                        if !expanded, isAnswered {
+                            Text(current)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onAddAsTask) {
+                    Image(systemName: "plus.circle")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .help("Add as task")
+            }
+
+            if expanded {
+                TextField("Type your answer…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2...8)
+                    .focused($focused)
+                    .padding(.leading, 22)
+                    .onSubmit { commitAndCollapse() }
+                HStack(spacing: 6) {
+                    Spacer()
+                    if !current.isEmpty {
+                        Button {
+                            store.setAnswer("", stageId: stageId, question: question, for: projectPath)
+                            draft = ""
+                            expanded = false
+                        } label: { Text("Clear") }
+                            .buttonStyle(.borderless)
+                            .controlSize(.small)
+                    }
+                    Button("Save") { commitAndCollapse() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines) == current)
+                }
+                .padding(.leading, 22)
+            }
+        }
+    }
+
+    private func commitIfChanged() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != current {
+            store.setAnswer(trimmed, stageId: stageId, question: question, for: projectPath)
+        }
+    }
+
+    private func commitAndCollapse() {
+        commitIfChanged()
+        expanded = false
+        focused = false
     }
 }
 

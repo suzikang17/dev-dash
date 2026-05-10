@@ -451,6 +451,7 @@ final class DashboardStore: ObservableObject {
         do {
             try ProjectMetaStore.applyTemplate(template, to: projectPath)
             projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+            regenerateRoadmap(for: projectPath)
         } catch {
             todoError = "Couldn't apply template: \(error.localizedDescription)"
         }
@@ -469,11 +470,36 @@ final class DashboardStore: ObservableObject {
     func setStage(_ stageId: String, for projectPath: String) {
         try? ProjectMetaStore.setStage(stageId, for: projectPath)
         projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
     }
 
     func toggleExitCriterion(_ criterion: String, stageId: String, for projectPath: String) {
         try? ProjectMetaStore.toggleExitCriterion(criterion, stageId: stageId, for: projectPath)
         projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
+    }
+
+    func setAnswer(_ answer: String, stageId: String, question: String, for projectPath: String) {
+        try? ProjectMetaStore.setAnswer(answer, stageId: stageId, question: question, for: projectPath)
+        projectMeta[projectPath] = ProjectMetaStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
+    }
+
+    /// Write ROADMAP.md from current state. Safe to call frequently — bails
+    /// if a non-DevDash-managed ROADMAP.md exists. State mutations call this.
+    func regenerateRoadmap(for projectPath: String) {
+        guard let template = template(for: projectPath) else { return }
+        let project = projects.first { $0.path == projectPath }
+        let name = project?.name ?? URL(fileURLWithPath: projectPath).lastPathComponent
+        let meta = self.meta(for: projectPath)
+        let tasks = tasksV2(for: projectPath)
+        _ = RoadmapGenerator.write(
+            projectName: name,
+            projectPath: projectPath,
+            meta: meta,
+            template: template,
+            tasks: tasks
+        )
     }
 
     func addTask(
@@ -491,6 +517,7 @@ final class DashboardStore: ObservableObject {
             )
             projectTasks[projectPath] = TaskStore.read(projectPath)
             todoError = nil
+            regenerateRoadmap(for: projectPath)
         } catch {
             todoError = "Couldn't add task: \(error.localizedDescription)"
         }
@@ -499,16 +526,19 @@ final class DashboardStore: ObservableObject {
     func setTaskStatus(projectPath: String, id: String, status: TaskStatus) {
         try? TaskStore.setStatus(projectPath: projectPath, id: id, status: status)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
     }
 
     func deleteTask(projectPath: String, id: String) {
         try? TaskStore.delete(projectPath: projectPath, id: id)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
     }
 
     func updateTask(projectPath: String, _ task: TaskItem) {
         try? TaskStore.update(projectPath: projectPath, task)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
     }
 
     /// Days since the project's roadmap (if any) was last edited.

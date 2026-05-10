@@ -60,6 +60,23 @@ enum ProjectMetaStore {
         try write(projectPath, meta: meta)
     }
 
+    static func setAnswer(_ answer: String, stageId: String, question: String, for projectPath: String) throws {
+        var meta = read(projectPath)
+        var perStage = meta.stageAnswers[stageId] ?? [:]
+        let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            perStage.removeValue(forKey: question)
+        } else {
+            perStage[question] = trimmed
+        }
+        if perStage.isEmpty {
+            meta.stageAnswers.removeValue(forKey: stageId)
+        } else {
+            meta.stageAnswers[stageId] = perStage
+        }
+        try write(projectPath, meta: meta)
+    }
+
     /// Discover a roadmap document by trying common filenames.
     static func discoverRoadmap(in projectPath: String) -> String? {
         let candidates = [

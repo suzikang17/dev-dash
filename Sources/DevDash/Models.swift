@@ -246,15 +246,20 @@ struct ProjectMeta: Codable, Hashable {
     var currentStageId: String?
     var stageStartedAt: Date?
     var checkedExitCriteria: Set<String>  // keys: "<stageId>:<criterion>"
+    var stageAnswers: [String: [String: String]]  // stageId → question → answer
     var roadmapPath: String?              // resolved at first scan
     var roadmapLastSeenMtime: Date?
     var updatedAt: Date
 
     static let empty = ProjectMeta(
         templateId: nil, currentStageId: nil, stageStartedAt: nil,
-        checkedExitCriteria: [], roadmapPath: nil, roadmapLastSeenMtime: nil,
-        updatedAt: Date()
+        checkedExitCriteria: [], stageAnswers: [:], roadmapPath: nil,
+        roadmapLastSeenMtime: nil, updatedAt: Date()
     )
+
+    func answer(for stageId: String, question: String) -> String {
+        stageAnswers[stageId]?[question] ?? ""
+    }
 }
 
 // MARK: - Launch templates
