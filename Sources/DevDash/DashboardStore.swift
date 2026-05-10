@@ -493,20 +493,28 @@ final class DashboardStore: ObservableObject {
         regenerateRoadmap(for: projectPath)
     }
 
-    /// Write ROADMAP.md from current state. Safe to call frequently — bails
-    /// if a non-DevDash-managed ROADMAP.md exists. State mutations call this.
+    /// Write ROADMAP.md and the living product doc from current state. Safe
+    /// to call frequently — both regenerators bail / no-op when the project
+    /// has no template or when the file isn't DevDash-owned. State mutations
+    /// call this.
     func regenerateRoadmap(for projectPath: String) {
-        guard let template = template(for: projectPath) else { return }
         let project = projects.first { $0.path == projectPath }
         let name = project?.name ?? URL(fileURLWithPath: projectPath).lastPathComponent
         let meta = self.meta(for: projectPath)
         let tasks = tasksV2(for: projectPath)
-        _ = RoadmapGenerator.write(
-            projectName: name,
-            projectPath: projectPath,
-            meta: meta,
-            template: template,
-            tasks: tasks
+        let template = self.template(for: projectPath)
+
+        if let template = template {
+            _ = RoadmapGenerator.write(
+                projectName: name, projectPath: projectPath,
+                meta: meta, template: template, tasks: tasks
+            )
+        }
+        // Living doc generates whether or not a template is applied — without
+        // one, the Roadmap tab just shows an "apply a template" prompt.
+        _ = ProductDocGenerator.generate(
+            projectName: name, projectPath: projectPath,
+            meta: meta, template: template, tasks: tasks
         )
     }
 
