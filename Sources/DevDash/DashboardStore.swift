@@ -468,6 +468,14 @@ final class DashboardStore: ObservableObject {
         }
     }
 
+    func setProjectNotes(_ notes: String, for projectPath: String) {
+        var m = meta(for: projectPath)
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        m.notes = trimmed.isEmpty ? nil : trimmed
+        try? ProjectMetaStore.write(projectPath, meta: m)
+        projectMeta[projectPath] = m
+    }
+
     func clearTemplate(for projectPath: String) {
         var m = meta(for: projectPath)
         m.templateId = nil
@@ -849,6 +857,10 @@ final class DashboardStore: ObservableObject {
         claudeTasks[projectPath] ?? []
     }
 
+    func runningTask(for projectPath: String) -> ClaudeTask? {
+        claudeTasks[projectPath]?.first { $0.status == .running }
+    }
+
     func runClaude(prompt: String, projectPath: String, allowEdits: Bool, kind: ClaudeTask.Kind = .general) async {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -889,15 +901,7 @@ final class DashboardStore: ObservableObject {
             for await line in proc.lines {
                 guard let self = self else { return }
                 await MainActor.run {
-                    if var arr = self.claudeTasks[path],
-                       let idx = arr.firstIndex(where: { $0.id == taskId }) {
-                        arr[idx].output.append(line)
-                        if arr[idx].sessionId == nil,
-                           let sid = self.captureSessionId(from: line) {
-                            arr[idx].sessionId = sid
-                        }
-                        self.claudeTasks[path] = arr
-                    }
+                    self.parseStreamLine(line, taskId: taskId, path: path)
                 }
             }
             await MainActor.run {
@@ -929,6 +933,130 @@ final class DashboardStore: ObservableObject {
             arr[idx] = task
             claudeTasks[task.projectPath] = arr
         }
+    }
+
+    // MARK: - Stream parsing
+
+    private func parseStreamLine(_ line: String, taskId: UUID, path: String) {
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            appendOutputLine(line, taskId: taskId, path: path)
+            return
+        }
+        switch type {
+        case "assistant":
+            guard let message = json["message"] as? [String: Any],
+                  let content = message["content"] as? [[String: Any]] else { return }
+            for item in content {
+                let itemType = item["type"] as? String
+                if itemType == "tool_use" {
+                    handleToolUse(item, taskId: taskId, path: path)
+                } else if itemType == "text", let text = item["text"] as? String, !text.isEmpty {
+                    handleTextBlock(text, taskId: taskId, path: path)
+                }
+            }
+        case "result":
+            break
+        default:
+            break
+        }
+    }
+
+    private func handleToolUse(_ item: [String: Any], taskId: UUID, path: String) {
+        guard let name = item["name"] as? String,
+              let input = item["input"] as? [String: Any] else { return }
+        let now = Date()
+        switch name {
+        case "Read", "Glob", "LS":
+            let p = (input["file_path"] ?? input["pattern"] ?? input["path"]) as? String ?? "unknown"
+            appendLiveFile(LiveFileEvent(path: p, operation: .read, timestamp: now), taskId: taskId, projectPath: path)
+        case "Write":
+            let p = input["file_path"] as? String ?? "unknown"
+            appendLiveFile(LiveFileEvent(path: p, operation: .write, timestamp: now), taskId: taskId, projectPath: path)
+        case "Edit", "MultiEdit":
+            let p = input["file_path"] as? String ?? "unknown"
+            appendLiveFile(LiveFileEvent(path: p, operation: .edit, timestamp: now), taskId: taskId, projectPath: path)
+        case "Bash":
+            let cmd = input["command"] as? String ?? "unknown"
+            appendLiveCommand(cmd, taskId: taskId, projectPath: path)
+        default:
+            break
+        }
+    }
+
+    private func handleTextBlock(_ text: String, taskId: UUID, path: String) {
+        var processed = text
+
+        if let range = processed.range(of: #"\[PHASES:\s*([^\]]+)\]"#, options: .regularExpression) {
+            let inner = String(processed[range])
+                .replacingOccurrences(of: #"^\[PHASES:\s*"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: "]", with: "")
+            let phases = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            if !phases.isEmpty {
+                setPhasesOnRunningTask(phases, taskId: taskId, projectPath: path)
+            }
+            processed = processed.replacingCharacters(in: range, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if let range = processed.range(of: #"\[PHASE:\s*([^\]]+)\]"#, options: .regularExpression) {
+            let inner = String(processed[range])
+                .replacingOccurrences(of: #"^\[PHASE:\s*"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: "]", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            if !inner.isEmpty {
+                advancePhase(to: inner, taskId: taskId, projectPath: path)
+            }
+            processed = processed.replacingCharacters(in: range, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if !processed.isEmpty {
+            appendOutputLine(processed, taskId: taskId, path: path)
+        }
+    }
+
+    private func appendOutputLine(_ line: String, taskId: UUID, path: String) {
+        guard var arr = claudeTasks[path],
+              let idx = arr.firstIndex(where: { $0.id == taskId }) else { return }
+        arr[idx].output.append(line)
+        if arr[idx].sessionId == nil, let sid = captureSessionId(from: line) {
+            arr[idx].sessionId = sid
+        }
+        claudeTasks[path] = arr
+    }
+
+    private func appendLiveFile(_ event: LiveFileEvent, taskId: UUID, projectPath: String) {
+        guard var arr = claudeTasks[projectPath],
+              let idx = arr.firstIndex(where: { $0.id == taskId }) else { return }
+        arr[idx].liveFiles.append(event)
+        claudeTasks[projectPath] = arr
+    }
+
+    private func appendLiveCommand(_ command: String, taskId: UUID, projectPath: String) {
+        guard var arr = claudeTasks[projectPath],
+              let idx = arr.firstIndex(where: { $0.id == taskId }) else { return }
+        arr[idx].liveCommands.append(command)
+        claudeTasks[projectPath] = arr
+    }
+
+    private func setPhasesOnRunningTask(_ phases: [String], taskId: UUID, projectPath: String) {
+        guard var arr = claudeTasks[projectPath],
+              let idx = arr.firstIndex(where: { $0.id == taskId }) else { return }
+        arr[idx].phases = phases
+        claudeTasks[projectPath] = arr
+        if let taskItemId = arr[idx].linkedTaskId {
+            try? TaskStore.setPhases(projectPath: projectPath, id: taskItemId, phases: phases)
+        }
+    }
+
+    private func advancePhase(to phase: String, taskId: UUID, projectPath: String) {
+        guard var arr = claudeTasks[projectPath],
+              let idx = arr.firstIndex(where: { $0.id == taskId }) else { return }
+        if let prev = arr[idx].currentPhase, !arr[idx].completedPhases.contains(prev) {
+            arr[idx].completedPhases.append(prev)
+        }
+        arr[idx].currentPhase = phase
+        claudeTasks[projectPath] = arr
     }
 
     // MARK: - Recap
