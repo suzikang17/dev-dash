@@ -290,7 +290,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case (.open, .ai, _), (.inProgress, _, _):   return .aiWorking
         case (.open, .human, false):                 return .speccing
         case (.open, .human, true):                  return .reviewQA
-        default:                                     return .backlog
+        case (.skipped, _, _):                       return .done
+        case (.open, .none, _):                      return .backlog
         }
     }
 }
@@ -590,8 +591,8 @@ struct ClaudeTask: Identifiable, Hashable {
     var currentPhase: String? = nil
     var completedPhases: [String] = []
     var phases: [String]? = nil
-    var liveFiles: [LiveFileEvent] = []
-    var liveCommands: [String] = []
+    var liveFiles: [LiveFileEvent] = []    // in-memory only — not Codable
+    var liveCommands: [String] = []        // in-memory only — not Codable
     var linkedTaskId: String? = nil
 
     enum ClaudeTaskStatus: String {
