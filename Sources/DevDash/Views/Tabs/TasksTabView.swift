@@ -10,6 +10,7 @@ struct TasksTabView: View {
 
     @State private var newTitle = ""
     @State private var newCategory: TaskCategory = .other
+    @State private var newCategoryIsAuto = true
     @State private var newStage: String? = nil
     @State private var showTemplatePicker = false
     @FocusState private var addFocused: Bool
@@ -427,14 +428,23 @@ struct TasksTabView: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($addFocused)
                 .onSubmit { submit(project: project) }
+                .onChange(of: newTitle) { _, title in
+                    if newCategoryIsAuto {
+                        newCategory = suggestCategory(from: title)
+                    }
+                }
 
-            Picker("Category", selection: $newCategory) {
+            Picker("Category", selection: Binding(
+                get: { newCategory },
+                set: { newCategory = $0; newCategoryIsAuto = false }
+            )) {
                 ForEach(TaskCategory.allCases, id: \.self) { c in
                     Label(c.label, systemImage: c.systemImage).tag(c)
                 }
             }
             .labelsHidden()
             .frame(width: 150)
+            .help(newCategoryIsAuto ? "Auto-suggested from title" : "Manually selected")
 
             if let template = store.template(for: project.path) {
                 Picker("Stage", selection: Binding(
@@ -471,7 +481,27 @@ struct TasksTabView: View {
             stage: stage
         )
         newTitle = ""
+        newCategory = .other
+        newCategoryIsAuto = true
         addFocused = true
+    }
+
+    private func suggestCategory(from title: String) -> TaskCategory {
+        let t = title.lowercased()
+        let keywords: [(TaskCategory, [String])] = [
+            (.qa,           ["test", "qa", "quality", "verify", "regression", "e2e", "unit", "spec", "coverage"]),
+            (.design,       ["design", "ui", "ux", "figma", "mockup", "wireframe", "layout", "visual", "brand", "component", "screen", "style"]),
+            (.ops,          ["deploy", "security", "audit", "infra", "ci", "cd", "pipeline", "monitor", "devops", "ops", "incident", "alert"]),
+            (.distribution, ["ship", "release", "launch", "publish", "submit", "app store", "distribute", "upload"]),
+            (.content,      ["write", "copy", "docs", "documentation", "readme", "blog", "post", "content"]),
+            (.marketing,    ["market", "campaign", "email", "social", "ads", "analytics", "growth", "seo", "promo"]),
+            (.research,     ["research", "investigate", "explore", "analyze", "spike", "poc", "prototype", "survey"]),
+            (.engineering,  ["fix", "bug", "build", "implement", "add", "refactor", "migrate", "upgrade", "api", "backend", "frontend", "feature", "crash", "error", "performance", "integrate"]),
+        ]
+        for (category, words) in keywords {
+            if words.contains(where: { t.contains($0) }) { return category }
+        }
+        return .other
     }
 
     // MARK: - Task list

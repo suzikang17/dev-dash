@@ -130,7 +130,7 @@ enum ProductDocGenerator {
         <script defer src=".assets/devdash-components.js"></script>
         <script defer src=".assets/alpine.min.js"></script>
         </head>
-        <body>
+        <body x-data="{}">
           <div class="wrap">
             <h1>\(escapeHTML(projectName))</h1>
             <div class="crumbs">\(crumbs)</div>
