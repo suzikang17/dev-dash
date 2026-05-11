@@ -646,17 +646,20 @@ enum ProductDocGenerator {
                 <tr><td><em>e.g. perf regression on hot path</em></td><td><span class="pill risk">High</span></td><td><em>benchmark gate before rollout</em></td></tr>
               </tbody>
             </table>
+            \(ProductDocAssets.addBtn(label: "+ Add risk", html: "<tr><td><em>new risk</em></td><td><span class=\"pill warn\">Med</span></td><td><em>mitigation</em></td></tr>"))
 
             <h3>Open questions</h3>
             <ul>
               <li><em>Question 1 — who's deciding, by when?</em></li>
             </ul>
+            \(ProductDocAssets.addBtn(label: "+ Add question", html: "<li><em>New question — owner, due date</em></li>"))
 
             <h3>Success metrics</h3>
             <div class="kpi-grid">
               <div class="kpi"><div class="k-label">Adoption</div><div class="k-value">—</div><div class="k-target">target: —</div></div>
               <div class="kpi"><div class="k-label">Quality signal</div><div class="k-value">—</div><div class="k-target">target: —</div></div>
             </div>
+            \(ProductDocAssets.addBtn(label: "+ Add KPI", html: "<div class=\"kpi\"><div class=\"k-label\">New metric</div><div class=\"k-value\">—</div><div class=\"k-target\">target: —</div></div>"))
             """
 
         case .implementationPlan:
@@ -678,6 +681,7 @@ enum ProductDocGenerator {
               <li><div class="t-meta">Week 2</div><div class="t-title">Core flow</div><p><em>End-to-end happy path.</em></p></li>
               <li><div class="t-meta">Week 3</div><div class="t-title">Polish &amp; ship</div><p><em>Edge cases, telemetry, rollout.</em></p></li>
             </ul>
+            \(ProductDocAssets.addBtn(label: "+ Add milestone", html: "<li><div class=\"t-meta\">Week ?</div><div class=\"t-title\">New milestone</div><p><em>Description.</em></p></li>"))
 
             <h3>Data flow</h3>
             <div class="card">
@@ -701,6 +705,7 @@ enum ProductDocGenerator {
                 <tr><td><em>migration on hot table</em></td><td><span class="pill">Low</span></td><td><span class="pill risk">High</span></td><td><em>shadow-write + verify before cutover</em></td></tr>
               </tbody>
             </table>
+            \(ProductDocAssets.addBtn(label: "+ Add risk", html: "<tr><td><em>new risk</em></td><td><span class=\"pill warn\">Med</span></td><td><span class=\"pill risk\">High</span></td><td><em>mitigation</em></td></tr>"))
 
             <h3>Rollout</h3>
             <ul class="checklist">
@@ -709,6 +714,7 @@ enum ProductDocGenerator {
               <li>☐ Kill switch documented</li>
               <li>☐ Metrics dashboard linked</li>
             </ul>
+            \(ProductDocAssets.addBtn(label: "+ Add rollout step", html: "<li>☐ <em>New step</em></li>"))
             """
 
         case .statusReport:
@@ -737,18 +743,22 @@ enum ProductDocGenerator {
               <div class="card">
                 <h4>✓ Shipped</h4>
                 <ul><li><em>Thing 1</em></li><li><em>Thing 2</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
               <div class="card">
                 <h4>⏳ In progress</h4>
                 <ul><li><em>Thing 3</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
               <div class="card">
                 <h4>⚠ Slipped</h4>
                 <ul><li><em>Thing 4 — why &amp; new ETA</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
               <div class="card">
                 <h4>→ Next week</h4>
                 <ul><li><em>Thing 5</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
             </div>
 
@@ -757,9 +767,18 @@ enum ProductDocGenerator {
               <li><span class="pill warn">Risk</span> <em>Something that could derail the next milestone.</em></li>
               <li><span class="pill current">Ask</span> <em>What you need from leadership / others.</em></li>
             </ul>
+            \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><span class=\"pill warn\">Risk</span> <em>New item</em></li>"))
             """
 
         case .decisionLog:
+            let decisionCardHTML = "<div class=\"card\"><div class=\"doc-head\"><h3 style=\"margin:0\">D-### · <em>title</em></h3><span class=\"doc-status meta\"><span class=\"pill warn\">Draft</span></span></div><h4>Context</h4><p><em>What forced the decision.</em></p><h4>Decision</h4><p><strong>Picked: …</strong> <em>Why.</em></p></div>"
+            let escDecision = decisionCardHTML
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+            let addDecisionBtn = """
+            <button class="add-btn" contenteditable="false" @click="$el.insertAdjacentHTML('beforebegin', '\(escDecision)'); window.devdashMarkDirty($el)">+ Add decision</button>
+            """
             return """
             <div class="doc-head">
               <h2>Decision Log</h2>
@@ -783,11 +802,13 @@ enum ProductDocGenerator {
                   <tr><td><strong>B.</strong> <em>name</em></td><td><em>…</em></td><td><em>…</em></td></tr>
                 </tbody>
               </table>
+              \(ProductDocAssets.addBtn(label: "+ Add option", html: "<tr><td><strong>?.</strong> <em>name</em></td><td><em>…</em></td><td><em>…</em></td></tr>"))
               <h4>Decision</h4>
               <p><strong>Picked: A.</strong> <em>Why.</em></p>
               <h4>Consequences</h4>
               <p><em>What this commits us to / locks out / makes easier later.</em></p>
             </div>
+            \(addDecisionBtn)
             """
 
         case .conceptExplainer:
@@ -816,6 +837,7 @@ enum ProductDocGenerator {
                 <tr><td><strong><em>Term 2</em></strong></td><td><em>1-line definition.</em></td></tr>
               </tbody>
             </table>
+            \(ProductDocAssets.addBtn(label: "+ Add term", html: "<tr><td><strong><em>New term</em></strong></td><td><em>1-line definition.</em></td></tr>"))
 
             <h3>How it actually works</h3>
             <p><em>Walk through the request path / lifecycle / state machine. Step by step.</em></p>
@@ -824,6 +846,7 @@ enum ProductDocGenerator {
               <li><em>Step 2</em></li>
               <li><em>Step 3</em></li>
             </ol>
+            \(ProductDocAssets.addBtn(label: "+ Add step", html: "<li><em>New step</em></li>"))
 
             <h3>Gotchas</h3>
             <div class="callout warn">
@@ -831,6 +854,7 @@ enum ProductDocGenerator {
                 <li><em>Surprising thing 1</em></li>
                 <li><em>Surprising thing 2</em></li>
               </ul>
+              \(ProductDocAssets.addBtn(label: "+ Add gotcha", html: "<li><em>New surprising thing</em></li>"))
             </div>
 
             <h3>FAQ</h3>
@@ -883,20 +907,24 @@ enum ProductDocGenerator {
               <div class="card">
                 <h4>👍 Went well</h4>
                 <ul><li><em>Thing 1</em></li><li><em>Thing 2</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
               <div class="card">
                 <h4>👎 Didn't go well</h4>
                 <ul><li><em>Thing 3</em></li><li><em>Thing 4</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
               <div class="card">
                 <h4>💡 Lessons</h4>
                 <ul><li><em>What we learned.</em></li></ul>
+                \(ProductDocAssets.addBtn(label: "+ Add", html: "<li><em>New item</em></li>"))
               </div>
               <div class="card">
                 <h4>→ Action items</h4>
                 <ul class="checklist">
                   <li>☐ <em>Action 1 — owner, due date</em></li>
                 </ul>
+                \(ProductDocAssets.addBtn(label: "+ Add action", html: "<li>☐ <em>New action — owner, due date</em></li>"))
               </div>
             </div>
 
@@ -906,6 +934,7 @@ enum ProductDocGenerator {
               <li class="done"><div class="t-meta">Mid</div><div class="t-title">Course corrections</div><p><em>What changed and why.</em></p></li>
               <li class="done"><div class="t-meta">End</div><div class="t-title">Landed</div><p><em>What we shipped.</em></p></li>
             </ul>
+            \(ProductDocAssets.addBtn(label: "+ Add milestone", html: "<li class=\"done\"><div class=\"t-meta\">When</div><div class=\"t-title\">New entry</div><p><em>What happened.</em></p></li>"))
             """
         }
     }
