@@ -715,6 +715,23 @@ final class DashboardStore: ObservableObject {
     /// Default is read-only ("explain, don't change") so this is safe to
     /// click without thinking. Pass allowEdits=true to actually let Claude
     /// modify files.
+    func runPersona(_ persona: GStackPersona, projectPath: String) async {
+        guard let content = persona.content else { return }
+        let projectName = URL(fileURLWithPath: projectPath).lastPathComponent
+        let notes = meta(for: projectPath).notes.map { "\nProject notes: \($0)" } ?? ""
+        let prompt = """
+        DISABLE_OMC
+
+        \(content)
+
+        Project: \(projectName)
+        Path: \(projectPath)\(notes)
+
+        Begin your analysis.
+        """
+        await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: false, kind: .general)
+    }
+
     func runForTask(_ task: TaskItem, projectPath: String, allowEdits: Bool) async {
         let projectName = URL(fileURLWithPath: projectPath).lastPathComponent
         let actionLine = allowEdits

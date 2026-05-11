@@ -48,6 +48,9 @@ struct ClaudeTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
                 }
+                GStackSpecialistsSection(project: project)
+                    .environmentObject(store)
+
                 if tasks.isEmpty && projectSessions.isEmpty {
                     EmptyStateClaude()
                 }
@@ -440,5 +443,105 @@ private struct PhaseStepperView: View {
                 }
             }
         }
+    }
+}
+
+private struct GStackSpecialistsSection: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+
+    private let phases: [(String, [GStackPersona])] = [
+        ("Plan", GStackSkillLoader.all.filter { ["plan-eng-review"].contains($0.id) }),
+        ("Design", GStackSkillLoader.all.filter { ["design-consultation", "design-review"].contains($0.id) }),
+        ("Build", GStackSkillLoader.all.filter { ["review", "investigate"].contains($0.id) }),
+        ("Quality", GStackSkillLoader.all.filter { ["qa", "cso"].contains($0.id) }),
+        ("Release", GStackSkillLoader.all.filter { ["ship", "document-release"].contains($0.id) }),
+    ]
+
+    var body: some View {
+        let installed = GStackSkillLoader.all.filter { $0.isInstalled }
+        if installed.isEmpty { return AnyView(EmptyView()) }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.3")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    Text("AI SPECIALISTS")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.2)
+                        .foregroundColor(.secondary)
+                }
+
+                ForEach(phases, id: \.0) { phase, personas in
+                    let available = personas.filter { $0.isInstalled }
+                    if !available.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(phase.uppercased())
+                                .font(.system(size: 9, weight: .semibold))
+                                .tracking(1.0)
+                                .foregroundColor(.secondary.opacity(0.6))
+
+                            ForEach(available) { persona in
+                                SpecialistRow(persona: persona, project: project)
+                                    .environmentObject(store)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        )
+    }
+}
+
+private struct SpecialistRow: View {
+    let persona: GStackPersona
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    @State private var running = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: persona.systemImage)
+                .font(.system(size: 14))
+                .foregroundColor(.accentColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(persona.role)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(persona.tagline)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                running = true
+                Task {
+                    await store.runPersona(persona, projectPath: project.path)
+                    store.detailTab = .claude
+                    running = false
+                }
+            } label: {
+                if running {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text("Run")
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(running)
+        }
+        .padding(.vertical, 4)
     }
 }
