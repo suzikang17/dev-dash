@@ -8,6 +8,10 @@ enum GStackSkillLoader {
         return String(content[range.lowerBound...])
     }
 
+    static var planPersona: String? {
+        persona(for: "plan-eng-review", startingWith: "# Plan Review Mode")
+    }
+
     static var reviewPersona: String? {
         persona(for: "review", startingWith: "You are running the `/review` workflow.")
     }
@@ -18,5 +22,21 @@ enum GStackSkillLoader {
 
     static var qaPersona: String? {
         persona(for: "qa", startingWith: "You are a QA engineer AND a bug-fix engineer.")
+    }
+
+    static var designPersona: String? {
+        persona(for: "design-review", startingWith: "You are a senior product designer AND a frontend engineer.")
+    }
+
+    static var contentPersona: String? {
+        persona(for: "document-release", startingWith: "You are running the `/document-release` workflow.")
+    }
+
+    static var shipPersona: String? {
+        persona(for: "ship", startingWith: "You are running the `/ship` workflow.")
+    }
+
+    static var investigatePersona: String? {
+        persona(for: "investigate", startingWith: "# Systematic Debugging")
     }
 }

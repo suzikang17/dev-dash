@@ -476,6 +476,14 @@ final class DashboardStore: ObservableObject {
         projectMeta[projectPath] = m
     }
 
+    func setCustomDevServerURL(_ url: String, for projectPath: String) {
+        var m = meta(for: projectPath)
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        m.customDevServerURL = trimmed.isEmpty ? nil : trimmed
+        try? ProjectMetaStore.write(projectPath, meta: m)
+        projectMeta[projectPath] = m
+    }
+
     func clearTemplate(for projectPath: String) {
         var m = meta(for: projectPath)
         m.templateId = nil
@@ -744,13 +752,22 @@ final class DashboardStore: ObservableObject {
 
         let personaBlock: String = {
             switch task.category {
-            case .engineering where task.hasAIRun:
-                return GStackSkillLoader.reviewPersona.map { "\n---\n\($0)" } ?? ""
+            case .engineering:
+                let persona = task.hasAIRun ? GStackSkillLoader.reviewPersona : GStackSkillLoader.planPersona
+                return persona.map { "\n---\n\($0)" } ?? ""
+            case .design:
+                return GStackSkillLoader.designPersona.map { "\n---\n\($0)" } ?? ""
+            case .content, .marketing:
+                return GStackSkillLoader.contentPersona.map { "\n---\n\($0)" } ?? ""
+            case .distribution:
+                return GStackSkillLoader.shipPersona.map { "\n---\n\($0)" } ?? ""
             case .ops:
                 return GStackSkillLoader.securityPersona.map { "\n---\n\($0)" } ?? ""
+            case .research:
+                return GStackSkillLoader.investigatePersona.map { "\n---\n\($0)" } ?? ""
             case .qa:
                 return GStackSkillLoader.qaPersona.map { "\n---\n\($0)" } ?? ""
-            default:
+            case .other:
                 return ""
             }
         }()
