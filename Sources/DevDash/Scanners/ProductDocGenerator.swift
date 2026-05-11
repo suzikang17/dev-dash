@@ -869,27 +869,37 @@ enum ProductDocGenerator {
               <span class="doc-status meta">Drag tickets between columns. Auto-saves.</span>
             </div>
 
-            <div class="triage-controls">
-              <button class="add-btn" contenteditable="false" data-action="triage-add" data-col="now">+ Ticket</button>
-              <button class="add-btn" contenteditable="false" data-action="triage-export-md">Copy as Markdown</button>
-            </div>
+            <script type="application/json" id="triage-state" data-state="triage">
+            { "cards": [] }
+            </script>
 
-            <div class="triage-cols">
-              <div class="triage-col" data-col="now">
-                <h4>Now <span class="meta tcount">0</span></h4>
-                <div class="triage-list" data-droplist="now"></div>
+            <div data-section-file="" data-section-format="alpine-triage" x-data="triageBoard()" x-init="init()">
+              <div class="triage-controls">
+                <button class="add-btn" contenteditable="false" @click="addCard('now')">+ Ticket</button>
+                <button class="add-btn" contenteditable="false" @click="copyMarkdown()" x-text="copyLabel"></button>
               </div>
-              <div class="triage-col" data-col="next">
-                <h4>Next <span class="meta tcount">0</span></h4>
-                <div class="triage-list" data-droplist="next"></div>
-              </div>
-              <div class="triage-col" data-col="later">
-                <h4>Later <span class="meta tcount">0</span></h4>
-                <div class="triage-list" data-droplist="later"></div>
-              </div>
-              <div class="triage-col" data-col="cut">
-                <h4>Cut <span class="meta tcount">0</span></h4>
-                <div class="triage-list" data-droplist="cut"></div>
+              <div class="triage-cols">
+                <template x-for="col in cols" :key="col">
+                  <div class="triage-col" :data-col="col" @dragover.prevent @drop="drop($event, col)">
+                    <h4><span x-text="col"></span> <span class="meta tcount" x-text="cardsIn(col).length"></span></h4>
+                    <div class="triage-list">
+                      <template x-for="card in cardsIn(col)" :key="card.id">
+                        <div class="triage-card" draggable="true"
+                             @dragstart="$event.dataTransfer.setData('id', card.id)">
+                          <div class="t-title" contenteditable="true"
+                               x-init="$el.textContent = card.title"
+                               @input.debounce.300ms="card.title = $el.textContent"></div>
+                          <div class="t-tags">
+                            <template x-for="t in card.tags" :key="t">
+                              <span class="tag" x-text="t" @click="toggleFilter(t)"></span>
+                            </template>
+                          </div>
+                          <button class="rm-btn" contenteditable="false" @click="removeCard(card.id)">✕</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
               </div>
             </div>
 
