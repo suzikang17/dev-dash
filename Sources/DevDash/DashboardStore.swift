@@ -742,7 +742,22 @@ final class DashboardStore: ObservableObject {
             If no UI is involved, cover API contracts, data correctness, and error paths.
             """ : ""
 
+        let personaBlock: String = {
+            switch task.category {
+            case .engineering where task.hasAIRun:
+                return GStackSkillLoader.reviewPersona.map { "\n---\n\($0)" } ?? ""
+            case .ops:
+                return GStackSkillLoader.securityPersona.map { "\n---\n\($0)" } ?? ""
+            case .qa:
+                return GStackSkillLoader.qaPersona.map { "\n---\n\($0)" } ?? ""
+            default:
+                return ""
+            }
+        }()
+
         let prompt = """
+        DISABLE_OMC
+
         \(phasePreamble)
 
         I'm working on the project \(projectName). Help me complete this task.
@@ -751,7 +766,7 @@ final class DashboardStore: ObservableObject {
         Category: \(task.category.label)
         \(task.notes.map { "Notes: \($0)" } ?? "")
 
-        \(actionLine)\(testPhase)
+        \(actionLine)\(testPhase)\(personaBlock)
         """
 
         try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .ai)
