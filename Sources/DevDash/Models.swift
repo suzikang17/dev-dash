@@ -282,6 +282,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var hasAIRun: Bool = false
     var phases: [String]? = nil
     var completedPhases: [String] = []
+    var gstackPersonaOverride: String? = nil
 
     var kanbanColumn: KanbanColumn {
         switch (status, owner, hasAIRun) {
@@ -328,12 +329,13 @@ struct ProjectMeta: Codable, Hashable {
     var roadmapPath: String?              // resolved at first scan
     var roadmapLastSeenMtime: Date?
     var notes: String?
+    var customDevServerURL: String?
     var updatedAt: Date
 
     static let empty = ProjectMeta(
         templateId: nil, currentStageId: nil, stageStartedAt: nil,
         checkedExitCriteria: [], stageAnswers: [:], roadmapPath: nil,
-        roadmapLastSeenMtime: nil, notes: nil, updatedAt: Date()
+        roadmapLastSeenMtime: nil, notes: nil, customDevServerURL: nil, updatedAt: Date()
     )
 
     func answer(for stageId: String, question: String) -> String {

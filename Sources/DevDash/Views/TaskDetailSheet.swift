@@ -38,6 +38,7 @@ struct TaskDetailSheet: View {
                     titleEditor
                     metadataRow
                     descriptionEditor
+                    personaSection
                     phasesSection
                     artifactsSection
                     if !children.isEmpty { childrenSection }
@@ -243,6 +244,99 @@ struct TaskDetailSheet: View {
             Text(absoluteDate(date))
                 .font(.system(size: 11).monospaced())
                 .foregroundColor(.secondary.opacity(0.7))
+        }
+    }
+
+    @ViewBuilder
+    private var personaSection: some View {
+        let t = task
+        let override = t?.gstackPersonaOverride
+        let autoP = GStackSkillLoader.autoPersona(for: t?.category ?? .other, hasAIRun: t?.hasAIRun ?? false)
+        let active = override.flatMap { id in GStackSkillLoader.all.first { $0.id == id } } ?? autoP
+        let installed = GStackSkillLoader.all.filter { $0.isInstalled }
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("PERSONA")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(.secondary)
+                if override == nil {
+                    Text("auto")
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.12))
+                        .foregroundColor(.secondary)
+                        .clipShape(Capsule())
+                } else {
+                    Button("Reset to auto") {
+                        if var updated = t {
+                            updated.gstackPersonaOverride = nil
+                            store.updateTask(projectPath: projectPath, updated)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+
+            if let p = active {
+                HStack(spacing: 10) {
+                    Image(systemName: p.systemImage)
+                        .font(.system(size: 16))
+                        .foregroundColor(.accentColor)
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(p.role)
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(p.tagline)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.2), lineWidth: 0.5))
+            } else if installed.isEmpty {
+                Text("Install gstack to enable AI personas")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            if !installed.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(installed) { p in
+                            let isSelected = override == p.id
+                            Button {
+                                if var updated = t {
+                                    updated.gstackPersonaOverride = isSelected ? nil : p.id
+                                    store.updateTask(projectPath: projectPath, updated)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: p.systemImage)
+                                        .font(.system(size: 10))
+                                    Text(p.role)
+                                        .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(isSelected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.08))
+                                .foregroundColor(isSelected ? .accentColor : .secondary)
+                                .clipShape(Capsule())
+                                .overlay(isSelected ? Capsule().stroke(Color.accentColor.opacity(0.4), lineWidth: 0.8) : nil)
+                            }
+                            .buttonStyle(.plain)
+                            .help(p.tagline)
+                        }
+                    }
+                }
+            }
         }
     }
 

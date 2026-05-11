@@ -751,25 +751,13 @@ final class DashboardStore: ObservableObject {
             """ : ""
 
         let personaBlock: String = {
-            switch task.category {
-            case .engineering:
-                let persona = task.hasAIRun ? GStackSkillLoader.reviewPersona : GStackSkillLoader.planPersona
-                return persona.map { "\n---\n\($0)" } ?? ""
-            case .design:
-                return GStackSkillLoader.designPersona.map { "\n---\n\($0)" } ?? ""
-            case .content, .marketing:
-                return GStackSkillLoader.contentPersona.map { "\n---\n\($0)" } ?? ""
-            case .distribution:
-                return GStackSkillLoader.shipPersona.map { "\n---\n\($0)" } ?? ""
-            case .ops:
-                return GStackSkillLoader.securityPersona.map { "\n---\n\($0)" } ?? ""
-            case .research:
-                return GStackSkillLoader.investigatePersona.map { "\n---\n\($0)" } ?? ""
-            case .qa:
-                return GStackSkillLoader.qaPersona.map { "\n---\n\($0)" } ?? ""
-            case .other:
-                return ""
+            let resolved: GStackPersona?
+            if let overrideId = task.gstackPersonaOverride {
+                resolved = GStackSkillLoader.all.first { $0.id == overrideId }
+            } else {
+                resolved = GStackSkillLoader.autoPersona(for: task.category, hasAIRun: task.hasAIRun)
             }
+            return resolved?.content.map { "\n---\n\($0)" } ?? ""
         }()
 
         let prompt = """
