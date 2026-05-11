@@ -97,6 +97,9 @@ struct ProductTabView: View {
                 onSave: { rel, html in
                     saveSection(projectPath: project.path, rel: rel, html: html)
                 },
+                onSaveAlpine: { rel, state in
+                    saveAlpineSection(projectPath: project.path, rel: rel, state: state)
+                },
                 onAction: { payload in
                     handleAction(project: project, payload: payload)
                 }
@@ -119,6 +122,55 @@ struct ProductTabView: View {
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try? html.write(toFile: target, atomically: true, encoding: .utf8)
         DocIndexGenerator.generate(projectPath: projectPath)
+    }
+
+    /// Bridge handler for Alpine-managed sections (currently triage). The browser
+    /// sends just the JSON state — we regex-replace the contents of the
+    /// <script id="triage-state">…</script> block in the file. If the file or
+    /// block is missing, regenerate the entire artifact from the triage template
+    /// scaffold and embed the new state.
+    private func saveAlpineSection(projectPath: String, rel: String, state: String) {
+        let target = "\(projectPath)/docs/devdash/\(rel)"
+        let dir = (target as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        let existing = (try? String(contentsOfFile: target, encoding: .utf8)) ?? ""
+        if !existing.isEmpty,
+           let updated = replaceTriageStateBlock(in: existing, with: state) {
+            try? updated.write(toFile: target, atomically: true, encoding: .utf8)
+            DocIndexGenerator.generate(projectPath: projectPath)
+            return
+        }
+
+        // Fallback: file is missing or block is malformed — regenerate from the template
+        // and patch the state in.
+        let projectName = (projectPath as NSString).lastPathComponent
+        let scaffold = ProductDocGenerator.template(.triageBoard, projectName: projectName)
+        if let withState = replaceTriageStateBlock(in: scaffold, with: state) {
+            try? withState.write(toFile: target, atomically: true, encoding: .utf8)
+            DocIndexGenerator.generate(projectPath: projectPath)
+        }
+    }
+
+    /// Non-greedy regex replace of the contents of <script ... id="triage-state" ...>...</script>.
+    /// Returns nil if the block isn't found.
+    private func replaceTriageStateBlock(in html: String, with state: String) -> String? {
+        let pattern = #"(<script[^>]*id="triage-state"[^>]*>)([\s\S]*?)(</script>)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+        let range = NSRange(html.startIndex..<html.endIndex, in: html)
+        guard regex.firstMatch(in: html, options: [], range: range) != nil else { return nil }
+        // Pretty-print the JSON for readability on disk.
+        let pretty = prettyJSON(state) ?? state
+        let replacement = "$1\n\(pretty)\n$3"
+        return regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: replacement)
+    }
+
+    private func prettyJSON(_ raw: String) -> String? {
+        guard let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data, options: []),
+              let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
+              let str = String(data: pretty, encoding: .utf8) else { return nil }
+        return str
     }
 
     /// Bridge handler: route data-action clicks to native side-effects.

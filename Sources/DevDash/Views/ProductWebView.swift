@@ -13,6 +13,7 @@ struct ProductWebView: NSViewRepresentable {
     let docsRoot: URL
     let reloadToken: Int                                   // bump to force reload
     let onSave: (String, String) -> Void                   // (relPath, html)
+    let onSaveAlpine: (String, String) -> Void             // (relPath, jsonState)
     let onAction: ([String: Any]) -> Void                  // generic dispatch
 
     func makeNSView(context: Context) -> WKWebView {
@@ -44,21 +45,25 @@ struct ProductWebView: NSViewRepresentable {
             context.coordinator.lastReloadToken = reloadToken
         }
         context.coordinator.onSave = onSave
+        context.coordinator.onSaveAlpine = onSaveAlpine
         context.coordinator.onAction = onAction
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSave: onSave, onAction: onAction)
+        Coordinator(onSave: onSave, onSaveAlpine: onSaveAlpine, onAction: onAction)
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var onSave: (String, String) -> Void
+        var onSaveAlpine: (String, String) -> Void
         var onAction: ([String: Any]) -> Void
         var lastReloadToken: Int = -1
 
         init(onSave: @escaping (String, String) -> Void,
+             onSaveAlpine: @escaping (String, String) -> Void,
              onAction: @escaping ([String: Any]) -> Void) {
             self.onSave = onSave
+            self.onSaveAlpine = onSaveAlpine
             self.onAction = onAction
         }
 
@@ -69,6 +74,11 @@ struct ProductWebView: NSViewRepresentable {
                 if let path = body["path"] as? String,
                    let html = body["html"] as? String {
                     onSave(path, html)
+                }
+            case "save-alpine":
+                if let path = body["path"] as? String,
+                   let state = body["state"] as? String {
+                    onSaveAlpine(path, state)
                 }
             default:
                 onAction(body)
