@@ -13,17 +13,17 @@ struct PreviewTabView: View {
         let proj = store.project(for: store.selection)
         let projectServices: [Service] = proj.map { store.services(for: $0.path) } ?? []
         let svc: Service? = store.service(for: store.selection)
+        let customURL: URL? = proj.flatMap { URL(string: store.meta(for: $0.path).customDevServerURL ?? "") }
+        let effectiveURL: URL? = customURL ?? svc.flatMap { URL(string: $0.url ?? "") }
 
         // Apple platforms get a different preview (no localhost URL).
         if let proj = proj, isAppleProject(proj), svc == nil {
             AppleAppPreview(project: proj)
                 .environmentObject(store)
-        } else if let svc = svc,
-           let urlString = svc.url,
-           let url = URL(string: urlString) {
+        } else if let url = effectiveURL {
             VStack(spacing: 0) {
                 if projectServices.count > 1, let path = proj?.path {
-                    ServiceSwitcher(services: projectServices, currentPort: svc.port, projectPath: path)
+                    ServiceSwitcher(services: projectServices, currentPort: svc?.port ?? 0, projectPath: path)
                     Divider()
                 }
                 ZStack {
@@ -69,10 +69,10 @@ struct PreviewTabView: View {
                     url: url,
                     status: holder.status,
                     viewport: $holder.viewport,
-                    pid: svc.pid,
+                    pid: svc?.pid,
                     onOpenExternal: { NSWorkspace.shared.open(url) },
                     onReload: { holder.reload() },
-                    onStop: { Task { await store.stopServer(pid: svc.pid) } }
+                    onStop: svc.map { s in { Task { await store.stopServer(pid: s.pid) } } }
                 )
             }
             .onAppear { holder.loadIfNeeded(url) }
@@ -133,10 +133,10 @@ private struct AddressBar: View {
     let url: URL
     let status: WebLoadStatus
     @Binding var viewport: Viewport
-    let pid: Int32
+    let pid: Int32?
     let onOpenExternal: () -> Void
     let onReload: () -> Void
-    let onStop: () -> Void
+    let onStop: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -179,12 +179,14 @@ private struct AddressBar: View {
             .buttonStyle(.borderless)
             .help("Open in browser")
 
-            Button(role: .destructive, action: onStop) {
-                Image(systemName: "stop.fill")
+            if let onStop = onStop, let pid = pid {
+                Button(role: .destructive, action: onStop) {
+                    Image(systemName: "stop.fill")
+                }
+                .buttonStyle(.borderless)
+                .foregroundColor(.red)
+                .help("Stop server (PID \(pid))")
             }
-            .buttonStyle(.borderless)
-            .foregroundColor(.red)
-            .help("Stop server (PID \(pid))")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

@@ -6,6 +6,7 @@ struct InfoTabView: View {
 
     var body: some View {
         if let project = store.project(for: store.selection) {
+            VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(project.name)
@@ -39,7 +40,11 @@ struct InfoTabView: View {
                             InfoRow(label: "Running on", value: "localhost:\(port)", icon: "play.circle.fill",
                                     linkURL: URL(string: "http://localhost:\(port)"))
                         }
+                        Divider()
+                        DevServerURLRow(project: project)
                     }
+
+                    NotesCard(project: project)
 
                     HStack(spacing: 10) {
                         if store.runningPort(for: project.path) == nil {
@@ -93,11 +98,77 @@ struct InfoTabView: View {
                 }
                 .padding(20)
             }
+            DevAddressBar(project: project)
+            } // VStack
         } else {
             Text("Select a project to see info")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+private struct NotesCard: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    @State private var draft: String = ""
+    @State private var editing = false
+
+    private var saved: String { store.meta(for: project.path).notes ?? "" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("NOTES")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if editing {
+                    Button("Done") {
+                        store.setProjectNotes(draft, for: project.path)
+                        editing = false
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.accentColor)
+                } else {
+                    Button(saved.isEmpty ? "Add" : "Edit") {
+                        draft = saved
+                        editing = true
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                }
+            }
+
+            if editing {
+                TextEditor(text: $draft)
+                    .font(.system(size: 13))
+                    .frame(minHeight: 72)
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor.opacity(0.4), lineWidth: 1))
+            } else if saved.isEmpty {
+                Text("No notes yet.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            } else {
+                Text(saved)
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
     }
 }
 
@@ -493,5 +564,132 @@ private struct InfoRow: View {
             Spacer()
         }
         .padding(.vertical, 10)
+    }
+}
+
+private struct DevServerURLRow: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    @State private var editing = false
+    @State private var draft = ""
+
+    private var savedURL: String? { store.meta(for: project.path).customDevServerURL }
+    private var detectedURL: String? {
+        store.runningPort(for: project.path).map { "http://localhost:\($0)" }
+    }
+    private var displayURL: String { savedURL ?? detectedURL ?? "" }
+    private var openURL: URL? { URL(string: displayURL) }
+    private var isRunning: Bool { store.runningPort(for: project.path) != nil }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: isRunning ? "play.circle.fill" : "link")
+                .foregroundColor(isRunning ? .green : .secondary)
+                .frame(width: 16)
+            Text("Dev URL")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .frame(width: 100, alignment: .leading)
+            if editing {
+                TextField("http://localhost:3000", text: $draft)
+                    .font(.system(size: 13))
+                    .textFieldStyle(.plain)
+                    .onSubmit { save() }
+                Button("Done") { save() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.accentColor)
+            } else if displayURL.isEmpty {
+                Text("Not set")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("Set") { startEditing() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            } else {
+                if let url = openURL {
+                    Button { NSWorkspace.shared.open(url) } label: {
+                        Text(displayURL)
+                            .foregroundColor(.accentColor)
+                            .font(.system(size: 13))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Button("Edit") { startEditing() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func startEditing() {
+        draft = savedURL ?? detectedURL ?? ""
+        editing = true
+    }
+
+    private func save() {
+        store.setCustomDevServerURL(draft, for: project.path)
+        editing = false
+    }
+}
+
+private struct DevAddressBar: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    private var savedURL: String { store.meta(for: project.path).customDevServerURL ?? "" }
+    private var detectedURL: String {
+        store.runningPort(for: project.path).map { "http://localhost:\($0)" } ?? ""
+    }
+    private var placeholder: String {
+        detectedURL.isEmpty ? "http://localhost:3000" : detectedURL
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: store.runningPort(for: project.path) != nil ? "play.circle.fill" : "link")
+                .font(.system(size: 11))
+                .foregroundColor(store.runningPort(for: project.path) != nil ? .green : .secondary)
+
+            TextField(placeholder, text: $draft)
+                .font(.system(size: 12))
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onSubmit { open() }
+                .onAppear { draft = savedURL }
+                .onChange(of: project.path) { draft = savedURL }
+
+            if !draft.isEmpty {
+                Button { open() } label: {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return, modifiers: [])
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color(NSColor.windowBackgroundColor))
+        .overlay(Rectangle().frame(height: 0.5).foregroundColor(Color(NSColor.separatorColor)), alignment: .top)
+    }
+
+    private func open() {
+        let raw = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let urlStr = raw.isEmpty ? detectedURL : raw
+        store.setCustomDevServerURL(urlStr, for: project.path)
+        if let url = URL(string: urlStr), !urlStr.isEmpty {
+            NSWorkspace.shared.open(url)
+        }
+        focused = false
     }
 }

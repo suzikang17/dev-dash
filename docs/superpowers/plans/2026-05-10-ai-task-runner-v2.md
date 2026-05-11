@@ -1454,6 +1454,102 @@ git commit -m "feat: wire setTaskOwner, reloadTasks, and task lifecycle into Das
 
 ---
 
+## Task 12: GStack skill injection + DISABLE_OMC prefix
+
+**Files:**
+- Create: `Sources/DevDash/Scanners/GStackSkillLoader.swift`
+- Modify: `Sources/DevDash/DashboardStore.swift`
+
+Inject gstack persona text into phase-specific prompts at runtime. Reads skill files from `~/.claude/skills/gstack/[skill]/SKILL.md`, strips the preamble, and returns the core workflow section. Graceful fallback if gstack is not installed.
+
+- [ ] **Step 1: Create `GStackSkillLoader.swift`**
+
+```swift
+import Foundation
+
+enum GStackSkillLoader {
+    static func persona(for skill: String, startingWith marker: String) -> String? {
+        let path = NSHomeDirectory() + "/.claude/skills/gstack/\(skill)/SKILL.md"
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        guard let range = content.range(of: marker) else { return nil }
+        return String(content[range.lowerBound...])
+    }
+
+    // Phase → skill mappings. Returns nil if gstack not installed or marker not found.
+    static var reviewPersona: String? {
+        persona(for: "review", startingWith: "You are running the `/review` workflow.")
+    }
+
+    static var securityPersona: String? {
+        persona(for: "cso", startingWith: "You are a Chief Security Officer")
+    }
+
+    static var qaPersona: String? {
+        persona(for: "qa", startingWith: "You are a QA engineer AND a bug-fix engineer.")
+    }
+}
+```
+
+- [ ] **Step 2: Add `DISABLE_OMC` prefix to `runForTask()` in `DashboardStore.swift`**
+
+At the top of the `prompt` string in `runForTask()`, prepend `DISABLE_OMC\n\n`. This prevents OMC from interfering with headless `claude -p` runs:
+
+```swift
+let prompt = """
+DISABLE_OMC
+
+\(phasePreamble)
+...
+"""
+```
+
+- [ ] **Step 3: Inject phase personas into `runForTask()`**
+
+After building `phasePreamble`, load the appropriate gstack persona based on the task category or phases. Add a `personaBlock` that gets appended to the prompt:
+
+```swift
+// Load gstack persona if available
+let personaBlock: String = {
+    switch task.category {
+    case .engineering:
+        // Inject review persona for engineering tasks that have had an AI run
+        if task.hasAIRun, let p = GStackSkillLoader.reviewPersona {
+            return "\n---\n\(p)"
+        }
+        return ""
+    case .security:
+        if let p = GStackSkillLoader.securityPersona { return "\n---\n\(p)" }
+        return ""
+    case .qa:
+        if let p = GStackSkillLoader.qaPersona { return "\n---\n\(p)" }
+        return ""
+    default:
+        return ""
+    }
+}()
+```
+
+Append `personaBlock` at the end of the prompt string.
+
+- [ ] **Step 4: Build**
+
+```bash
+cd /Users/suki/dev/dev-dash && swift build 2>&1 | head -40
+```
+
+- [ ] **Step 5: Smoke test**
+
+Run a task with `category = .security` on any project. Verify in the Claude tab output that the CSO persona instructions appear in what Claude produces (it should reference security-focused analysis).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add Sources/DevDash/Scanners/GStackSkillLoader.swift Sources/DevDash/DashboardStore.swift
+git commit -m "feat: gstack skill injection + DISABLE_OMC prefix for headless claude runs"
+```
+
+---
+
 ## Self-Review Notes
 
 After all tasks are complete, verify:

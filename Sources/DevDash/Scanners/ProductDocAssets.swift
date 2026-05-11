@@ -17,7 +17,7 @@ enum ProductDocAssets {
         let assetsDir = "\(docsRoot)/\(assetsRel)"
         try? FileManager.default.createDirectory(atPath: assetsDir, withIntermediateDirectories: true)
         for name in assetFiles {
-            guard let src = Bundle.module.url(forResource: name, withExtension: nil) else {
+            guard let src = resourceURL(named: name) else {
                 NSLog("[devdash] missing bundled resource: \(name)")
                 continue
             }
@@ -31,6 +31,18 @@ enum ProductDocAssets {
             try? FileManager.default.removeItem(atPath: dst)
             try? FileManager.default.copyItem(atPath: src.path, toPath: dst)
         }
+    }
+
+    /// Resolve a bundled JS resource. `Bundle.module` finds it during `swift run`
+    /// (when the SPM-generated `DevDash_DevDash.bundle` sits next to the binary).
+    /// The packaged .app workflow in `run.sh` copies the JS files directly into
+    /// `DevDash.app/Contents/Resources/` so codesign can sign the .app cleanly,
+    /// which means `Bundle.main` is the working lookup there.
+    private static func resourceURL(named name: String) -> URL? {
+        if let url = Bundle.module.url(forResource: name, withExtension: nil) {
+            return url
+        }
+        return Bundle.main.url(forResource: name, withExtension: nil)
     }
 
     /// Render an Alpine + Add button. The button is placed *immediately after*

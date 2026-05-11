@@ -30,6 +30,9 @@ struct ClaudeTabView: View {
 
         ScrollView {
             LazyVStack(spacing: 14, pinnedViews: []) {
+                GStackSpecialistsSection(project: project)
+                    .environmentObject(store)
+
                 if !tasks.isEmpty {
                     InlineSectionHeader(label: "Tasks", count: tasks.count, systemImage: "sparkles")
                     ForEach(tasks) { task in ClaudeTaskCard(task: task) }
@@ -48,9 +51,6 @@ struct ClaudeTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
                 }
-                GStackSpecialistsSection(project: project)
-                    .environmentObject(store)
-
                 if tasks.isEmpty && projectSessions.isEmpty {
                     EmptyStateClaude()
                 }

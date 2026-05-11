@@ -40,12 +40,12 @@ struct TasksTabView: View {
                             .cornerRadius(8)
                     }
 
+                    addBar(project: project)
+
                     if viewMode == "board" {
                         KanbanBoardView(project: project)
                             .environmentObject(store)
                     } else {
-                        addBar(project: project)
-
                         taskList(project: project)
 
                         let issues = store.tasks(for: project.path)?.issues ?? []
