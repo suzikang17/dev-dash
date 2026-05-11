@@ -84,192 +84,103 @@ struct ProductWebView: NSViewRepresentable {
         catch (e) { console.error('devdash bridge failed', e); }
       }
 
+      // Walk every artifact embed (.embed[data-section-file]) and copy the section
+      // file path onto any descendant Alpine-managed root that doesn't have one yet.
+      // Triage templates ship with data-section-file="" because the path isn't known
+      // at scaffold time; the embed wrapper supplies it at view time.
+      function fillAlpineSectionPaths(scope) {
+        (scope || document).querySelectorAll('[data-section-file]').forEach(function(host) {
+          var hostPath = host.dataset.sectionFile;
+          if (!hostPath) return;
+          host.querySelectorAll('[data-section-format="alpine-triage"]').forEach(function(node) {
+            if (!node.dataset.sectionFile) node.dataset.sectionFile = hostPath;
+          });
+        });
+      }
+
       function attachEditing(root) {
         (root || document).querySelectorAll('[data-section-file]').forEach(function(el) {
           if (el.dataset.editingAttached) return;
+          // Alpine-managed sections own their own state machine; do not make their
+          // root contenteditable.
+          if (el.dataset.sectionFormat === 'alpine-triage') { el.dataset.editingAttached = 'true'; return; }
+          // Artifact-browser .embed wrappers that contain an Alpine-triage root
+          // delegate ownership to the inner Alpine component — making the outer
+          // wrapper contenteditable would cause the whole embed innerHTML to save
+          // alongside (and conflict with) the JSON-block save path.
+          if (el.querySelector('[data-section-format="alpine-triage"]')) {
+            el.dataset.editingAttached = 'true';
+            return;
+          }
           el.dataset.editingAttached = 'true';
           el.contentEditable = 'true';
           el.spellcheck = false;
           var saveTimer = null;
-          var origHTML = el.innerHTML;
-
           el.addEventListener('input', function() {
             el.classList.add('is-dirty');
             clearTimeout(saveTimer);
-            saveTimer = setTimeout(function() { save(el); }, 800);
+            saveTimer = setTimeout(function() { saveHTML(el); }, 800);
           });
           el.addEventListener('blur', function() {
             if (el.classList.contains('is-dirty')) {
               clearTimeout(saveTimer);
-              save(el);
+              saveHTML(el);
             }
           });
-          // Cmd-S inside the editable saves immediately
           el.addEventListener('keydown', function(e) {
             if ((e.metaKey || e.ctrlKey) && e.key === 's') {
               e.preventDefault();
               clearTimeout(saveTimer);
-              save(el);
+              saveHTML(el);
             }
           });
         });
       }
 
-      function save(el) {
+      function saveHTML(el) {
         post({ action: 'save', path: el.dataset.sectionFile, html: el.innerHTML });
         el.classList.remove('is-dirty');
         el.classList.add('is-saved');
         setTimeout(function() { el.classList.remove('is-saved'); }, 1500);
       }
 
-      // Client-side template library used by data-action="dom-insert-template".
-      // Each template is a plain HTML string. Adding more here is the way to
-      // expand what users can scaffold inside any editable section.
-      var templates = {
-        'kpi': '<div class="kpi"><div class="k-label">New metric</div><div class="k-value">—</div><div class="k-target">target: —</div><div class="k-delta">—</div></div>',
-        'idea-card': '<div class="item"><span class="tag">new</span> <em>New idea — describe it</em></div>',
-        'risk-row': '<tr><td><em>New risk</em></td><td><span class="pill warn">Med</span></td><td><span class="pill risk">High</span></td><td><em>mitigation</em></td></tr>',
-        'metric-row': '<tr><td><em>New metric</em></td><td>—</td><td>—</td><td>—</td></tr>',
-        'decision-entry': '<div class="card"><div class="doc-head"><h3 style="margin:0">D-### · <em>title</em></h3><span class="doc-status meta"><span class="pill warn">Draft</span></span></div><h4>Context</h4><p><em>What forced the decision.</em></p><h4>Decision</h4><p><strong>Picked: …</strong> <em>Why.</em></p></div>',
-        'feature-card': '<div class="card"><h3>New feature</h3><p><em>One sentence.</em></p></div>',
-        'milestone': '<li><div class="t-meta">Week ?</div><div class="t-title">New milestone</div><p><em>Description.</em></p></li>',
-        'checklist-item': '<li>☐ <em>New item</em></li>',
-        'kpi-tile': '<div class="kpi"><div class="k-label">New KPI</div><div class="k-value">—</div><div class="k-target">target: —</div></div>'
+      // Inline Alpine @click handlers in templates call this after mutating DOM
+      // inside a contenteditable section, so the input listener fires and the
+      // debounced save runs.
+      window.devdashMarkDirty = function(el) {
+        var section = el.closest('[data-section-file]');
+        if (!section) return;
+        section.classList.add('is-dirty');
+        section.dispatchEvent(new Event('input', { bubbles: true }));
       };
 
-      // Inject small ✕ buttons on every removable item. Each closes its
-      // closest matching container via dom-remove-closest. Idempotent —
-      // never adds a second ✕ if one already exists. Re-runnable on any
-      // subtree, so new templates get × buttons too.
-      function injectRemovesIn(scope) {
-        if (!scope) return;
-        function attach(el, targetSel) {
-          if (el.querySelector(':scope > .rm-btn')) return;
-          var rm = document.createElement('button');
-          rm.className = 'rm-btn';
-          rm.textContent = '✕';
-          rm.title = 'Remove';
-          rm.contentEditable = 'false';
-          rm.dataset.action = 'dom-remove-closest';
-          rm.dataset.target = targetSel;
-          var cs = getComputedStyle(el);
-          if (cs.position === 'static') el.style.position = 'relative';
-          el.appendChild(rm);
+      // Triage's scheduleSave() calls this with the section path + JSON state.
+      // Bridge ships it to Swift, which regex-replaces the JSON block in the file.
+      window.devdashSaveAlpine = function(path, state) {
+        if (!path) return;   // Alpine root hadn't been linked to a file yet
+        post({ action: 'save-alpine', path: path, state: state });
+        var sec = document.querySelector('[data-section-file="' + path + '"]');
+        if (sec) {
+          sec.classList.add('is-saved');
+          setTimeout(function() { sec.classList.remove('is-saved'); }, 1500);
         }
-        scope.querySelectorAll('.kpi').forEach(function(t) { attach(t, '.kpi'); });
-        scope.querySelectorAll('.board .item').forEach(function(t) { attach(t, '.item'); });
-        scope.querySelectorAll('.triage-card').forEach(function(t) { attach(t, '.triage-card'); });
-      }
+      };
 
-      function findEditableAncestor(el) {
-        var cur = el;
-        while (cur && cur !== document.body) {
-          if (cur.dataset && cur.dataset.sectionFile) return cur;
-          cur = cur.parentElement;
-        }
-        return null;
-      }
-
-      // Single document-level click delegate. Works for every [data-action]
-      // button regardless of when it was added to the DOM (no per-element
-      // attach race). Always preventDefault so contenteditable focus
-      // shenanigans never bubble up.
+      // Pass-through delegate for any [data-action] not consumed locally.
+      // Keeps open-file / regenerate / etc. working from the rendered HTML.
       document.addEventListener('click', function(e) {
         var btn = e.target.closest('[data-action]');
-        console.log('[devdash] click target:', e.target, 'matched data-action btn:', btn);
         if (!btn) return;
         e.preventDefault();
-        e.stopPropagation();
-        var act = btn.dataset.action;
-        console.log('[devdash] handling action:', act, 'data:', JSON.stringify(btn.dataset));
-
-        if (act === 'dom-insert-template' || act === 'dom-append-template') {
-          var tplKey = btn.dataset.template;
-          var targetSel = btn.dataset.target;
-          var html = templates[tplKey];
-          if (!html) { console.warn('unknown template', tplKey); return; }
-          var section = findEditableAncestor(btn);
-          if (!section) return;
-          var target = targetSel ? section.querySelector(targetSel) : btn.parentElement;
-          if (!target) { console.warn('target not found:', targetSel); return; }
-          var wrap = document.createElement('div');
-          wrap.innerHTML = html.trim();
-          var node = wrap.firstChild;
-          if (act === 'dom-append-template' || !target.contains(btn)) {
-            target.appendChild(node);
-          } else {
-            target.insertBefore(node, btn);
-          }
-          // Newly inserted nodes need their own ✕ if applicable.
-          injectRemovesIn(target);
-          section.classList.add('is-dirty');
-          save(section);
-          return;
-        }
-
-        if (act === 'dom-remove-closest') {
-          var sel = btn.dataset.target;
-          var sec = findEditableAncestor(btn);
-          if (!sec || !sel) return;
-          var victim = btn.closest(sel);
-          if (victim) {
-            victim.remove();
-            sec.classList.add('is-dirty');
-            save(sec);
-          }
-          return;
-        }
-
-        if (act === 'triage-add') {
-          var section2 = findEditableAncestor(btn);
-          if (!section2) return;
-          var col = btn.dataset.col || 'now';
-          var list = section2.querySelector('[data-droplist="' + col + '"]');
-          if (!list) return;
-          var card = document.createElement('div');
-          card.className = 'triage-card';
-          card.contentEditable = 'true';
-          card.dataset.triageId = 't-' + Math.random().toString(36).slice(2, 9);
-          card.innerHTML = '<div class="t-title">New ticket</div><div class="t-tags"><span class="tag">untagged</span></div>';
-          list.appendChild(card);
-          attachTriage(list);
-          updateCounts(list.closest('.triage-cols'));
-          section2.classList.add('is-dirty');
-          save(section2);
-          return;
-        }
-
-        if (act === 'triage-export-md') {
-          var section3 = findEditableAncestor(btn);
-          if (!section3) return;
-          var lines = ['# Triage'];
-          section3.querySelectorAll('.triage-col').forEach(function(col) {
-            var title = (col.querySelector('h4') || {}).textContent || '';
-            lines.push('');
-            lines.push('## ' + title.replace(/\\d+$/, '').trim());
-            col.querySelectorAll('.triage-card').forEach(function(card) {
-              var t = (card.querySelector('.t-title') || {}).textContent || '';
-              lines.push('- ' + t.trim());
-            });
-          });
-          var md = lines.join('\\n');
-          if (navigator.clipboard) navigator.clipboard.writeText(md);
-          var orig = btn.textContent;
-          btn.textContent = 'Copied!';
-          setTimeout(function() { btn.textContent = orig; }, 1200);
-          return;
-        }
-
-        // Fallthrough → native handler.
-        var payload = { action: act };
+        var payload = { action: btn.dataset.action };
         Object.keys(btn.dataset).forEach(function(k) {
           if (k === 'action') return;
           payload[k] = btn.dataset[k];
         });
         post(payload);
-      }, true);   // capture phase so we beat any bubbling
+      }, true);
 
-      // Inject the editing/saving CSS once
+      // Bridge style for dirty/saved indicators
       if (!document.getElementById('devdash-bridge-style')) {
         var style = document.createElement('style');
         style.id = 'devdash-bridge-style';
@@ -280,168 +191,13 @@ struct ProductWebView: NSViewRepresentable {
         document.head.appendChild(style);
       }
 
-      // Auto-inject + Add buttons for known structural patterns so that
-      // sections scaffolded before this feature shipped still get the
-      // affordance. The buttons are appended in-DOM only on first sight;
-      // they'll persist into the file once the user makes any edit.
-      function autoInject(scope) {
-        (scope || document).querySelectorAll('[data-section-file]').forEach(function(sec) {
-          if (sec.dataset.autoinjected) return;
-          sec.dataset.autoinjected = 'true';
-
-          function makeBtn(label, template, target) {
-            var btn = document.createElement('button');
-            btn.className = 'add-btn';
-            btn.textContent = label;
-            btn.dataset.action = 'dom-append-template';
-            btn.dataset.template = template;
-            btn.dataset.target = target;
-            // Critical: section is contenteditable, so without this the click
-            // just places the caret inside the button label.
-            btn.contentEditable = 'false';
-            return btn;
-          }
-          function uid(prefix) { return prefix + Math.random().toString(36).slice(2, 9); }
-
-          injectRemovesIn(sec);
-
-          // .kpi-grid → "+ Add KPI" sibling button after the grid
-          sec.querySelectorAll('.kpi-grid').forEach(function(grid) {
-            if (grid.dataset.autobtn) return;
-            grid.dataset.autobtn = '1';
-            var id = uid('kg-');
-            grid.setAttribute('data-kg-id', id);
-            var btn = makeBtn('+ Add KPI', 'kpi', '[data-kg-id="' + id + '"]');
-            grid.parentNode.insertBefore(btn, grid.nextSibling);
-          });
-
-          // ul.checklist → "+ Add item"
-          sec.querySelectorAll('ul.checklist').forEach(function(ul) {
-            if (ul.dataset.autobtn) return;
-            ul.dataset.autobtn = '1';
-            var id = uid('cl-');
-            ul.setAttribute('data-cl-id', id);
-            var btn = makeBtn('+ Add item', 'checklist-item', '[data-cl-id="' + id + '"]');
-            ul.parentNode.insertBefore(btn, ul.nextSibling);
-          });
-
-          // .board .col → "+ Idea" inside each column
-          sec.querySelectorAll('.board .col').forEach(function(col) {
-            if (col.dataset.autobtn) return;
-            col.dataset.autobtn = '1';
-            var id = uid('bc-');
-            col.setAttribute('data-bc-id', id);
-            var btn = makeBtn('+ Idea', 'idea-card', '[data-bc-id="' + id + '"]');
-            col.appendChild(btn);
-          });
-
-          // table tbody → "+ Add row"
-          sec.querySelectorAll('table tbody').forEach(function(tbody) {
-            if (tbody.dataset.autobtn) return;
-            tbody.dataset.autobtn = '1';
-            var id = uid('tb-');
-            tbody.setAttribute('data-tb-id', id);
-            var table = tbody.closest('table');
-            var btn = makeBtn('+ Add row', 'metric-row', '[data-tb-id="' + id + '"]');
-            (table || tbody).parentNode.insertBefore(btn, (table || tbody).nextSibling);
-          });
-        });
-      }
-
-      // Triage board drag-and-drop. Operates on any .triage-board / .triage-cols
-      // ancestor inside an editable section so the dropped state auto-saves.
-      function attachTriage(scope) {
-        (scope || document).querySelectorAll('.triage-list').forEach(function(list) {
-          if (list.dataset.triageAttached) return;
-          list.dataset.triageAttached = 'true';
-          list.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            list.classList.add('is-drop-target');
-          });
-          list.addEventListener('dragleave', function() {
-            list.classList.remove('is-drop-target');
-          });
-          list.addEventListener('drop', function(e) {
-            e.preventDefault();
-            list.classList.remove('is-drop-target');
-            var id = e.dataTransfer.getData('text/triage-id');
-            var card = id ? document.querySelector('[data-triage-id="' + id + '"]') : null;
-            if (!card) return;
-            list.appendChild(card);
-            updateCounts(list.closest('.triage-cols'));
-            var section = findEditableAncestor(list);
-            if (section) {
-              section.classList.add('is-dirty');
-              save(section);
-            }
-          });
-        });
-
-        (scope || document).querySelectorAll('.triage-card').forEach(function(card) {
-          if (card.dataset.triageCardAttached) return;
-          card.dataset.triageCardAttached = 'true';
-          card.setAttribute('draggable', 'true');
-          if (!card.dataset.triageId) {
-            card.dataset.triageId = 't-' + Math.random().toString(36).slice(2, 9);
-          }
-          card.addEventListener('dragstart', function(e) {
-            e.dataTransfer.setData('text/triage-id', card.dataset.triageId);
-            e.dataTransfer.effectAllowed = 'move';
-            card.classList.add('dragging');
-          });
-          card.addEventListener('dragend', function() {
-            card.classList.remove('dragging');
-          });
-          // Tag click → toggle filter
-          card.querySelectorAll('.tag').forEach(function(tag) {
-            if (tag.dataset.tagFilterAttached) return;
-            tag.dataset.tagFilterAttached = 'true';
-            tag.addEventListener('click', function(e) {
-              e.stopPropagation();
-              var board = card.closest('.triage-cols');
-              var current = board && board.dataset.filter;
-              var next = (current === tag.textContent) ? '' : tag.textContent;
-              if (board) {
-                board.dataset.filter = next;
-                applyFilter(board);
-              }
-            });
-          });
-        });
-      }
-
-      function updateCounts(board) {
-        if (!board) return;
-        board.querySelectorAll('.triage-col').forEach(function(col) {
-          var count = col.querySelectorAll('.triage-card').length;
-          var cnt = col.querySelector('.tcount');
-          if (cnt) cnt.textContent = count;
-        });
-      }
-
-      function applyFilter(board) {
-        var filter = (board.dataset.filter || '').trim();
-        board.querySelectorAll('.triage-card').forEach(function(card) {
-          if (!filter) { card.classList.remove('is-filtered-out'); return; }
-          var tags = Array.from(card.querySelectorAll('.tag')).map(function(t) { return t.textContent; });
-          if (tags.indexOf(filter) === -1) card.classList.add('is-filtered-out');
-          else card.classList.remove('is-filtered-out');
-        });
-      }
-
+      fillAlpineSectionPaths(document);
       attachEditing(document);
-      autoInject(document);
-      attachTriage(document);
-      document.querySelectorAll('.triage-cols').forEach(updateCounts);
-      // Re-attach after tab switches. The doc-level click delegate works
-      // for any new button, but we still need to mark new sections
-      // contenteditable + auto-inject add-buttons inside them.
       document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
         b.addEventListener('click', function() {
           setTimeout(function() {
+            fillAlpineSectionPaths(document);
             attachEditing(document);
-            autoInject(document);
-            attachTriage(document);
           }, 30);
         });
       });
