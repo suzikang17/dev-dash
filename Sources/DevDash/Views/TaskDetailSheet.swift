@@ -42,6 +42,7 @@ struct TaskDetailSheet: View {
                     phasesSection
                     artifactsSection
                     if !children.isEmpty { childrenSection }
+                    if let docPath = task?.linkedDocPath { backlinksSection(docPath: docPath) }
                     timeline
                     aiActions
                 }
@@ -122,7 +123,7 @@ struct TaskDetailSheet: View {
     private var metadataRow: some View {
         HStack(spacing: 12) {
             Picker("Status", selection: $status) {
-                ForEach([TaskStatus.open, .inProgress, .done, .skipped], id: \.self) { s in
+                ForEach([TaskStatus.open, .inProgress, .blocked, .done, .skipped], id: \.self) { s in
                     Text(s.label).tag(s)
                 }
             }
@@ -187,6 +188,7 @@ struct TaskDetailSheet: View {
                 ForEach(children) { c in
                     Button {
                         store.openTaskId = c.id
+                        store.openTaskProjectPath = projectPath
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: childIcon(c.status))
@@ -212,6 +214,31 @@ struct TaskDetailSheet: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func backlinksSection(docPath: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("REFERENCED IN")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .tracking(0.5)
+            Button {
+                store.pendingFilePath = docPath
+                store.detailTab = .files
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text")
+                        .foregroundStyle(.purple)
+                        .font(.system(size: 12))
+                    Text(URL(fileURLWithPath: docPath).lastPathComponent)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.purple)
+                        .lineLimit(1)
+                }
+            }
+            .buttonStyle(.plain)
         }
     }
 
