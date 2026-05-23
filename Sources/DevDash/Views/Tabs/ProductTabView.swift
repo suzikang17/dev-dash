@@ -9,6 +9,7 @@ struct ProductTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var lastRegenAt: Date?
     @State private var reloadToken: Int = 0
+    @State private var showLinkedSidebar: Bool = false
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -79,6 +80,14 @@ struct ProductTabView: View {
             .menuStyle(.borderlessButton)
             .frame(width: 32)
             .help("Edit sections / scaffold a new HTML artifact")
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { showLinkedSidebar.toggle() }
+            } label: {
+                Image(systemName: "sidebar.right")
+                    .symbolVariant(showLinkedSidebar ? .fill : .none)
+            }
+            .buttonStyle(.borderless)
+            .help(showLinkedSidebar ? "Hide linked tasks" : "Show linked tasks")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -89,27 +98,67 @@ struct ProductTabView: View {
     private func content(project: Project) -> some View {
         let path = ProductDocGenerator.indexPath(for: project.path)
         let docsRoot = URL(fileURLWithPath: ProductDocGenerator.folderPath(for: project.path))
-        if FileManager.default.fileExists(atPath: path) {
-            ProductWebView(
-                url: URL(fileURLWithPath: path),
-                docsRoot: docsRoot,
-                reloadToken: reloadToken,
-                onSave: { rel, html in
-                    saveSection(projectPath: project.path, rel: rel, html: html)
-                },
-                onSaveAlpine: { rel, state in
-                    saveAlpineSection(projectPath: project.path, rel: rel, state: state)
-                },
-                onAction: { payload in
-                    handleAction(project: project, payload: payload)
+        HStack(spacing: 0) {
+            Group {
+                if FileManager.default.fileExists(atPath: path) {
+                    ProductWebView(
+                        url: URL(fileURLWithPath: path),
+                        docsRoot: docsRoot,
+                        reloadToken: reloadToken,
+                        onSave: { rel, html in
+                            saveSection(projectPath: project.path, rel: rel, html: html)
+                        },
+                        onSaveAlpine: { rel, state in
+                            saveAlpineSection(projectPath: project.path, rel: rel, state: state)
+                        },
+                        onAction: { payload in
+                            handleAction(project: project, payload: payload)
+                        },
+                        onSearchItems: { [weak store] query in
+                            guard let store = store else { return [] }
+                            let tasks = store.tasksV2(for: project.path)
+                            let q = query.lowercased()
+                            return tasks
+                                .filter { q.isEmpty || $0.title.lowercased().contains(q) }
+                                .prefix(8)
+                                .map { t in
+                                    ["id": t.id, "title": t.title,
+                                     "type": "task", "status": t.status.rawValue]
+                                }
+                        },
+                        onCreateTask: { [weak store] title, linkedDocPath in
+                            guard let store = store else { return [:] }
+                            guard let task = try? TaskStore.add(
+                                projectPath: project.path,
+                                title: title,
+                                source: .local,
+                                linkedDocPath: linkedDocPath
+                            ) else { return [:] }
+                            store.projectTasks[project.path] = TaskStore.read(project.path)
+                            store.regenerateRoadmap(for: project.path)
+                            return ["id": task.id, "title": task.title, "status": task.status.rawValue]
+                        }
+                    )
+                    .onAppear { store.activeDocPath = path }
+                    .onChange(of: path) { _, p in store.activeDocPath = p }
+                } else {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text("Generating…").foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-            )
-        } else {
-            VStack(spacing: 8) {
-                ProgressView()
-                Text("Generating…").foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if showLinkedSidebar {
+                Divider()
+                LinkedTasksSidebarView(
+                    projectPath: project.path,
+                    docPath: store.activeDocPath ?? path
+                )
+                .environmentObject(store)
+            }
         }
     }
 
@@ -186,6 +235,10 @@ struct ProductTabView: View {
         case "regenerate":
             store.regenerateRoadmap(for: project.path)
             lastRegenAt = Date()
+        case "promote-idea":
+            if let title = payload["title"] as? String {
+                store.addTask(projectPath: project.path, title: title)
+            }
         default:
             break
         }
