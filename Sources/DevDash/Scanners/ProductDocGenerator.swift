@@ -523,29 +523,36 @@ enum ProductDocGenerator {
                 <button class="add-btn" contenteditable="false" @click="$el.insertAdjacentHTML('beforebegin', '\(esc)'); window.devdashMarkDirty($el)">+ Idea</button>
                 """
             }
+            func promoteBtn(title: String) -> String {
+                """
+                <button data-action="promote-idea" data-title="\(title)" contenteditable="false" \
+                onclick="this.textContent='\\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';" \
+                style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(90,200,250,0.4);background:rgba(90,200,250,0.08);color:#5ac8fa;cursor:pointer;white-space:nowrap;flex-shrink:0;">\\u2192 task</button>
+                """
+            }
             return """
             <div class="doc-head">
               <h2>Ideas</h2>
               <span class="doc-status">Parking lot · <code>sections/ideas.html</code></span>
             </div>
 
-            <p class="meta">Promote to a task (Tasks tab) or a PRD (Product → New PRD) when an idea is ripe.</p>
+            <p class="meta">Click <strong>→ task</strong> on any idea to promote it to the backlog. Or promote to a PRD (Product → New PRD) when ripe.</p>
 
             <div class="board">
               <div class="col" data-col="quick-wins">
                 <h4>Quick wins <span class="meta">low effort, real value</span></h4>
-                <div class="item"><span class="tag">eng</span> <em>Idea 1</em></div>
-                <div class="item"><span class="tag">design</span> <em>Idea 2</em></div>
+                <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">eng</span> <em>Idea 1</em></span>\(promoteBtn(title: "Idea 1"))</div>
+                <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">design</span> <em>Idea 2</em></span>\(promoteBtn(title: "Idea 2"))</div>
                 \(ideaBtn())
               </div>
               <div class="col" data-col="big-bets">
                 <h4>Big bets <span class="meta">larger investment</span></h4>
-                <div class="item"><span class="tag">research</span> <em>Idea 3</em></div>
+                <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">research</span> <em>Idea 3</em></span>\(promoteBtn(title: "Idea 3"))</div>
                 \(ideaBtn())
               </div>
               <div class="col" data-col="maybe-later">
                 <h4>Maybe later <span class="meta">parked</span></h4>
-                <div class="item"><span class="tag">marketing</span> <em>Idea 4</em></div>
+                <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">marketing</span> <em>Idea 4</em></span>\(promoteBtn(title: "Idea 4"))</div>
                 \(ideaBtn())
               </div>
             </div>
