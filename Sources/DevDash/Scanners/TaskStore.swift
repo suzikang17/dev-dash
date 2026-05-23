@@ -69,7 +69,8 @@ enum TaskStore {
         stage: String? = nil,
         notes: String? = nil,
         source: TaskSource = .local,
-        parentId: String? = nil
+        parentId: String? = nil,
+        linkedDocPath: String? = nil
     ) throws -> TaskItem {
         var tasks = read(projectPath)
         let task = TaskItem(
@@ -84,7 +85,8 @@ enum TaskStore {
             startedAt: nil,
             completedAt: nil,
             ghIssueURL: nil,
-            parentId: parentId
+            parentId: parentId,
+            linkedDocPath: linkedDocPath
         )
         tasks.append(task)
         try write(projectPath, tasks: tasks)
@@ -172,8 +174,20 @@ enum TaskStore {
     }
 
     static func delete(projectPath: String, id: String) throws {
-        let tasks = read(projectPath).filter { $0.id != id }
-        try write(projectPath, tasks: tasks)
+        let tasks = read(projectPath)
+        // Collect the target and all descendants to cascade-delete.
+        var toDelete: Set<String> = [id]
+        var changed = true
+        while changed {
+            changed = false
+            for t in tasks where !toDelete.contains(t.id) {
+                if let p = t.parentId, toDelete.contains(p) {
+                    toDelete.insert(t.id)
+                    changed = true
+                }
+            }
+        }
+        try write(projectPath, tasks: tasks.filter { !toDelete.contains($0.id) })
     }
 
     private static let decoder: JSONDecoder = {

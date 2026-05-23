@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 struct Service: Identifiable, Hashable {
     let id: String
@@ -283,6 +284,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var phases: [String]? = nil
     var completedPhases: [String] = []
     var gstackPersonaOverride: String? = nil
+    var linkedDocPath: String? = nil
 
     var kanbanColumn: KanbanColumn {
         switch (status, owner, hasAIRun) {
@@ -330,12 +332,13 @@ struct ProjectMeta: Codable, Hashable {
     var roadmapLastSeenMtime: Date?
     var notes: String?
     var customDevServerURL: String?
+    var productionURL: String?
     var updatedAt: Date
 
     static let empty = ProjectMeta(
         templateId: nil, currentStageId: nil, stageStartedAt: nil,
         checkedExitCriteria: [], stageAnswers: [:], roadmapPath: nil,
-        roadmapLastSeenMtime: nil, notes: nil, customDevServerURL: nil, updatedAt: Date()
+        roadmapLastSeenMtime: nil, notes: nil, customDevServerURL: nil, productionURL: nil, updatedAt: Date()
     )
 
     func answer(for stageId: String, question: String) -> String {
@@ -570,6 +573,27 @@ struct FileNode: Identifiable, Hashable {
     var children: [FileNode]?  // nil for files, lazy for directories
 
     var id: String { path }
+}
+
+// MARK: - Visual QAT
+
+struct SnapshotDiffResult: Identifiable {
+    let id = UUID()
+    let newImage: CGImage
+    let diffImage: CGImage
+    let changedPixelRatio: Float
+    let isSignificant: Bool
+    let runPath: String
+}
+
+struct VisualRun: Codable {
+    let id: String
+    let url: String
+    let viewportLabel: String
+    let changedPixelRatio: Float
+    var approved: Bool
+    var taskId: String?
+    let createdAt: Date
 }
 
 struct ProjectRecap: Codable, Equatable {

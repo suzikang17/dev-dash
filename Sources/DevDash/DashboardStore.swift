@@ -68,6 +68,8 @@ final class DashboardStore: ObservableObject {
     /// Open a TaskDetailSheet for this task. Set to nil to dismiss.
     @Published var openTaskId: String? = nil
     @Published var openTaskProjectPath: String? = nil
+    @Published var isCommandBarVisible: Bool = false
+    @Published var activeDocPath: String? = nil
     private var digestTask: Task<Void, Never>?
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
@@ -75,6 +77,8 @@ final class DashboardStore: ObservableObject {
     @Published var projectProviders: [String: [Provider]] = [:]   // path → providers
     @Published var projectHealth: [String: [String: HealthRunResult]] = [:]   // path → checkId → result
     @Published var runningHealthChecks: Set<String> = []   // "<path>:<checkId>"
+    @Published var gitStatuses: [String: GitStatus] = [:]
+    @Published var gitOpInProgress: Set<String> = []
 
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
@@ -168,6 +172,21 @@ final class DashboardStore: ObservableObject {
             }
         }
         self.lastUpdated = Date()
+
+        // Background git status scan for all git projects — detached so it
+        // doesn't block the main refresh tick. Each result updates the sidebar
+        // as it arrives.
+        let gitPaths = projects.filter { $0.isGit }.map { $0.path }
+        Task.detached(priority: .utility) { [weak self] in
+            await withTaskGroup(of: Void.self) { group in
+                for path in gitPaths {
+                    group.addTask {
+                        guard let status = await GitStatusScanner.scan(path: path) else { return }
+                        await MainActor.run { self?.gitStatuses[path] = status }
+                    }
+                }
+            }
+        }
     }
 
     func startAutoRefresh(interval: TimeInterval = 15) {
@@ -484,6 +503,14 @@ final class DashboardStore: ObservableObject {
         projectMeta[projectPath] = m
     }
 
+    func setProductionURL(_ url: String, for projectPath: String) {
+        var m = meta(for: projectPath)
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        m.productionURL = trimmed.isEmpty ? nil : trimmed
+        try? ProjectMetaStore.write(projectPath, meta: m)
+        projectMeta[projectPath] = m
+    }
+
     func clearTemplate(for projectPath: String) {
         var m = meta(for: projectPath)
         m.templateId = nil
@@ -543,13 +570,15 @@ final class DashboardStore: ObservableObject {
         category: TaskCategory = .other,
         stage: String? = nil,
         notes: String? = nil,
-        parentId: String? = nil
+        parentId: String? = nil,
+        linkedDocPath: String? = nil
     ) {
         do {
             _ = try TaskStore.add(
                 projectPath: projectPath, title: title,
                 category: category, stage: stage, notes: notes,
-                source: .local, parentId: parentId
+                source: .local, parentId: parentId,
+                linkedDocPath: linkedDocPath
             )
             projectTasks[projectPath] = TaskStore.read(projectPath)
             todoError = nil
@@ -904,6 +933,8 @@ final class DashboardStore: ObservableObject {
     func markTaskDone(projectPath: String, taskId: String) async {
         try? TaskStore.setStatus(projectPath: projectPath, id: taskId, status: .done)
         try? TaskStore.setOwner(projectPath: projectPath, id: taskId, owner: .none)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+        regenerateRoadmap(for: projectPath)
         guard let task = tasksV2(for: projectPath).first(where: { $0.id == taskId }) else { return }
         await generateTaskReleaseNote(task, projectPath: projectPath)
     }
@@ -1336,7 +1367,14 @@ final class DashboardStore: ObservableObject {
         startErrors[projectPath]
     }
 
-    private static let portSniffer = try! NSRegularExpression(pattern: #"localhost:(\d{2,5})"#)
+    // URL-style host:port patterns (localhost, loopback, any-interface, IPv6 any)
+    private static let portSnifferURL = try! NSRegularExpression(
+        pattern: #"(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::\]):(\d{2,5})"#
+    )
+    // Prose patterns: "port 3000", "ready on 3000", "listening on :3000"
+    private static let portSnifferProse = try! NSRegularExpression(
+        pattern: #"(?i)(?:port|ready on|listening on)[:\s]+:?(\d{2,5})\b"#
+    )
 
     func startServer(for projectPath: String) async {
         startErrors[projectPath] = nil
@@ -1356,11 +1394,15 @@ final class DashboardStore: ObservableObject {
                 // in the sidebar without waiting for the next 15s scan tick.
                 if self.runningPort(for: projectPath) == nil {
                     let range = NSRange(line.startIndex..<line.endIndex, in: line)
-                    if let match = Self.portSniffer.firstMatch(in: line, range: range),
-                       let r = Range(match.range(at: 1), in: line),
-                       let _ = Int(line[r]) {
-                        Task { await self.refreshAll() }
-                    }
+                    let sniffers = [Self.portSnifferURL, Self.portSnifferProse]
+                    let detected = sniffers.lazy.compactMap { regex -> Int? in
+                        guard let m = regex.firstMatch(in: line, range: range),
+                              let r = Range(m.range(at: 1), in: line),
+                              let port = Int(line[r]),
+                              ProcessScanner.isDevPort(port) else { return nil }
+                        return port
+                    }.first
+                    if detected != nil { Task { await self.refreshAll() } }
                 }
             }
         }
@@ -1424,5 +1466,48 @@ final class DashboardStore: ObservableObject {
 
     func logs(for projectPath: String) -> [String] {
         serverLogs[projectPath] ?? []
+    }
+
+    // MARK: - Git
+
+    func gitStatus(for path: String) -> GitStatus? {
+        gitStatuses[path]
+    }
+
+    func refreshGitStatus(for path: String) async {
+        guard let status = await GitStatusScanner.scan(path: path) else { return }
+        gitStatuses[path] = status
+    }
+
+    func gitCheckout(_ branch: String, for path: String) async {
+        gitOpInProgress.insert(path)
+        _ = await GitStatusScanner.op(["checkout", branch], in: path)
+        gitOpInProgress.remove(path)
+        await refreshGitStatus(for: path)
+    }
+
+    func gitFetch(for path: String) async {
+        gitOpInProgress.insert(path)
+        _ = await GitStatusScanner.op(["fetch"], in: path)
+        gitOpInProgress.remove(path)
+        await refreshGitStatus(for: path)
+    }
+
+    func gitPull(for path: String) async {
+        gitOpInProgress.insert(path)
+        _ = await GitStatusScanner.op(["pull"], in: path)
+        gitOpInProgress.remove(path)
+        await refreshGitStatus(for: path)
+    }
+
+    func gitPush(for path: String) async {
+        gitOpInProgress.insert(path)
+        _ = await GitStatusScanner.op(["push"], in: path)
+        gitOpInProgress.remove(path)
+        await refreshGitStatus(for: path)
+    }
+
+    func gitDiff(for path: String) async -> String? {
+        await GitStatusScanner.diff(path: path)
     }
 }
