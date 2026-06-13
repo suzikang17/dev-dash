@@ -46,6 +46,7 @@ struct DevDashApp: App {
                 .task {
                     if store.selection == nil { store.selection = .home }
                     await store.reattachManagedServers()
+                    store.ensureAtlasRunning()
                     await store.refreshAll()
                     await store.refreshTodos()
                     store.startAutoRefresh()

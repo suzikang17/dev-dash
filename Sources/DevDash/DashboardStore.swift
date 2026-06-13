@@ -1454,6 +1454,16 @@ final class DashboardStore: ObservableObject {
         }
     }
 
+    private static let atlasPath = "/Users/suki/dev/atlas"
+
+    func ensureAtlasRunning() {
+        let path = Self.atlasPath
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        let state = ServerStateStore.load()
+        if let entry = state[path], ServerStateStore.isAlive(entry.pid) { return }
+        Task { await self.startServer(for: path) }
+    }
+
     func stopServer(for projectPath: String) async {
         await ServerRunner.shared.stop(projectPath: projectPath)
         for svc in services(for: projectPath) {
