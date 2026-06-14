@@ -3,6 +3,7 @@ import SwiftUI
 struct DailyTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var days: [DayGroup] = []
+    @State private var allDocs: [DailyLoreEntry] = []
     @State private var selectedEntry: DailyLoreEntry?
     @State private var selectedSession: SessionDigest?
     @State private var mode: ViewMode = .daily
@@ -71,8 +72,7 @@ struct DailyTabView: View {
 
     @ViewBuilder
     private func browseContent() -> some View {
-        let grouped = days
-            .flatMap { $0.docs }
+        let grouped = allDocs
             .reduce(into: [String: [DailyLoreEntry]]()) { $0[$1.loreType, default: []].append($1) }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
@@ -142,6 +142,7 @@ struct DailyTabView: View {
 
         Task.detached(priority: .userInitiated) {
             var docsByDate: [String: [DailyLoreEntry]] = [:]
+            var allDocsList: [DailyLoreEntry] = []
             let fmgr = FileManager.default
             if let typeDirs = try? fmgr.contentsOfDirectory(atPath: docsRoot) {
                 for dirName in typeDirs {
@@ -163,15 +164,17 @@ struct DailyTabView: View {
                         } else {
                             dateStr = nil
                         }
-                        guard let date = dateStr else { continue }
                         let entry = DailyLoreEntry(
                             loreType: fm["lore_type"] ?? dirName,
                             title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
                             file: file,
                             path: filePath,
-                            dateStr: date
+                            dateStr: dateStr ?? ""
                         )
-                        docsByDate[date, default: []].append(entry)
+                        allDocsList.append(entry)
+                        if let date = dateStr {
+                            docsByDate[date, default: []].append(entry)
+                        }
                     }
                 }
             }
@@ -197,7 +200,7 @@ struct DailyTabView: View {
                     }
                 )
             }
-            await MainActor.run { self.days = groups }
+            await MainActor.run { self.days = groups; self.allDocs = allDocsList }
         }
     }
 
