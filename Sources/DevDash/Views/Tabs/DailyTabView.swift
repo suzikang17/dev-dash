@@ -158,8 +158,8 @@ struct DailyTabView: View {
 }
 
 private struct DayGroup: Identifiable {
-    let id: String  // dateStr
     let dateStr: String
+    var id: String { dateStr }
     let isToday: Bool
     let formatted: String
     let docs: [DailyLoreEntry]
