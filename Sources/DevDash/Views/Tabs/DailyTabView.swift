@@ -12,7 +12,7 @@ struct DailyTabView: View {
         if let project = project {
             HSplitView {
                 timeline(project: project)
-                    .frame(minWidth: 240, idealWidth: 300, maxWidth: 400)
+                    .frame(minWidth: 280, idealWidth: 360, maxWidth: 480)
                 // always present so HSplitView keeps timeline left-pinned
                 ZStack {
                     if let entry = selectedEntry {
