@@ -15,10 +15,21 @@ struct TasksTabView: View {
     @State private var showTemplatePicker = false
     @FocusState private var addFocused: Bool
     @AppStorage("taskViewMode") private var viewMode: String = "board"
+    @AppStorage("taskSource") private var taskSource: String = "devdash"
 
     var body: some View {
         if let project = store.project(for: store.selection) {
-            ScrollView {
+            if taskSource == "lore" {
+                VStack(spacing: 0) {
+                    sourceToggle
+                    Divider()
+                    LoreTasksView(projectPath: project.path)
+                }
+            } else {
+            VStack(spacing: 0) {
+                sourceToggle
+                Divider()
+                ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     headerRow(project: project)
 
@@ -69,11 +80,29 @@ struct TasksTabView: View {
                 TemplatePickerSheet(projectPath: project.path)
                     .environmentObject(store)
             }
+            } // end VStack
+            } // end else (devdash source)
         } else {
             Text("Select a project to see tasks")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: - Source toggle
+
+    private var sourceToggle: some View {
+        HStack(spacing: 8) {
+            Picker("Source", selection: $taskSource) {
+                Text("Dev Dash").tag("devdash")
+                Text("Lore").tag("lore")
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 180)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 
     // MARK: - Header
@@ -1484,18 +1513,15 @@ private struct KanbanCard: View {
             }
             Divider()
             Button("Move to Backlog") {
-                try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .none)
-                try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .open)
-                reloadTasks()
+                store.setTaskOwner(projectPath: projectPath, id: task.id, owner: .none)
+                store.setTaskStatus(projectPath: projectPath, id: task.id, status: .open)
             }
             Button("Mark Blocked") {
-                try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .blocked)
-                try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .human)
-                reloadTasks()
+                store.setTaskStatus(projectPath: projectPath, id: task.id, status: .blocked)
+                store.setTaskOwner(projectPath: projectPath, id: task.id, owner: .human)
             }
             Button("Mark Done") {
                 Task { await store.markTaskDone(projectPath: projectPath, taskId: task.id) }
-                reloadTasks()
             }
             Divider()
             Button(role: .destructive) {
@@ -1503,10 +1529,6 @@ private struct KanbanCard: View {
             } label: { Text("Delete") }
         }
         .onHover { hover = $0 }
-    }
-
-    private func reloadTasks() {
-        store.projectTasks[projectPath] = TaskStore.read(projectPath)
     }
 }
 

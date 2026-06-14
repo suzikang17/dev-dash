@@ -9,6 +9,7 @@ struct DailyTabView: View {
     @State private var mode: ViewMode = .daily
     @State private var browseType: String? = nil
     @State private var browseSearch: String = ""
+    @State private var showNewTask = false
 
     private enum ViewMode { case daily, browse }
 
@@ -21,7 +22,12 @@ struct DailyTabView: View {
                     .frame(minWidth: 320, idealWidth: 400, maxWidth: 560)
                 // always present so HSplitView keeps timeline left-pinned
                 ZStack {
-                    if let entry = selectedEntry {
+                    if mode == .browse, let type = browseType {
+                        TypeDetailPanel(
+                            typeName: type,
+                            docs: allDocs.filter { $0.loreType == type }
+                        )
+                    } else if let entry = selectedEntry {
                         NotePanel(entry: entry, onClose: { selectedEntry = nil })
                     } else if let session = selectedSession {
                         SessionPanel(digest: session, onClose: { selectedSession = nil })
@@ -32,8 +38,14 @@ struct DailyTabView: View {
                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear { reload(project: project) }
-            .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; reload(project: project) }
+            .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; browseType = nil; reload(project: project) }
             .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
+            .onChange(of: mode) { _, newMode in if newMode == .daily { browseType = nil } }
+            .sheet(isPresented: $showNewTask) {
+                NewLoreTaskSheet(projectPath: project.path) {
+                    reload(project: project)
+                }
+            }
         } else {
             ContentUnavailableView("No project selected", systemImage: "calendar.day.timeline.left")
         }
@@ -42,11 +54,21 @@ struct DailyTabView: View {
     @ViewBuilder
     private func timeline(project: Project) -> some View {
         VStack(spacing: 0) {
-            Picker("", selection: $mode) {
-                Text("Daily").tag(ViewMode.daily)
-                Text("Browse").tag(ViewMode.browse)
+            HStack(spacing: 8) {
+                Picker("", selection: $mode) {
+                    Text("Daily").tag(ViewMode.daily)
+                    Text("Browse").tag(ViewMode.browse)
+                }
+                .pickerStyle(.segmented)
+                Button {
+                    showNewTask = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("New task")
             }
-            .pickerStyle(.segmented)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             Divider()
@@ -76,26 +98,17 @@ struct DailyTabView: View {
     private func browseContent() -> some View {
         let grouped = allDocs
             .reduce(into: [String: [DailyLoreEntry]]()) { $0[$1.loreType, default: []].append($1) }
-        if let type = browseType {
-            browseDocList(type: type, docs: grouped[type] ?? [])
-        } else {
-            browseTypeIndex(grouped: grouped)
-        }
-    }
-
-    @ViewBuilder
-    private func browseTypeIndex(grouped: [String: [DailyLoreEntry]]) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(grouped.keys.sorted(), id: \.self) { type in
                     Button {
-                        browseSearch = ""
+                        selectedEntry = nil; selectedSession = nil
                         browseType = type
                     } label: {
                         HStack {
                             Text(type.capitalized)
                                 .font(.system(size: 13))
-                                .foregroundColor(.primary)
+                                .foregroundColor(browseType == type ? .accentColor : .primary)
                             Spacer()
                             Text("\(grouped[type]?.count ?? 0)")
                                 .font(.system(size: 12))
@@ -106,6 +119,7 @@ struct DailyTabView: View {
                         }
                         .padding(.vertical, 7)
                         .padding(.horizontal, 12)
+                        .background(browseType == type ? Color.accentColor.opacity(0.08) : .clear)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -113,77 +127,6 @@ struct DailyTabView: View {
                 }
             }
             .padding(.top, 4)
-        }
-    }
-
-    @ViewBuilder
-    private func browseDocList(type: String, docs: [DailyLoreEntry]) -> some View {
-        VStack(spacing: 0) {
-            // Back + search header
-            HStack(spacing: 6) {
-                Button {
-                    browseType = nil
-                    browseSearch = ""
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(type.capitalized)
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundColor(.accentColor)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                Text("\(docs.count)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            HStack {
-                Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.caption)
-                TextField("Filter", text: $browseSearch)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                if !browseSearch.isEmpty {
-                    Button { browseSearch = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
-                    }.buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color.primary.opacity(0.05))
-            .cornerRadius(6)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 6)
-
-            Divider()
-
-            let filtered = browseSearch.isEmpty ? docs : docs.filter {
-                $0.title.localizedCaseInsensitiveContains(browseSearch)
-            }
-            let sorted = filtered.sorted {
-                $0.dateStr.isEmpty == $1.dateStr.isEmpty
-                    ? $0.title < $1.title
-                    : !$0.dateStr.isEmpty && ($0.dateStr > $1.dateStr)
-            }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(sorted) { entry in
-                        DailyRow(
-                            label: entry.title,
-                            detail: entry.dateStr.isEmpty ? nil : entry.dateStr,
-                            isSelected: selectedEntry?.id == entry.id,
-                            action: { selectedSession = nil; selectedEntry = entry }
-                        )
-                        .padding(.horizontal, 8)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
         }
     }
 
@@ -263,7 +206,8 @@ struct DailyTabView: View {
                             title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
                             file: file,
                             path: filePath,
-                            dateStr: dateStr ?? ""
+                            dateStr: dateStr ?? "",
+                            frontmatter: fm
                         )
                         allDocsList.append(entry)
                         if let date = dateStr {
@@ -314,6 +258,109 @@ struct DailyTabView: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+}
+
+// MARK: - Type detail panel (Browse → type selected)
+
+private struct TypeDetailPanel: View {
+    let typeName: String
+    let docs: [DailyLoreEntry]
+
+    @State private var selectedId: UUID? = nil
+
+    private var selectedDoc: DailyLoreEntry? { docs.first { $0.id == selectedId } }
+
+    var body: some View {
+        VSplitView {
+            tableView
+                .frame(minHeight: 140)
+            bottomPane
+                .frame(minHeight: 100)
+        }
+    }
+
+    @ViewBuilder
+    private var tableView: some View {
+        let sorted = docs.sorted {
+            $0.dateStr.isEmpty == $1.dateStr.isEmpty
+                ? $0.title < $1.title
+                : !$0.dateStr.isEmpty && ($0.dateStr > $1.dateStr)
+        }
+        Table(of: DailyLoreEntry.self, selection: $selectedId) {
+            TableColumn("Title") { doc in
+                Text(doc.title).lineLimit(1)
+            }
+            .width(min: 140, ideal: 260)
+            TableColumn("Date") { doc in
+                Text(doc.frontmatter["date"] ?? doc.frontmatter["created"] ?? "")
+                    .lineLimit(1).foregroundColor(.secondary)
+            }
+            .width(min: 90, ideal: 110)
+            TableColumn("Status") { doc in
+                let s = doc.frontmatter["status"] ?? ""
+                Text(s).lineLimit(1).foregroundColor(statusColor(s))
+            }
+            .width(min: 70, ideal: 90)
+            TableColumn("Type / Category") { doc in
+                Text(doc.frontmatter["type"] ?? doc.frontmatter["category"] ?? "")
+                    .lineLimit(1).foregroundColor(.secondary)
+            }
+            .width(min: 80, ideal: 120)
+            TableColumn("Owner") { doc in
+                Text(doc.frontmatter["owner"] ?? "").lineLimit(1).foregroundColor(.secondary)
+            }
+            .width(min: 60, ideal: 80)
+        } rows: {
+            ForEach(sorted) { doc in TableRow(doc) }
+        }
+    }
+
+    @ViewBuilder
+    private var bottomPane: some View {
+        if let doc = selectedDoc {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(doc.title).font(.headline).lineLimit(1)
+                        if !doc.dateStr.isEmpty {
+                            Text(doc.dateStr).font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                Divider()
+                MarkdownWebView(markdown: bodyContent(doc))
+            }
+        } else {
+            Text("Select a document from the table")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func bodyContent(_ entry: DailyLoreEntry) -> String {
+        guard let raw = try? String(contentsOfFile: entry.path, encoding: .utf8) else { return "" }
+        guard raw.hasPrefix("---") else { return raw }
+        let lines = raw.components(separatedBy: "\n")
+        var fences = 0; var start = 0
+        for (i, line) in lines.enumerated() {
+            if line.hasPrefix("---") { fences += 1; if fences == 2 { start = i + 1; break } }
+        }
+        return lines.dropFirst(start).joined(separator: "\n").trimmingCharacters(in: .newlines)
+    }
+
+    private func statusColor(_ status: String?) -> Color {
+        switch status {
+        case "done": return .green.opacity(0.8)
+        case "open": return .primary
+        case "blocked": return .red.opacity(0.8)
+        case "in_progress": return .yellow.opacity(0.8)
+        default: return .primary
+        }
+    }
 }
 
 // MARK: - Session side panel
@@ -535,6 +582,7 @@ private struct DailyLoreEntry: Identifiable {
     let file: String
     let path: String
     let dateStr: String
+    let frontmatter: [String: String]
 }
 
 private struct DailySectionView<Content: View>: View {
@@ -604,4 +652,136 @@ private func parseMdFrontmatter(_ content: String) -> [String: String] {
         if !key.isEmpty { result[key] = value }
     }
     return result
+}
+
+// MARK: - New Lore Task Sheet
+
+struct NewLoreTaskSheet: View {
+    let projectPath: String
+    let onCreated: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var status = "open"
+    @State private var owner = "human"
+    @State private var category = "engineering"
+    @State private var errorMsg: String? = nil
+    @FocusState private var titleFocused: Bool
+
+    private let statuses = ["open", "in_progress", "blocked", "done"]
+    private let owners = ["human", "ai", "none"]
+    private let categories = ["engineering", "design", "qa", "ops", "distribution", "content", "marketing", "research", "other"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("New Task")
+                    .font(.system(size: 16, weight: .semibold))
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(16)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Title").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                    TextField("Task title…", text: $title)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($titleFocused)
+                        .onSubmit { submit() }
+                }
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Status").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                        Picker("Status", selection: $status) {
+                            ForEach(statuses, id: \.self) { Text($0).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 140)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Owner").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                        Picker("Owner", selection: $owner) {
+                            ForEach(owners, id: \.self) { Text($0).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 120)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Category").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                        Picker("Category", selection: $category) {
+                            ForEach(categories, id: \.self) { Text($0).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 160)
+                    }
+                }
+
+                if let err = errorMsg {
+                    Text(err).font(.system(size: 12)).foregroundColor(.red)
+                }
+            }
+            .padding(16)
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Create") { submit() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(16)
+        }
+        .frame(width: 520)
+        .onAppear { titleFocused = true }
+    }
+
+    private func submit() {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        let tasksDir = "\(projectPath)/docs/tasks"
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+            let num = nextTaskNumber(in: tasksDir)
+            let slug = trimmedTitle.lowercased()
+                .replacingOccurrences(of: #"[^a-z0-9\s-]"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: #"\s+"#, with: "-", options: .regularExpression)
+            let filename = String(format: "%04d-%@.md", num, String(slug.prefix(60)))
+            let ownerLine = owner == "none" ? "" : "\nowner: \(owner)"
+            let content = """
+            ---
+            title: "\(trimmedTitle)"
+            status: \(status)\(ownerLine)
+            category: \(category)
+            ---
+
+            # \(trimmedTitle)
+
+            """
+            try content.write(toFile: "\(tasksDir)/\(filename)", atomically: true, encoding: .utf8)
+            onCreated()
+            dismiss()
+        } catch {
+            errorMsg = "Failed to create file: \(error.localizedDescription)"
+        }
+    }
+
+    private func nextTaskNumber(in dir: String) -> Int {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+        let nums = files.compactMap { f -> Int? in
+            guard f.hasSuffix(".md") else { return nil }
+            return Int(f.prefix(4))
+        }
+        return (nums.max() ?? 0) + 1
+    }
 }
