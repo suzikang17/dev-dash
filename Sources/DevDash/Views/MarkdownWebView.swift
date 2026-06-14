@@ -154,8 +154,22 @@ private func convertBody(_ md: String) -> String {
                 out += ordered ? "<ol>" : "<ul>"
                 listStack.append((ordered, indent))
             }
-            out += "<li>\(inline(Substring(content)))</li>"
+            // Collect wrapped continuation lines for this item
+            var parts = [content]
             i += 1
+            while i < lines.count {
+                let next = lines[i]
+                let nextT = next.trimmingCharacters(in: .whitespaces)
+                if nextT.isEmpty { break }
+                if nextT.hasPrefix("#") || nextT.hasPrefix(">") { break }
+                if next.hasPrefix("```") || next.hasPrefix("~~~") { break }
+                if nextT == "---" || nextT == "***" || nextT == "___" { break }
+                if nextT.hasPrefix("- ") || nextT.hasPrefix("* ") || nextT.hasPrefix("+ ") { break }
+                if orderedListPrefix(nextT) != nil { break }
+                parts.append(nextT)
+                i += 1
+            }
+            out += "<li>\(parts.map { inline($0) }.joined(separator: " "))</li>"
             continue
         }
 
