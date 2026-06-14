@@ -3,35 +3,47 @@ import SwiftUI
 struct DailyTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var days: [DayGroup] = []
+    @State private var selectedEntry: DailyLoreEntry?
 
     private var project: Project? { store.project(for: store.selection) }
 
     var body: some View {
         if let project = project {
-            Group {
-                if days.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 28, pinnedViews: .sectionHeaders) {
-                            ForEach(days) { day in
-                                Section {
-                                    dayContent(day)
-                                } header: {
-                                    dayHeader(day)
-                                }
-                            }
-                        }
-                        .padding()
-                    }
+            HSplitView {
+                timeline(project: project)
+                    .frame(minWidth: 240, idealWidth: 300, maxWidth: 400)
+                if let entry = selectedEntry {
+                    NotePanel(entry: entry, onClose: { selectedEntry = nil })
                 }
             }
             .onAppear { reload(project: project) }
-            .onChange(of: project.path) { _, _ in reload(project: project) }
+            .onChange(of: project.path) { _, _ in selectedEntry = nil; reload(project: project) }
             .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
         } else {
             ContentUnavailableView("No project selected", systemImage: "calendar.day.timeline.left")
+        }
+    }
+
+    @ViewBuilder
+    private func timeline(project: Project) -> some View {
+        Group {
+            if days.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 24, pinnedViews: .sectionHeaders) {
+                        ForEach(days) { day in
+                            Section {
+                                dayContent(day)
+                            } header: {
+                                dayHeader(day)
+                            }
+                        }
+                    }
+                    .padding()
+                }
+            }
         }
     }
 
@@ -41,21 +53,21 @@ struct DailyTabView: View {
             .font(.headline)
             .foregroundColor(day.isToday ? .primary : .secondary)
             .padding(.vertical, 4)
-            .padding(.horizontal, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.regularMaterial)
     }
 
     @ViewBuilder
     private func dayContent(_ day: DayGroup) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if !day.sessions.isEmpty {
                 DailySectionView(title: "Claude") {
                     ForEach(day.sessions) { session in
                         DailyRow(
                             label: session.title ?? session.firstUserMessage ?? "Session",
-                            detail: session.durationSeconds > 0
-                                ? formatDuration(session.durationSeconds) : nil
+                            detail: session.durationSeconds > 0 ? formatDuration(session.durationSeconds) : nil,
+                            isSelected: false,
+                            action: nil
                         )
                     }
                 }
@@ -64,7 +76,12 @@ struct DailyTabView: View {
             ForEach(grouped.keys.sorted(), id: \.self) { type in
                 DailySectionView(title: type.capitalized) {
                     ForEach(grouped[type] ?? []) { entry in
-                        DailyRow(label: entry.title, detail: nil)
+                        DailyRow(
+                            label: entry.title,
+                            detail: nil,
+                            isSelected: selectedEntry?.id == entry.id,
+                            action: { selectedEntry = entry }
+                        )
                     }
                 }
             }
@@ -77,7 +94,6 @@ struct DailyTabView: View {
         let digests = store.sessionDigests
 
         Task.detached(priority: .userInitiated) {
-            // Collect all docs with a date, keyed by YYYY-MM-DD
             var docsByDate: [String: [DailyLoreEntry]] = [:]
             let fmgr = FileManager.default
             if let typeDirs = try? fmgr.contentsOfDirectory(atPath: docsRoot) {
@@ -89,9 +105,9 @@ struct DailyTabView: View {
                     guard let files = try? fmgr.contentsOfDirectory(atPath: dirPath) else { continue }
                     for file in files {
                         guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
-                        guard let content = try? String(contentsOfFile: "\(dirPath)/\(file)", encoding: .utf8) else { continue }
+                        let filePath = "\(dirPath)/\(file)"
+                        guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else { continue }
                         let fm = parseMdFrontmatter(content)
-                        // Determine date: created field first, then filename prefix
                         let dateStr: String?
                         if let created = fm["created"], created.count >= 10 {
                             dateStr = String(created.prefix(10))
@@ -104,14 +120,14 @@ struct DailyTabView: View {
                         let entry = DailyLoreEntry(
                             loreType: fm["lore_type"] ?? dirName,
                             title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
-                            file: file
+                            file: file,
+                            path: filePath
                         )
                         docsByDate[date, default: []].append(entry)
                     }
                 }
             }
 
-            // Collect sessions keyed by YYYY-MM-DD
             var sessionsByDate: [String: [SessionDigest]] = [:]
             for digest in digests.values {
                 guard digest.projectPath == projectPath || digest.projectPath.hasPrefix("\(projectPath)/"),
@@ -120,7 +136,6 @@ struct DailyTabView: View {
                 sessionsByDate[dateStr, default: []].append(digest)
             }
 
-            // Build sorted day groups (newest first)
             let allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
             let todayStr = Self.dayFormatter.string(from: Date())
             let groups = allDates.sorted(by: >).map { dateStr in
@@ -134,7 +149,6 @@ struct DailyTabView: View {
                     }
                 )
             }
-
             await MainActor.run { self.days = groups }
         }
     }
@@ -157,6 +171,81 @@ struct DailyTabView: View {
     }()
 }
 
+// MARK: - Note side panel
+
+private struct NotePanel: View {
+    let entry: DailyLoreEntry
+    let onClose: () -> Void
+    @State private var rawContent: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(entry.loreType)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            Divider()
+            ScrollView {
+                markdownBody
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .textSelection(.enabled)
+            }
+        }
+        .frame(minWidth: 320)
+        .onAppear { loadContent() }
+        .onChange(of: entry.path) { _, _ in loadContent() }
+    }
+
+    @ViewBuilder
+    private var markdownBody: some View {
+        // Strip YAML frontmatter before rendering
+        let body = stripFrontmatter(rawContent)
+        if let attributed = try? AttributedString(markdown: body,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(attributed)
+                .font(.system(size: 13))
+        } else {
+            Text(body)
+                .font(.system(size: 13, design: .monospaced))
+        }
+    }
+
+    private func loadContent() {
+        rawContent = (try? String(contentsOfFile: entry.path, encoding: .utf8)) ?? ""
+    }
+
+    private func stripFrontmatter(_ s: String) -> String {
+        guard s.hasPrefix("---") else { return s }
+        let lines = s.components(separatedBy: "\n")
+        var fences = 0
+        var start = 0
+        for (i, line) in lines.enumerated() {
+            if line.hasPrefix("---") {
+                fences += 1
+                if fences == 2 { start = i + 1; break }
+            }
+        }
+        return lines.dropFirst(start).joined(separator: "\n").trimmingCharacters(in: .newlines)
+    }
+}
+
+// MARK: - Shared components
+
 private struct DayGroup: Identifiable {
     let dateStr: String
     var id: String { dateStr }
@@ -171,6 +260,7 @@ private struct DailyLoreEntry: Identifiable {
     let loreType: String
     let title: String
     let file: String
+    let path: String
 }
 
 private struct DailySectionView<Content: View>: View {
@@ -191,14 +281,17 @@ private struct DailySectionView<Content: View>: View {
 private struct DailyRow: View {
     let label: String
     let detail: String?
+    let isSelected: Bool
+    let action: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(Color.secondary.opacity(0.35))
+                .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.35))
                 .frame(width: 5, height: 5)
             Text(label)
                 .font(.system(size: 13))
+                .foregroundColor(isSelected ? .accentColor : .primary)
                 .lineLimit(1)
             Spacer()
             if let detail = detail {
@@ -206,7 +299,18 @@ private struct DailyRow: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            if action != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .background(isSelected ? Color.accentColor.opacity(0.08) : .clear)
+        .cornerRadius(4)
+        .contentShape(Rectangle())
+        .onTapGesture { action?() }
     }
 }
 
