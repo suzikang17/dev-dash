@@ -7,6 +7,8 @@ struct DailyTabView: View {
     @State private var selectedEntry: DailyLoreEntry?
     @State private var selectedSession: SessionDigest?
     @State private var mode: ViewMode = .daily
+    @State private var browseType: String? = nil
+    @State private var browseSearch: String = ""
 
     private enum ViewMode { case daily, browse }
 
@@ -74,23 +76,114 @@ struct DailyTabView: View {
     private func browseContent() -> some View {
         let grouped = allDocs
             .reduce(into: [String: [DailyLoreEntry]]()) { $0[$1.loreType, default: []].append($1) }
+        if let type = browseType {
+            browseDocList(type: type, docs: grouped[type] ?? [])
+        } else {
+            browseTypeIndex(grouped: grouped)
+        }
+    }
+
+    @ViewBuilder
+    private func browseTypeIndex(grouped: [String: [DailyLoreEntry]]) -> some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(grouped.keys.sorted(), id: \.self) { type in
-                    DailySectionView(title: type.capitalized) {
-                        let sorted = (grouped[type] ?? []).sorted { $0.dateStr > $1.dateStr }
-                        ForEach(sorted) { entry in
-                            DailyRow(
-                                label: entry.title,
-                                detail: entry.dateStr,
-                                isSelected: selectedEntry?.id == entry.id,
-                                action: { selectedSession = nil; selectedEntry = entry }
-                            )
+                    Button {
+                        browseSearch = ""
+                        browseType = type
+                    } label: {
+                        HStack {
+                            Text(type.capitalized)
+                                .font(.system(size: 13))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(grouped[type]?.count ?? 0)")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
                         }
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 12)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    Divider().padding(.leading, 12)
                 }
             }
-            .padding()
+            .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private func browseDocList(type: String, docs: [DailyLoreEntry]) -> some View {
+        VStack(spacing: 0) {
+            // Back + search header
+            HStack(spacing: 6) {
+                Button {
+                    browseType = nil
+                    browseSearch = ""
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(type.capitalized)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Text("\(docs.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.caption)
+                TextField("Filter", text: $browseSearch)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                if !browseSearch.isEmpty {
+                    Button { browseSearch = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                    }.buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.primary.opacity(0.05))
+            .cornerRadius(6)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 6)
+
+            Divider()
+
+            let filtered = browseSearch.isEmpty ? docs : docs.filter {
+                $0.title.localizedCaseInsensitiveContains(browseSearch)
+            }
+            let sorted = filtered.sorted {
+                $0.dateStr.isEmpty == $1.dateStr.isEmpty
+                    ? $0.title < $1.title
+                    : !$0.dateStr.isEmpty && ($0.dateStr > $1.dateStr)
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(sorted) { entry in
+                        DailyRow(
+                            label: entry.title,
+                            detail: entry.dateStr.isEmpty ? nil : entry.dateStr,
+                            isSelected: selectedEntry?.id == entry.id,
+                            action: { selectedSession = nil; selectedEntry = entry }
+                        )
+                        .padding(.horizontal, 8)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
         }
     }
 
