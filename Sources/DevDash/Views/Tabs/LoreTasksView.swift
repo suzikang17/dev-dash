@@ -16,6 +16,7 @@ struct LoreTaskItem: Identifiable {
     var notes: String
     var completed: String
     var body: String
+    var completedToday: Bool
 
     var kanbanColumn: LoreKanbanColumn {
         switch (status, owner, aiRun) {
@@ -56,7 +57,6 @@ enum LoreKanbanColumn: String, CaseIterable {
 }
 
 enum LoreViewMode: String { case kanban, needs }
-
 enum LoreCommandMode { case status, owner, priority }
 
 // MARK: - Main View
@@ -131,6 +131,7 @@ struct LoreTasksView: View {
                     }
                     .focusable()
                     .focused($listFocused)
+                    .focusEffectDisabled()
                     .onTapGesture { listFocused = true }
                     .onChange(of: selected?.id) { _, id in
                         if let id { withAnimation(.easeInOut(duration: 0.12)) { proxy.scrollTo(id, anchor: .center) } }
@@ -160,9 +161,11 @@ struct LoreTasksView: View {
                 } else {
                     VStack(spacing: 8) {
                         Text("Select a task").font(.caption).foregroundColor(.secondary)
-                        Text("↑↓ navigate  ·  S status  ·  A owner  ·  P priority  ·  Space done  ·  C new")
+                        Text("↑↓ navigate  ·  Tab switch view  ·  S status  ·  A owner  ·  P priority  ·  Space done  ·  C new")
                             .font(.system(size: 10)).foregroundColor(.secondary.opacity(0.6))
+                            .multilineTextAlignment(.center)
                     }
+                    .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -173,6 +176,12 @@ struct LoreTasksView: View {
         }
         .onAppear { reload(); listFocused = true }
         .onChange(of: projectPath) { _, _ in reload() }
+        .onChange(of: viewMode) { _, _ in
+            if let sel = selected, !flatTaskList.contains(where: { $0.id == sel.id }) {
+                selected = flatTaskList.first
+            }
+            listFocused = true
+        }
     }
 
     // MARK: - List sections
@@ -182,37 +191,97 @@ struct LoreTasksView: View {
         ForEach(LoreKanbanColumn.allCases, id: \.self) { col in
             let colTasks = tasksFor(col)
             if col == .done {
+                let todayDone = colTasks.filter { $0.completedToday }
+                let olderDone = colTasks.filter { !$0.completedToday }
+                if !todayDone.isEmpty {
+                    Section {
+                        ForEach(todayDone) { taskRow($0) }
+                    } header: {
+                        sectionHeader("Done today", color: .green, count: todayDone.count)
+                            .dropDestination(for: String.self) { files, _ in
+                                files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: col) }
+                                return true
+                            }
+                    }
+                }
                 Section {
-                    if showDone { ForEach(colTasks) { taskRow($0) } }
-                } header: { doneHeader(count: colTasks.count) }
-            } else if !colTasks.isEmpty {
+                    if showDone { ForEach(olderDone) { taskRow($0) } }
+                } header: {
+                    doneHeader(count: olderDone.count)
+                        .dropDestination(for: String.self) { files, _ in
+                            files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: col) }
+                            return true
+                        }
+                }
+            } else {
                 Section {
-                    ForEach(colTasks) { taskRow($0) }
-                } header: { sectionHeader(col.label, color: col.color, count: colTasks.count) }
+                    if colTasks.isEmpty {
+                        Text("Drop here")
+                            .font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 36).padding(.vertical, 8)
+                    } else {
+                        ForEach(colTasks) { taskRow($0) }
+                    }
+                } header: {
+                    sectionHeader(col.label, color: col.color, count: colTasks.count)
+                        .dropDestination(for: String.self) { files, _ in
+                            files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: col) }
+                            return true
+                        }
+                }
             }
         }
     }
 
     @ViewBuilder
     private var needsContent: some View {
-        if !yourTurnTasks.isEmpty {
-            Section {
+        Section {
+            if yourTurnTasks.isEmpty {
+                Text("Drop here").font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36).padding(.vertical, 8)
+            } else {
                 ForEach(yourTurnTasks) { taskRow($0, showColumn: true) }
-            } header: { sectionHeader("Your turn", color: .purple, count: yourTurnTasks.count) }
+            }
+        } header: {
+            sectionHeader("Your turn", color: .purple, count: yourTurnTasks.count)
+                .dropDestination(for: String.self) { files, _ in
+                    files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .speccing) }
+                    return true
+                }
         }
-        if !aiTurnTasks.isEmpty {
-            Section {
+
+        Section {
+            if aiTurnTasks.isEmpty {
+                Text("Drop here").font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36).padding(.vertical, 8)
+            } else {
                 ForEach(aiTurnTasks) { taskRow($0) }
-            } header: { sectionHeader("AI's turn", color: .blue, count: aiTurnTasks.count) }
+            }
+        } header: {
+            sectionHeader("AI's turn", color: .blue, count: aiTurnTasks.count)
+                .dropDestination(for: String.self) { files, _ in
+                    files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .aiWorking) }
+                    return true
+                }
         }
-        if !blockedNeedsTasks.isEmpty {
-            Section {
+
+        Section {
+            if blockedNeedsTasks.isEmpty {
+                Text("Drop here").font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36).padding(.vertical, 8)
+            } else {
                 ForEach(blockedNeedsTasks) { taskRow($0) }
-            } header: { sectionHeader("Blocked", color: .orange, count: blockedNeedsTasks.count) }
-        }
-        if yourTurnTasks.isEmpty && aiTurnTasks.isEmpty && blockedNeedsTasks.isEmpty {
-            Text("Nothing needs attention").font(.caption).foregroundColor(.secondary)
-                .frame(maxWidth: .infinity).padding(.top, 32)
+            }
+        } header: {
+            sectionHeader("Blocked", color: .orange, count: blockedNeedsTasks.count)
+                .dropDestination(for: String.self) { files, _ in
+                    files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .blocked) }
+                    return true
+                }
         }
     }
 
@@ -225,6 +294,7 @@ struct LoreTasksView: View {
             setStatus(task, to: task.status == "done" ? "open" : "done")
         }
         .id(task.id)
+        .draggable(task.file)
         Divider().padding(.leading, 36)
     }
 
@@ -260,7 +330,6 @@ struct LoreTasksView: View {
     // MARK: - Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        // Command palette is open — number keys pick options, Esc dismisses
         if let cmd = activeCommand {
             if let char = press.characters.first, let n = char.wholeNumberValue, n >= 1 {
                 let opts = commandOptions(for: cmd)
@@ -273,6 +342,7 @@ struct LoreTasksView: View {
         let key = press.key
         let ch  = press.characters
 
+        if key == .tab { viewMode = viewMode == .kanban ? .needs : .kanban; return .handled }
         if key == .downArrow || ch == "j" { moveSelection(by: +1); return .handled }
         if key == .upArrow   || ch == "k" { moveSelection(by: -1); return .handled }
         if ch == " " { guard selected != nil else { return .ignored }; toggleDone(); return .handled }
@@ -314,11 +384,68 @@ struct LoreTasksView: View {
         }
     }
 
+    // MARK: - Drag & drop
+
+    private func findTask(_ file: String) -> LoreTaskItem? {
+        tasks.first { $0.file == file }
+    }
+
+    private func applyColumnChange(_ task: LoreTaskItem, to col: LoreKanbanColumn) {
+        guard let raw = try? String(contentsOfFile: task.path, encoding: .utf8) else { return }
+
+        var newStatus = task.status
+        var newOwner  = task.owner
+        var newAiRun  = task.aiRun
+
+        switch col {
+        case .backlog:   newStatus = "open";    newOwner = "none";  newAiRun = false
+        case .speccing:  newStatus = "open";    newOwner = "human"; newAiRun = false
+        case .aiWorking: newStatus = "open";    newOwner = "ai"
+        case .blocked:   newStatus = "blocked"
+        case .reviewQA:  newStatus = "open";    newOwner = "human"; newAiRun = true
+        case .done:      newStatus = "done"
+        }
+
+        var lines = raw.components(separatedBy: "\n")
+        var foundOwner = false, foundAiRun = false
+        lines = lines.map { line -> String in
+            if line.hasPrefix("status:") { return "status: \(newStatus)" }
+            if line.hasPrefix("owner:")  { foundOwner  = true; return "owner: \(newOwner)" }
+            if line.hasPrefix("ai_run:") { foundAiRun  = true; return "ai_run: \(newAiRun)" }
+            return line
+        }
+        if !foundOwner || !foundAiRun {
+            var fences = 0
+            for (i, line) in lines.enumerated() {
+                if line.hasPrefix("---") { fences += 1; if fences == 2 {
+                    if !foundAiRun { lines.insert("ai_run: \(newAiRun)", at: i) }
+                    if !foundOwner { lines.insert("owner: \(newOwner)", at: i) }
+                    break
+                }}
+            }
+        }
+
+        var result = lines.joined(separator: "\n")
+        if newStatus != task.status {
+            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd'T'HH:mm"
+            let entry = "- \(df.string(from: Date())) \(task.status) → \(newStatus)"
+            let header = "\n## Status history\n"
+            result = result.contains(header)
+                ? result.trimmingCharacters(in: .newlines) + "\n" + entry + "\n"
+                : result.trimmingCharacters(in: .newlines) + header + entry + "\n"
+        }
+
+        try? result.write(toFile: task.path, atomically: true, encoding: .utf8)
+        reload()
+    }
+
     // MARK: - Data
 
     func reload() {
         let dir = "\(projectPath)/docs/tasks"
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return }
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        let todayStr = df.string(from: Date())
         let loaded = files
             .filter { $0.hasSuffix(".md") && $0 != "index.md" && $0 != "INDEX.md" }
             .sorted()
@@ -326,6 +453,10 @@ struct LoreTasksView: View {
                 let path = "\(dir)/\(file)"
                 guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
                 let fm = parseLoreFM(raw)
+                let body = loreMDBody(raw)
+                let completedToday = body.range(
+                    of: "- \(todayStr)T[^\\n]*→ done", options: .regularExpression
+                ) != nil
                 return LoreTaskItem(
                     id: UUID(),
                     file: file,
@@ -339,7 +470,8 @@ struct LoreTasksView: View {
                     effort: fm["effort"] ?? "",
                     notes: fm["notes"] ?? "",
                     completed: fm["completed"] ?? "",
-                    body: loreMDBody(raw)
+                    body: body,
+                    completedToday: completedToday
                 )
             }
         tasks = loaded
@@ -347,12 +479,12 @@ struct LoreTasksView: View {
     }
 
     private func setStatus(_ task: LoreTaskItem, to newStatus: String) {
+        guard newStatus != task.status else { return }
         guard let raw = try? String(contentsOfFile: task.path, encoding: .utf8) else { return }
         let statusUpdated = raw.components(separatedBy: "\n").map { line in
             line.hasPrefix("status:") ? "status: \(newStatus)" : line
         }.joined(separator: "\n")
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd'T'HH:mm"
         let entry = "- \(df.string(from: Date())) \(task.status) → \(newStatus)"
         let historyHeader = "\n## Status history\n"
         let withHistory: String
@@ -412,7 +544,6 @@ private struct LoreCommandPalette: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .background(Color.clear)
             }
             Divider()
             Text("Esc — dismiss")
@@ -499,10 +630,15 @@ private struct LoreTaskRow: View {
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(isSelected ? Color.accentColor.opacity(0.13) : Color.clear)
+                .padding(.horizontal, 4)
+        )
     }
 
     private var statusIcon: String {
