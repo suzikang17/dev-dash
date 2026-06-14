@@ -228,7 +228,7 @@ private struct SessionPanel: View {
             } else if let t = transcript {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(t.turns.filter { $0.role == .user || $0.role == .assistant }) { turn in
+                        ForEach(t.turns.filter { hasVisibleContent($0) }) { turn in
                             TurnRow(turn: turn)
                         }
                     }
@@ -244,6 +244,19 @@ private struct SessionPanel: View {
             loading = true
             transcript = await store.transcriptForDigest(digest)
             loading = false
+        }
+    }
+
+    private func hasVisibleContent(_ turn: SessionTranscript.Turn) -> Bool {
+        guard turn.role == .user || turn.role == .assistant else { return false }
+        return turn.blocks.contains {
+            switch $0 {
+            case .text(let s): return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .thinking(let s): return !s.isEmpty
+            case .toolUse: return true
+            case .toolResult(_, let isError): return isError
+            case .attachment: return false
+            }
         }
     }
 
