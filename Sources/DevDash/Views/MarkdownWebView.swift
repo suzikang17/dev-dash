@@ -233,25 +233,22 @@ private extension String {
 
     func replacingMatches(of pattern: String, _ transform: (MatchResult) -> String) -> String {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return self }
-        var result = self
-        var offset = 0
         let matches = regex.matches(in: self, range: NSRange(startIndex..., in: self))
+        guard !matches.isEmpty else { return self }
+        var result = ""
+        var lastEnd = startIndex
         for match in matches {
+            guard let fullRange = Range(match.range, in: self) else { continue }
+            result += self[lastEnd..<fullRange.lowerBound]
             var groups: [String] = []
             for g in 1..<match.numberOfRanges {
                 if let r = Range(match.range(at: g), in: self) { groups.append(String(self[r])) }
                 else { groups.append("") }
             }
-            let fullRange = Range(match.range, in: self)!
-            let full = String(self[fullRange])
-            let replacement = transform(MatchResult(full: full, groups: groups))
-            let nsRange = NSRange(fullRange, in: result)
-            let adjustedRange = NSRange(location: nsRange.location + offset, length: nsRange.length)
-            if let swiftRange = Range(adjustedRange, in: result) {
-                result.replaceSubrange(swiftRange, with: replacement)
-                offset += replacement.utf16.count - nsRange.length
-            }
+            result += transform(MatchResult(full: String(self[fullRange]), groups: groups))
+            lastEnd = fullRange.upperBound
         }
+        result += self[lastEnd...]
         return result
     }
 }
