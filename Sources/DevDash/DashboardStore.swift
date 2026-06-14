@@ -420,7 +420,21 @@ final class DashboardStore: ObservableObject {
         }.value
     }
 
-    nonisolated private static func resolveJsonlPath(sessionId: String) -> String? {
+    func transcriptForDigest(_ digest: SessionDigest) async -> SessionTranscript? {
+        let sessionId = digest.id
+        let path = Self.resolveJsonlPath(sessionId: sessionId) ?? {
+            let dir = digest.projectPath.replacingOccurrences(of: "/", with: "-")
+            return "\(NSHomeDirectory())/.claude/projects/\(dir)/\(sessionId).jsonl"
+        }()
+        return await Task.detached(priority: .userInitiated) {
+            ClaudeSessionParser.parseTranscript(
+                jsonlPath: path, sessionId: sessionId,
+                projectPath: digest.projectPath, projectName: digest.projectName
+            )
+        }.value
+    }
+
+    nonisolated static func resolveJsonlPath(sessionId: String) -> String? {
         let claudeDir = "\(NSHomeDirectory())/.claude/projects"
         guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: claudeDir) else { return nil }
         for d in dirs {
@@ -1454,7 +1468,8 @@ final class DashboardStore: ObservableObject {
         }
     }
 
-    private static let atlasPath = "/Users/suki/dev/atlas"
+    static let atlasPath = "/Users/suki/dev/atlas"
+    static let atlasPort = 4123
 
     func ensureAtlasRunning() {
         let path = Self.atlasPath

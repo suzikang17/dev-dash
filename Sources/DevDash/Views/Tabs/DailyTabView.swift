@@ -4,6 +4,7 @@ struct DailyTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var days: [DayGroup] = []
     @State private var selectedEntry: DailyLoreEntry?
+    @State private var selectedSession: SessionDigest?
 
     private var project: Project? { store.project(for: store.selection) }
 
@@ -14,10 +15,13 @@ struct DailyTabView: View {
                     .frame(minWidth: 240, idealWidth: 300, maxWidth: 400)
                 if let entry = selectedEntry {
                     NotePanel(entry: entry, onClose: { selectedEntry = nil })
+                } else if let session = selectedSession {
+                    SessionPanel(digest: session, onClose: { selectedSession = nil })
+                        .environmentObject(store)
                 }
             }
             .onAppear { reload(project: project) }
-            .onChange(of: project.path) { _, _ in selectedEntry = nil; reload(project: project) }
+            .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; reload(project: project) }
             .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
         } else {
             ContentUnavailableView("No project selected", systemImage: "calendar.day.timeline.left")
@@ -66,8 +70,8 @@ struct DailyTabView: View {
                         DailyRow(
                             label: session.title ?? session.firstUserMessage ?? "Session",
                             detail: session.durationSeconds > 0 ? formatDuration(session.durationSeconds) : nil,
-                            isSelected: false,
-                            action: nil
+                            isSelected: selectedSession?.id == session.id,
+                            action: { selectedEntry = nil; selectedSession = session }
                         )
                     }
                 }
@@ -169,6 +173,138 @@ struct DailyTabView: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+}
+
+// MARK: - Session side panel
+
+private struct SessionPanel: View {
+    @EnvironmentObject var store: DashboardStore
+    let digest: SessionDigest
+    let onClose: () -> Void
+    @State private var transcript: SessionTranscript?
+    @State private var loading = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(digest.title ?? digest.firstUserMessage ?? "Claude session")
+                        .font(.headline)
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        if let start = digest.startedAt {
+                            Text(start.formatted(date: .omitted, time: .shortened))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        if digest.durationSeconds > 0 {
+                            Text(formatDuration(digest.durationSeconds))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Text("\(digest.userMessageCount) msgs")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            Divider()
+            if loading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let t = transcript {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(t.turns.filter { $0.role == .user || $0.role == .assistant }) { turn in
+                            TurnRow(turn: turn)
+                        }
+                    }
+                    .padding()
+                }
+            } else {
+                ContentUnavailableView("Transcript unavailable", systemImage: "text.bubble")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(minWidth: 340)
+        .task(id: digest.id) {
+            loading = true
+            transcript = await store.transcriptForDigest(digest)
+            loading = false
+        }
+    }
+
+    private func formatDuration(_ secs: Int) -> String {
+        if secs < 60 { return "\(secs)s" }
+        if secs < 3600 { return "\(secs / 60)m" }
+        return "\(secs / 3600)h \((secs % 3600) / 60)m"
+    }
+}
+
+private struct TurnRow: View {
+    let turn: SessionTranscript.Turn
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(turn.role == .user ? "You" : "Claude",
+                  systemImage: turn.role == .user ? "person.fill" : "sparkles")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(turn.role == .user ? .primary : .purple)
+            ForEach(Array(turn.blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
+        .padding(10)
+        .background(turn.role == .user
+            ? Color.primary.opacity(0.04)
+            : Color.purple.opacity(0.04))
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: SessionTranscript.Block) -> some View {
+        switch block {
+        case .text(let s):
+            if let attributed = try? AttributedString(markdown: s,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                Text(attributed)
+                    .font(.system(size: 12))
+                    .textSelection(.enabled)
+            } else {
+                Text(s)
+                    .font(.system(size: 12))
+                    .textSelection(.enabled)
+            }
+        case .thinking(let s):
+            Text(s)
+                .font(.system(size: 11))
+                .italic()
+                .foregroundColor(.secondary)
+                .lineLimit(3)
+        case .toolUse(let name, let summary, _):
+            Label(summary.isEmpty ? name : "\(name): \(summary)", systemImage: "wrench.and.screwdriver")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+        case .toolResult(let text, let isError):
+            if isError {
+                Label(text, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundColor(.red.opacity(0.8))
+                    .lineLimit(2)
+            }
+        case .attachment:
+            EmptyView()
+        }
+    }
 }
 
 // MARK: - Note side panel
