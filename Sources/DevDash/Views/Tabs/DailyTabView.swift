@@ -353,31 +353,14 @@ private struct NotePanel: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             Divider()
-            ScrollView {
-                markdownBody
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .textSelection(.enabled)
-            }
+            MarkdownWebView(markdown: bodyContent)
         }
         .frame(minWidth: 320)
         .onAppear { loadContent() }
         .onChange(of: entry.path) { _, _ in loadContent() }
     }
 
-    @ViewBuilder
-    private var markdownBody: some View {
-        // Strip YAML frontmatter before rendering
-        let body = stripFrontmatter(rawContent)
-        if let attributed = try? AttributedString(markdown: body,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            Text(attributed)
-                .font(.system(size: 13))
-        } else {
-            Text(body)
-                .font(.system(size: 13, design: .monospaced))
-        }
-    }
+    private var bodyContent: String { stripFrontmatter(rawContent) }
 
     private func loadContent() {
         rawContent = (try? String(contentsOfFile: entry.path, encoding: .utf8)) ?? ""
