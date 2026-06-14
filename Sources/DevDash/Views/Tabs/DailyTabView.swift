@@ -5,6 +5,9 @@ struct DailyTabView: View {
     @State private var days: [DayGroup] = []
     @State private var selectedEntry: DailyLoreEntry?
     @State private var selectedSession: SessionDigest?
+    @State private var mode: ViewMode = .daily
+
+    private enum ViewMode { case daily, browse }
 
     private var project: Project? { store.project(for: store.selection) }
 
@@ -35,11 +38,19 @@ struct DailyTabView: View {
 
     @ViewBuilder
     private func timeline(project: Project) -> some View {
-        Group {
+        VStack(spacing: 0) {
+            Picker("", selection: $mode) {
+                Text("Daily").tag(ViewMode.daily)
+                Text("Browse").tag(ViewMode.browse)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            Divider()
             if days.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            } else if mode == .daily {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24, pinnedViews: .sectionHeaders) {
                         ForEach(days) { day in
@@ -52,7 +63,34 @@ struct DailyTabView: View {
                     }
                     .padding()
                 }
+            } else {
+                browseContent()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func browseContent() -> some View {
+        let grouped = days
+            .flatMap { $0.docs }
+            .reduce(into: [String: [DailyLoreEntry]]()) { $0[$1.loreType, default: []].append($1) }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 20) {
+                ForEach(grouped.keys.sorted(), id: \.self) { type in
+                    DailySectionView(title: type.capitalized) {
+                        let sorted = (grouped[type] ?? []).sorted { $0.dateStr > $1.dateStr }
+                        ForEach(sorted) { entry in
+                            DailyRow(
+                                label: entry.title,
+                                detail: entry.dateStr,
+                                isSelected: selectedEntry?.id == entry.id,
+                                action: { selectedSession = nil; selectedEntry = entry }
+                            )
+                        }
+                    }
+                }
+            }
+            .padding()
         }
     }
 
@@ -130,7 +168,8 @@ struct DailyTabView: View {
                             loreType: fm["lore_type"] ?? dirName,
                             title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
                             file: file,
-                            path: filePath
+                            path: filePath,
+                            dateStr: date
                         )
                         docsByDate[date, default: []].append(entry)
                     }
@@ -398,6 +437,7 @@ private struct DailyLoreEntry: Identifiable {
     let title: String
     let file: String
     let path: String
+    let dateStr: String
 }
 
 private struct DailySectionView<Content: View>: View {
