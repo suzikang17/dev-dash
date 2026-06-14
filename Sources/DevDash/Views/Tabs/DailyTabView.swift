@@ -13,12 +13,17 @@ struct DailyTabView: View {
             HSplitView {
                 timeline(project: project)
                     .frame(minWidth: 240, idealWidth: 300, maxWidth: 400)
-                if let entry = selectedEntry {
-                    NotePanel(entry: entry, onClose: { selectedEntry = nil })
-                } else if let session = selectedSession {
-                    SessionPanel(digest: session, onClose: { selectedSession = nil })
-                        .environmentObject(store)
+                // always present so HSplitView keeps timeline left-pinned
+                ZStack {
+                    if let entry = selectedEntry {
+                        NotePanel(entry: entry, onClose: { selectedEntry = nil })
+                    } else if let session = selectedSession {
+                        SessionPanel(digest: session, onClose: { selectedSession = nil })
+                            .environmentObject(store)
+                    }
+                    // invisible placeholder keeps the pane alive when nothing is selected
                 }
+                .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear { reload(project: project) }
             .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; reload(project: project) }
