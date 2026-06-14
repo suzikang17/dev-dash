@@ -44,10 +44,12 @@ struct DevDashApp: App {
                     }
                 }
                 .task {
-                    if store.selection == nil { store.selection = .home }
+                    let hasSavedSelection = UserDefaults.standard.string(forKey: "devdash.lastSelection") != nil
+                    if store.selection == nil && !hasSavedSelection { store.selection = .home }
                     await store.reattachManagedServers()
                     store.ensureAtlasRunning()
                     await store.refreshAll()
+                    store.restoreLastSelection()
                     await store.refreshTodos()
                     store.startAutoRefresh()
                     Task { await store.refreshIssues() }

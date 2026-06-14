@@ -15,6 +15,9 @@ final class DashboardStore: ObservableObject {
         didSet {
             restoreTabForCurrentSelection()
             recordNavigation()
+            if let sel = selection {
+                UserDefaults.standard.set(sel.key, forKey: "devdash.lastSelection")
+            }
         }
     }
 
@@ -124,6 +127,23 @@ final class DashboardStore: ObservableObject {
         var memory = tabMemory
         memory[key] = detailTab.rawValue
         tabMemory = memory
+    }
+
+    func restoreLastSelection() {
+        guard let key = UserDefaults.standard.string(forKey: "devdash.lastSelection") else { return }
+        let resolved: Selection?
+        if key == "home" {
+            resolved = .home
+        } else if key.hasPrefix("project:") {
+            let path = String(key.dropFirst("project:".count))
+            resolved = projects.first { $0.path == path }.map { _ in .project(path: path) }
+        } else if key.hasPrefix("service:") {
+            let id = String(key.dropFirst("service:".count))
+            resolved = services.first { $0.id == id }.map { _ in .service(serviceID: id) }
+        } else {
+            resolved = nil
+        }
+        if let resolved { selection = resolved }
     }
     @Published var startingProjects: Set<String> = []
     @Published var startErrors: [String: String] = [:]
