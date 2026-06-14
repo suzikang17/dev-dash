@@ -157,8 +157,9 @@ struct DailyTabView: View {
                         guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else { continue }
                         let fm = parseMdFrontmatter(content)
                         let dateStr: String?
-                        if let created = fm["created"], created.count >= 10 {
-                            dateStr = String(created.prefix(10))
+                        let rawDate = fm["created"] ?? fm["date"]
+                        if let d = rawDate, d.count >= 10 {
+                            dateStr = String(d.prefix(10))
                         } else if file.count >= 10, file.prefix(10).allSatisfy({ $0.isNumber || $0 == "-" }) {
                             dateStr = String(file.prefix(10))
                         } else {
