@@ -287,7 +287,7 @@ struct LoreTasksView: View {
 
     @ViewBuilder
     private func taskRow(_ task: LoreTaskItem, showColumn: Bool = false) -> some View {
-        LoreTaskRow(task: task, isSelected: selected?.id == task.id, showColumn: showColumn) {
+        LoreTaskRow(task: task, selectedId: Binding(get: { selected?.id }, set: { _ in }), showColumn: showColumn) {
             selected = task
             listFocused = true
         } onToggle: {
@@ -576,14 +576,16 @@ private struct LoreCommandPalette: View {
 
 private struct LoreTaskRow: View {
     let task: LoreTaskItem
-    let isSelected: Bool
+    @Binding var selectedId: UUID?
     let showColumn: Bool
     let onSelect: () -> Void
     let onToggle: () -> Void
 
-    init(task: LoreTaskItem, isSelected: Bool, showColumn: Bool = false,
+    private var isSelected: Bool { selectedId == task.id }
+
+    init(task: LoreTaskItem, selectedId: Binding<UUID?>, showColumn: Bool = false,
          onSelect: @escaping () -> Void, onToggle: @escaping () -> Void) {
-        self.task = task; self.isSelected = isSelected; self.showColumn = showColumn
+        self.task = task; self._selectedId = selectedId; self.showColumn = showColumn
         self.onSelect = onSelect; self.onToggle = onToggle
     }
 
@@ -779,13 +781,27 @@ private struct LoreTaskDetailPane: View {
 private func parseLoreFM(_ raw: String) -> [String: String] {
     var result: [String: String] = [:]
     guard raw.hasPrefix("---") else { return result }
-    var fences = 0
-    for line in raw.components(separatedBy: "\n") {
+    let lines = raw.components(separatedBy: "\n")
+    var fences = 0; var i = 0
+    while i < lines.count {
+        let line = lines[i]; i += 1
         if line.hasPrefix("---") { fences += 1; if fences == 2 { break }; continue }
         guard fences == 1, let colon = line.firstIndex(of: ":") else { continue }
         let key = String(line[line.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
         var value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-        if (value.hasPrefix("\"") && value.hasSuffix("\"")) || (value.hasPrefix("'") && value.hasSuffix("'")) {
+        if value == ">-" || value == ">" || value == "|-" || value == "|" {
+            // YAML block scalar — collect indented continuation lines
+            let fold = value.hasPrefix(">")
+            var parts: [String] = []
+            while i < lines.count {
+                let next = lines[i]
+                if next.hasPrefix("---") { break }
+                if next.hasPrefix(" ") || next.hasPrefix("\t") {
+                    parts.append(next.trimmingCharacters(in: .whitespaces)); i += 1
+                } else if next.isEmpty { i += 1 } else { break }
+            }
+            value = fold ? parts.joined(separator: " ") : parts.joined(separator: "\n")
+        } else if (value.hasPrefix("\"") && value.hasSuffix("\"")) || (value.hasPrefix("'") && value.hasSuffix("'")) {
             value = String(value.dropFirst().dropLast())
         }
         if !key.isEmpty { result[key] = value }

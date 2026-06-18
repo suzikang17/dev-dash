@@ -13,3 +13,9 @@ DerivedData/
 # oh-my-claudecode state
 .omc/
 .claude/
+
+# DevDash.app — track Info.plist only; ignore binary + generated files
+DevDash.app/Contents/MacOS/DevDash
+DevDash.app/Contents/Resources/
+DevDash.app/Contents/_CodeSignature/
+DevDash-*.zip
