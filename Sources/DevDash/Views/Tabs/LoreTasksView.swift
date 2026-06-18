@@ -56,8 +56,18 @@ enum LoreKanbanColumn: String, CaseIterable {
     }
 }
 
-enum LoreViewMode: String { case kanban, needs }
+enum LoreViewMode: String { case kanban, needs, ideas }
 enum LoreCommandMode { case status, owner, priority }
+
+struct LoreIdeaItem: Identifiable {
+    let id = UUID()
+    let file: String
+    let path: String
+    let title: String
+    let status: String   // raw, promising, promoted, parked
+    let category: String
+    let body: String
+}
 
 // MARK: - Main View
 
@@ -72,6 +82,9 @@ struct LoreTasksView: View {
     @State private var activeCommand: LoreCommandMode? = nil
     @State private var showNewTask = false
     @FocusState private var listFocused: Bool
+    @State private var ideas: [LoreIdeaItem] = []
+    @State private var selectedIdea: LoreIdeaItem? = nil
+    @State private var generatingIdeaFile: String? = nil
 
     private var filtered: [LoreTaskItem] {
         guard !search.isEmpty else { return tasks }
@@ -108,6 +121,7 @@ struct LoreTasksView: View {
                 Picker("", selection: $viewMode) {
                     Text("Kanban").tag(LoreViewMode.kanban)
                     Text("Needs").tag(LoreViewMode.needs)
+                    Text("Ideas").tag(LoreViewMode.ideas)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 12).padding(.vertical, 7)
@@ -126,7 +140,8 @@ struct LoreTasksView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
                             if viewMode == .kanban { kanbanContent }
-                            else { needsContent }
+                            else if viewMode == .needs { needsContent }
+                            else { ideasContent }
                         }
                     }
                     .focusable()
@@ -152,7 +167,20 @@ struct LoreTasksView: View {
             .animation(.easeInOut(duration: 0.1), value: activeCommand != nil)
 
             ZStack {
-                if let task = selected {
+                if viewMode == .ideas {
+                    if let idea = selectedIdea {
+                        LoreIdeaDetailPane(idea: idea, isGenerating: generatingIdeaFile == idea.file) {
+                            promoteIdea(idea)
+                        }
+                    } else {
+                        VStack(spacing: 8) {
+                            Text("Select an idea").font(.caption).foregroundColor(.secondary)
+                            Text("P promotes to a task via Claude")
+                                .font(.system(size: 10)).foregroundColor(.secondary.opacity(0.6))
+                        }
+                        .padding().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else if let task = selected {
                     LoreTaskDetailPane(
                         task: task,
                         onStatusChange: { setStatus(task, to: $0) },
@@ -174,11 +202,15 @@ struct LoreTasksView: View {
         .sheet(isPresented: $showNewTask) {
             NewLoreTaskSheet(projectPath: projectPath) { reload() }
         }
-        .onAppear { reload(); listFocused = true }
-        .onChange(of: projectPath) { _, _ in reload() }
-        .onChange(of: viewMode) { _, _ in
-            if let sel = selected, !flatTaskList.contains(where: { $0.id == sel.id }) {
-                selected = flatTaskList.first
+        .onAppear { reload(); reloadIdeas(); listFocused = true }
+        .onChange(of: projectPath) { _, _ in reload(); reloadIdeas() }
+        .onChange(of: viewMode) { _, newMode in
+            if newMode == .ideas {
+                reloadIdeas()
+            } else {
+                if let sel = selected, !flatTaskList.contains(where: { $0.id == sel.id }) {
+                    selected = flatTaskList.first
+                }
             }
             listFocused = true
         }
@@ -283,6 +315,146 @@ struct LoreTasksView: View {
                     return true
                 }
         }
+    }
+
+    // MARK: - Ideas
+
+    @ViewBuilder
+    private var ideasContent: some View {
+        if ideas.isEmpty {
+            VStack(spacing: 8) {
+                Text("No ideas yet").font(.caption).foregroundColor(.secondary)
+                Text("lore add idea --title \"...\"")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary.opacity(0.6))
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 40)
+        } else {
+            ForEach(ideas) { idea in
+                Button {
+                    selectedIdea = idea
+                    listFocused = true
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(idea.title)
+                                .font(.system(size: 13))
+                                .lineLimit(2).multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .foregroundColor(idea.status == "promoted" || idea.status == "parked" ? .secondary : .primary)
+                                .strikethrough(idea.status == "parked")
+                            HStack(spacing: 5) {
+                                Text(idea.status).font(.system(size: 10))
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(ideaStatusColor(idea.status).opacity(0.14))
+                                    .foregroundColor(ideaStatusColor(idea.status))
+                                    .clipShape(Capsule())
+                                if !idea.category.isEmpty {
+                                    Text(idea.category).font(.system(size: 10)).foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        if idea.status != "promoted" && idea.status != "parked" {
+                            if generatingIdeaFile == idea.file {
+                                ProgressView().scaleEffect(0.6).frame(width: 20)
+                            } else {
+                                Button { promoteIdea(idea) } label: {
+                                    Image(systemName: "arrow.up.right.circle")
+                                        .foregroundColor(.blue)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Promote to task via Claude")
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(selectedIdea?.id == idea.id ? Color.accentColor.opacity(0.13) : Color.clear)
+                        .padding(.horizontal, 4)
+                )
+                Divider().padding(.leading, 36)
+            }
+        }
+    }
+
+    private func ideaStatusColor(_ status: String) -> Color {
+        switch status {
+        case "promising": return .green
+        case "promoted":  return .blue
+        case "parked":    return .secondary
+        default:          return .orange
+        }
+    }
+
+    private func reloadIdeas() {
+        let ideasDir = "\(projectPath)/docs/ideas"
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: ideasDir) else { return }
+        ideas = files
+            .filter { $0.hasSuffix(".md") && $0 != "index.md" && $0 != "INDEX.md" }
+            .sorted()
+            .compactMap { file -> LoreIdeaItem? in
+                let path = "\(ideasDir)/\(file)"
+                guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+                let fm = parseLoreFM(raw)
+                return LoreIdeaItem(
+                    file: file, path: path,
+                    title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
+                    status: fm["status"] ?? "raw",
+                    category: fm["category"] ?? "",
+                    body: loreMDBody(raw)
+                )
+            }
+    }
+
+    private func promoteIdea(_ idea: LoreIdeaItem) {
+        guard generatingIdeaFile == nil else { return }
+        generatingIdeaFile = idea.file
+        Task {
+            let taskPrompt = LoreRunner.schemaPrompt(type: "task", projectPath: projectPath) ?? ""
+            let userMsg = "Title: \(idea.title)\n\nContext from idea:\n\(idea.body)"
+            guard let body = await LoreRunner.generate(systemPrompt: taskPrompt, userMessage: userMsg, projectPath: projectPath) else {
+                await MainActor.run { generatingIdeaFile = nil }
+                return
+            }
+            let taskDir = "\(projectPath)/docs/tasks"
+            let nextId = LoreRunner.nextId(in: taskDir)
+            let slug = LoreRunner.slug(from: idea.title)
+            let filename = "\(nextId)-\(slug).md"
+            let today = String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+            let escapedTitle = idea.title.replacingOccurrences(of: "\"", with: "\\\"")
+            let cat = idea.category.isEmpty ? "other" : idea.category
+            let content = "---\ntitle: \"\(escapedTitle)\"\nstatus: open\nowner: human\ncategory: \(cat)\ncreated: \"\(today)\"\n---\n\n# \(idea.title)\n\n\(body.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+            try? content.write(toFile: "\(taskDir)/\(filename)", atomically: true, encoding: .utf8)
+            rewriteIdeaFrontmatter(idea, status: "promoted", promotedTo: filename)
+            await MainActor.run {
+                generatingIdeaFile = nil
+                reloadIdeas()
+                reload()
+            }
+        }
+    }
+
+    private func rewriteIdeaFrontmatter(_ idea: LoreIdeaItem, status: String, promotedTo: String) {
+        guard let raw = try? String(contentsOfFile: idea.path, encoding: .utf8) else { return }
+        var lines = raw.components(separatedBy: "\n")
+        var hasPromotedTo = false
+        lines = lines.map { l in
+            if l.hasPrefix("status:") { return "status: \(status)" }
+            if l.hasPrefix("promoted_to:") { hasPromotedTo = true; return "promoted_to: \(promotedTo)" }
+            return l
+        }
+        if !hasPromotedTo {
+            var fences = 0
+            for i in 0..<lines.count {
+                if lines[i].hasPrefix("---") { fences += 1; if fences == 2 { lines.insert("promoted_to: \(promotedTo)", at: i); break } }
+            }
+        }
+        try? lines.joined(separator: "\n").write(toFile: idea.path, atomically: true, encoding: .utf8)
     }
 
     @ViewBuilder
@@ -777,6 +949,62 @@ private struct LoreTaskDetailPane: View {
 }
 
 // MARK: - Helpers
+
+// MARK: - Idea Detail Pane
+
+private struct LoreIdeaDetailPane: View {
+    let idea: LoreIdeaItem
+    let isGenerating: Bool
+    let onPromote: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(idea.title).font(.headline)
+                    HStack(spacing: 8) {
+                        Text(idea.status)
+                            .font(.system(size: 11))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.12))
+                            .clipShape(Capsule())
+                        if !idea.category.isEmpty {
+                            Text(idea.category).font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                    }
+                }
+                Divider()
+                if !idea.body.isEmpty {
+                    Text(idea.body)
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary.opacity(0.85))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if idea.status != "promoted" && idea.status != "parked" {
+                    Divider()
+                    Button {
+                        onPromote()
+                    } label: {
+                        if isGenerating {
+                            HStack(spacing: 6) {
+                                ProgressView().scaleEffect(0.7)
+                                Text("Generating task…").font(.system(size: 12))
+                            }
+                        } else {
+                            Label("Promote to task", systemImage: "arrow.up.right.circle.fill")
+                                .font(.system(size: 12))
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isGenerating)
+                }
+            }
+            .padding(16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
 
 private func parseLoreFM(_ raw: String) -> [String: String] {
     var result: [String: String] = [:]

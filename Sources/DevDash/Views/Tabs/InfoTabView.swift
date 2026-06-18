@@ -42,7 +42,11 @@ struct InfoTabView: View {
                         }
                         Divider()
                         DevServerURLRow(project: project)
+                        Divider()
+                        ProductionURLRow(project: project)
                     }
+
+                    GitCard(project: project)
 
                     NotesCard(project: project)
 
@@ -574,10 +578,17 @@ private struct DevServerURLRow: View {
     @State private var draft = ""
 
     private var savedURL: String? { store.meta(for: project.path).customDevServerURL }
-    private var detectedURL: String? {
-        store.runningPort(for: project.path).map { "http://localhost:\($0)" }
+    private var displayURL: String {
+        guard let port = store.runningPort(for: project.path) else { return savedURL ?? "" }
+        let base = "http://localhost:\(port)"
+        guard let saved = savedURL,
+              let url = URL(string: saved),
+              let host = url.host,
+              host == "localhost" || host == "127.0.0.1" else { return base }
+        var path = url.path == "/" ? "" : url.path
+        if let q = url.query { path += "?\(q)" }
+        return base + path
     }
-    private var displayURL: String { savedURL ?? detectedURL ?? "" }
     private var openURL: URL? { URL(string: displayURL) }
     private var isRunning: Bool { store.runningPort(for: project.path) != nil }
 
@@ -630,7 +641,7 @@ private struct DevServerURLRow: View {
     }
 
     private func startEditing() {
-        draft = savedURL ?? detectedURL ?? ""
+        draft = displayURL.isEmpty ? "" : displayURL
         editing = true
     }
 
@@ -640,56 +651,411 @@ private struct DevServerURLRow: View {
     }
 }
 
+private struct ProductionURLRow: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    @State private var editing = false
+    @State private var draft = ""
+
+    private var savedURL: String? { store.meta(for: project.path).productionURL }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "globe")
+                .foregroundColor(.secondary)
+                .frame(width: 16)
+            Text("Production URL")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .frame(width: 100, alignment: .leading)
+            if editing {
+                TextField("https://myapp.com", text: $draft)
+                    .font(.system(size: 13))
+                    .textFieldStyle(.plain)
+                    .onSubmit { save() }
+                Button("Done") { save() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.accentColor)
+            } else if let url = savedURL {
+                Button { NSWorkspace.shared.open(URL(string: url) ?? URL(fileURLWithPath: "/")) } label: {
+                    Text(url)
+                        .foregroundColor(.accentColor)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button("Edit") { draft = url; editing = true }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Not set")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("Set") { draft = ""; editing = true }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func save() {
+        store.setProductionURL(draft, for: project.path)
+        editing = false
+    }
+}
+
 private struct DevAddressBar: View {
     let project: Project
     @EnvironmentObject var store: DashboardStore
-    @State private var draft = ""
+    @State private var pathDraft = ""
     @FocusState private var focused: Bool
 
+    private var runningPort: Int? { store.runningPort(for: project.path) }
     private var savedURL: String { store.meta(for: project.path).customDevServerURL ?? "" }
-    private var detectedURL: String {
-        store.runningPort(for: project.path).map { "http://localhost:\($0)" } ?? ""
-    }
-    private var placeholder: String {
-        detectedURL.isEmpty ? "http://localhost:3000" : detectedURL
+
+    // Path+query portion of the saved URL when it was a localhost URL.
+    private var savedPath: String {
+        guard let url = URL(string: savedURL),
+              let host = url.host,
+              host == "localhost" || host == "127.0.0.1" else { return "" }
+        var s = url.path == "/" ? "" : url.path
+        if let q = url.query { s += "?\(q)" }
+        if let f = url.fragment { s += "#\(f)" }
+        return s
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: store.runningPort(for: project.path) != nil ? "play.circle.fill" : "link")
-                .font(.system(size: 11))
-                .foregroundColor(store.runningPort(for: project.path) != nil ? .green : .secondary)
-
-            TextField(placeholder, text: $draft)
-                .font(.system(size: 12))
-                .textFieldStyle(.plain)
-                .focused($focused)
-                .onSubmit { open() }
-                .onAppear { draft = savedURL }
-                .onChange(of: project.path) { draft = savedURL }
-
-            if !draft.isEmpty {
-                Button { open() } label: {
-                    Image(systemName: "arrow.right.circle.fill")
-                        .foregroundColor(.accentColor)
+        HStack(spacing: 0) {
+            if let port = runningPort {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+                    .padding(.leading, 12)
+                    .padding(.trailing, 8)
+                Text(verbatim: "http://localhost:\(port)")
+                    .font(.system(size: 12).monospaced())
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+                TextField("/path", text: $pathDraft)
+                    .font(.system(size: 12).monospaced())
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { save(); focused = false }
+                    .onAppear { pathDraft = savedPath }
+                    .onChange(of: project.path) { _, _ in pathDraft = savedPath }
+            } else {
+                Image(systemName: "link")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 12)
+                    .padding(.trailing, 8)
+                TextField("http://localhost:3000", text: $pathDraft)
+                    .font(.system(size: 12))
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { save(); focused = false }
+                    .onAppear { pathDraft = savedURL }
+                    .onChange(of: project.path) { _, _ in pathDraft = savedURL }
+            }
+            Spacer(minLength: 4)
+            if focused {
+                Button { save(); focused = false } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut(.return, modifiers: [])
+                .help("Save (Enter)")
+                .padding(.trailing, 4)
             }
+            Button { open() } label: {
+                Image(systemName: "arrow.up.forward.circle.fill")
+                    .foregroundColor(effectiveURL.isEmpty ? Color.secondary.opacity(0.3) : .accentColor)
+            }
+            .buttonStyle(.plain)
+            .disabled(effectiveURL.isEmpty)
+            .help("Save and open in browser")
+            .padding(.trailing, 10)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .frame(height: 32)
         .background(Color(NSColor.windowBackgroundColor))
         .overlay(Rectangle().frame(height: 0.5).foregroundColor(Color(NSColor.separatorColor)), alignment: .top)
     }
 
-    private func open() {
-        let raw = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let urlStr = raw.isEmpty ? detectedURL : raw
-        store.setCustomDevServerURL(urlStr, for: project.path)
-        if let url = URL(string: urlStr), !urlStr.isEmpty {
-            NSWorkspace.shared.open(url)
+    private var effectiveURL: String {
+        if let port = runningPort {
+            var path = pathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !path.isEmpty && !path.hasPrefix("/") { path = "/\(path)" }
+            return "http://localhost:\(port)\(path)"
         }
+        return pathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func save() {
+        let url = effectiveURL
+        guard !url.isEmpty else { return }
+        store.setCustomDevServerURL(url, for: project.path)
+    }
+
+    private func open() {
+        save()
+        guard !effectiveURL.isEmpty, let url = URL(string: effectiveURL) else { return }
+        NSWorkspace.shared.open(url)
         focused = false
+    }
+}
+
+private struct GitCard: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+    @State private var showDiff = false
+    @State private var diffContent: String? = nil
+    @State private var loadingDiff = false
+
+    private var status: GitStatus? { store.gitStatus(for: project.path) }
+    private var isOp: Bool { store.gitOpInProgress.contains(project.path) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("GIT", systemImage: "arrow.triangle.branch")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if isOp { ProgressView().controlSize(.mini) }
+                Button {
+                    Task { await store.refreshGitStatus(for: project.path) }
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(isOp)
+            }
+
+            if let s = status {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .foregroundColor(.secondary)
+                        .frame(width: 14)
+                    if s.localBranches.count > 1 {
+                        Picker("", selection: Binding(
+                            get: { s.branch ?? "" },
+                            set: { b in Task { await store.gitCheckout(b, for: project.path) } }
+                        )) {
+                            ForEach(s.localBranches, id: \.self) { Text($0).tag($0) }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 200)
+                    } else {
+                        Text(s.branch ?? "detached HEAD")
+                            .font(.system(size: 13).monospaced())
+                    }
+                    Spacer()
+                    if s.aheadCount > 0 {
+                        Label("\(s.aheadCount)", systemImage: "arrow.up.circle.fill")
+                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                            .foregroundColor(.blue)
+                    }
+                    if s.behindCount > 0 {
+                        Label("\(s.behindCount)", systemImage: "arrow.down.circle.fill")
+                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                            .foregroundColor(.orange)
+                    }
+                }
+
+                if !s.isClean {
+                    HStack(spacing: 8) {
+                        if s.stagedCount > 0 {
+                            GitStatusChip(count: s.stagedCount, label: "staged", color: .green)
+                        }
+                        if s.unstagedCount > 0 {
+                            GitStatusChip(count: s.unstagedCount, label: "modified", color: .orange)
+                        }
+                        if s.untrackedCount > 0 {
+                            GitStatusChip(count: s.untrackedCount, label: "untracked", color: .secondary)
+                        }
+                        Spacer()
+                        if s.stashCount > 0 {
+                            Text("\(s.stashCount) stashed")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        Button {
+                            loadingDiff = true
+                            Task {
+                                diffContent = await store.gitDiff(for: project.path)
+                                loadingDiff = false
+                                if diffContent != nil { showDiff = true }
+                            }
+                        } label: {
+                            Label(loadingDiff ? "Loading…" : "Diff", systemImage: "doc.text.magnifyingglass")
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 11))
+                        .controlSize(.small)
+                        .disabled(loadingDiff)
+                    }
+                } else {
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        Text("Working tree clean")
+                    }
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                }
+
+                if s.worktrees.count > 1 {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("WORKTREES")
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(1.0)
+                            .foregroundColor(.secondary)
+                        ForEach(s.worktrees) { wt in
+                            HStack(spacing: 6) {
+                                Image(systemName: wt.isMain ? "house" : "folder")
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 14)
+                                Text(wt.displayName)
+                                    .font(.system(size: 12))
+                                if let b = wt.branch {
+                                    Text(b)
+                                        .font(.system(size: 11).monospaced())
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+
+                HStack(spacing: 8) {
+                    Button("Fetch") { Task { await store.gitFetch(for: project.path) } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isOp)
+                    Button("Pull") { Task { await store.gitPull(for: project.path) } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isOp || s.upstream == nil)
+                    Button("Push") { Task { await store.gitPush(for: project.path) } }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(isOp || s.aheadCount == 0)
+                }
+            } else if project.isGit {
+                HStack { ProgressView().controlSize(.mini); Text("Loading…").font(.system(size: 12)).foregroundColor(.secondary) }
+            } else {
+                Text("Not a git repository.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .onAppear {
+            if store.gitStatus(for: project.path) == nil {
+                Task { await store.refreshGitStatus(for: project.path) }
+            }
+        }
+        .onChange(of: project.path) { _, _ in
+            Task { await store.refreshGitStatus(for: project.path) }
+        }
+        .sheet(isPresented: $showDiff) {
+            DiffSheet(diff: diffContent ?? "No changes.")
+        }
+    }
+}
+
+private struct GitStatusChip: View {
+    let count: Int
+    let label: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text("\(count)")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+            Text(label)
+                .font(.system(size: 11))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
+    }
+}
+
+private struct DiffSheet: View {
+    let diff: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Uncommitted Changes")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Button("Close") { dismiss() }
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(14)
+            Divider()
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(diff.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
+                        DiffLineView(line: line)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+            }
+        }
+        .frame(minWidth: 700, minHeight: 480)
+    }
+}
+
+private struct DiffLineView: View {
+    let line: String
+
+    var body: some View {
+        Text(verbatim: line.isEmpty ? " " : line)
+            .font(.system(size: 12).monospaced())
+            .foregroundColor(foregroundColor)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(backgroundColor)
+    }
+
+    private var foregroundColor: Color {
+        if line.hasPrefix("+") && !line.hasPrefix("+++") { return .green }
+        if line.hasPrefix("-") && !line.hasPrefix("---") { return Color(red: 1, green: 0.35, blue: 0.35) }
+        if line.hasPrefix("@@") { return .accentColor }
+        if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") {
+            return .secondary
+        }
+        return .primary
+    }
+
+    private var backgroundColor: Color {
+        if line.hasPrefix("+") && !line.hasPrefix("+++") { return .green.opacity(0.05) }
+        if line.hasPrefix("-") && !line.hasPrefix("---") { return .red.opacity(0.05) }
+        return .clear
     }
 }

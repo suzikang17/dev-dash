@@ -10,6 +10,7 @@ struct DailyTabView: View {
     @State private var browseType: String? = nil
     @State private var browseSearch: String = ""
     @State private var showNewTask = false
+    @State private var summarizingDate: String? = nil
 
     private enum ViewMode { case daily, browse }
 
@@ -132,12 +133,35 @@ struct DailyTabView: View {
 
     @ViewBuilder
     private func dayHeader(_ day: DayGroup) -> some View {
-        Text(day.isToday ? "Today · \(day.formatted)" : day.formatted)
-            .font(.headline)
-            .foregroundColor(day.isToday ? .primary : .secondary)
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial)
+        HStack {
+            Text(day.isToday ? "Today · \(day.formatted)" : day.formatted)
+                .font(.headline)
+                .foregroundColor(day.isToday ? .primary : .secondary)
+            Spacer()
+            Button {
+                guard let p = project?.path, summarizingDate == nil else { return }
+                summarizingDate = day.dateStr
+                Task {
+                    await summarizeDay(day.dateStr, projectPath: p)
+                    await MainActor.run { summarizingDate = nil; reload(project: project!) }
+                }
+            } label: {
+                if summarizingDate == day.dateStr {
+                    ProgressView().scaleEffect(0.6).frame(width: 16, height: 16)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Generate devlog for this day")
+            .disabled(summarizingDate != nil)
+        }
+        .padding(.vertical, 4)
+        .padding(.trailing, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial)
     }
 
     @ViewBuilder
@@ -258,6 +282,40 @@ struct DailyTabView: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    // MARK: - Summarize day
+
+    private func summarizeDay(_ dateStr: String, projectPath: String) async {
+        let taskDir = "\(projectPath)/docs/tasks"
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: taskDir) else { return }
+        var activities: [String] = []
+        for file in files.sorted() {
+            guard file.hasSuffix(".md"), file != "index.md", file != "INDEX.md" else { continue }
+            guard let raw = try? String(contentsOfFile: "\(taskDir)/\(file)", encoding: .utf8) else { continue }
+            let titleLine = raw.components(separatedBy: "\n").first { $0.hasPrefix("title:") }
+            var title = titleLine.map { String($0.dropFirst(6)).trimmingCharacters(in: .whitespaces) } ?? file
+            if (title.hasPrefix("\"") && title.hasSuffix("\"")) || (title.hasPrefix("'") && title.hasSuffix("'")) {
+                title = String(title.dropFirst().dropLast())
+            }
+            let statusLine = raw.components(separatedBy: "\n").first { $0.hasPrefix("status:") }
+            let status = statusLine.map { String($0.dropFirst(7)).trimmingCharacters(in: .whitespaces) } ?? "?"
+            guard let histRange = raw.range(of: "## Status history") else { continue }
+            let todayLines = String(raw[histRange.upperBound...])
+                .components(separatedBy: "\n")
+                .filter { $0.hasPrefix("- \(dateStr)") }
+            if todayLines.isEmpty { continue }
+            activities.append("**\(title)** (\(status)): \(todayLines.joined(separator: "; "))")
+        }
+        guard !activities.isEmpty else { return }
+        let devlogPrompt = LoreRunner.schemaPrompt(type: "devlog", projectPath: projectPath) ?? ""
+        let userMsg = "Date: \(dateStr)\n\nTask activity:\n\(activities.map { "- \($0)" }.joined(separator: "\n"))"
+        guard let body = await LoreRunner.generate(systemPrompt: devlogPrompt, userMessage: userMsg, projectPath: projectPath, timeout: 180) else { return }
+        let devlogDir = "\(projectPath)/docs/devlog"
+        let nextId = LoreRunner.nextId(in: devlogDir)
+        let filename = "\(dateStr)-day-\(nextId).md"
+        let content = "---\ntitle: \"\(dateStr) — day summary\"\ndate: \"\(dateStr)\"\n---\n\n# \(dateStr) — day summary\n\n\(body.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+        try? content.write(toFile: "\(devlogDir)/\(filename)", atomically: true, encoding: .utf8)
+    }
 }
 
 // MARK: - Type detail panel (Browse → type selected)

@@ -234,10 +234,15 @@ private struct SidebarServiceRow: View {
                 Text(service.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                Text(service.framework)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let proj = store.project(for: .service(serviceID: service.id)) {
+                        GitRefLabel(path: proj.path, branch: proj.branch)
+                    }
+                    Text(service.framework)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .lineLimit(1)
             }
             Spacer()
             Text(verbatim: String(service.port))
@@ -300,6 +305,7 @@ private struct SidebarProjectRow: View {
                     }
                 }
                 HStack(spacing: 4) {
+                    GitRefLabel(path: project.path, branch: project.branch)
                     Text(project.framework)
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
@@ -377,6 +383,42 @@ private struct SidebarProjectRow: View {
         case .stale: return "circle.fill"
         case .archived: return "circle"
         case .noGit: return "questionmark.circle"
+        }
+    }
+}
+
+/// Shows either a worktree indicator (⊞ name) or a branch indicator (⎇ branch)
+/// followed by a "·" separator, or nothing if there's no git info yet.
+private struct GitRefLabel: View {
+    let path: String
+    let branch: String?
+    @EnvironmentObject var store: DashboardStore
+
+    var body: some View {
+        let worktrees = store.gitStatuses[path]?.worktrees ?? []
+        let thisTree = worktrees.first(where: { $0.path == path })
+        let isWorktree = worktrees.count > 1 && thisTree?.isMain == false
+
+        if isWorktree, let name = thisTree?.displayName {
+            HStack(spacing: 3) {
+                Image(systemName: "square.on.square")
+                    .font(.system(size: 8))
+                    .foregroundColor(.purple)
+                Text(name)
+                    .font(.system(size: 10).monospaced())
+                    .foregroundColor(.purple)
+                Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+            }
+        } else if let b = branch ?? store.gitStatuses[path]?.branch {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 8))
+                    .foregroundColor(.secondary)
+                Text(b)
+                    .font(.system(size: 10).monospaced())
+                    .foregroundColor(.secondary)
+                Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+            }
         }
     }
 }

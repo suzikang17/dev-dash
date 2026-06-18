@@ -4,6 +4,10 @@ import AppKit
 struct PreviewTabView: View {
     @EnvironmentObject var store: DashboardStore
     @StateObject private var holder = WebViewHolder()
+    @State private var snapshotInProgress = false
+    @State private var diffResult: SnapshotDiffResult?
+    @State private var toastMessage: String?
+    @State private var showingProduction = false
 
     private func isAppleProject(_ project: Project) -> Bool {
         ["macOS App", "iOS App", "Swift Package", "Xcode"].contains(project.framework)
@@ -16,14 +20,72 @@ struct PreviewTabView: View {
         let customURL: URL? = proj.flatMap { URL(string: store.meta(for: $0.path).customDevServerURL ?? "") }
         let effectiveURL: URL? = customURL ?? svc.flatMap { URL(string: $0.url ?? "") }
 
-        // Apple platforms get a different preview (no localhost URL).
         if let proj = proj, isAppleProject(proj), svc == nil {
             AppleAppPreview(project: proj)
                 .environmentObject(store)
         } else if let url = effectiveURL {
+            let slug = VisualSnapshotStore.slugify(url)
+            let vp = holder.viewport.rawValue
+            let projectPath = proj?.path ?? ""
+            let doSnapshot: (() -> Void)? = svc != nil ? {
+                Task { @MainActor in
+                    guard !snapshotInProgress else { return }
+                    snapshotInProgress = true
+                    defer { snapshotInProgress = false }
+                    do {
+                        let newImage = try await VisualDiffRunner.takeSnapshot(webView: holder.webView)
+                        let savedBaseline = VisualSnapshotStore.baseline(for: projectPath, urlSlug: slug, viewport: vp)
+                        let prodURLString = store.meta(for: projectPath).productionURL
+                        let baseline: CGImage
+                        if let saved = savedBaseline {
+                            baseline = saved
+                        } else if let prodStr = prodURLString, let prodURL = URL(string: prodStr) {
+                            toastMessage = "Fetching baseline from production..."
+                            let prodImage = try await VisualDiffRunner.takeSnapshotFromURL(prodURL, viewportSize: holder.webView.frame.size)
+                            VisualSnapshotStore.saveBaseline(prodImage, projectPath: projectPath, urlSlug: slug, viewport: vp)
+                            baseline = prodImage
+                        } else {
+                            VisualSnapshotStore.saveBaseline(newImage, projectPath: projectPath, urlSlug: slug, viewport: vp)
+                            toastMessage = "Baseline saved"
+                            return
+                        }
+                        let diff = VisualDiffRunner.diff(new: newImage, baseline: baseline)
+                        if diff.isSignificant {
+                            let runId = ISO8601DateFormatter().string(from: Date())
+                            let run = VisualRun(
+                                id: runId, url: url.absoluteString, viewportLabel: vp,
+                                changedPixelRatio: diff.changedPixelRatio, approved: false,
+                                taskId: nil, createdAt: Date()
+                            )
+                            let path = VisualSnapshotStore.saveRun(
+                                newImage: newImage, diffImage: diff.diffImage,
+                                run: run, projectPath: projectPath, urlSlug: slug, viewport: vp
+                            )
+                            VisualSnapshotStore.pruneRuns(projectPath: projectPath, urlSlug: slug, viewport: vp)
+                            diffResult = SnapshotDiffResult(
+                                newImage: newImage, diffImage: diff.diffImage,
+                                changedPixelRatio: diff.changedPixelRatio, isSignificant: true, runPath: path
+                            )
+                        } else {
+                            VisualSnapshotStore.saveBaseline(newImage, projectPath: projectPath, urlSlug: slug, viewport: vp)
+                            toastMessage = "No significant changes"
+                        }
+                    } catch {
+                        toastMessage = "Snapshot failed: \(error.localizedDescription)"
+                    }
+                }
+            } : nil
+
+            let prodURL = store.meta(for: projectPath).productionURL.flatMap { URL(string: $0) }
+            let displayURL = (showingProduction && prodURL != nil) ? prodURL! : url
+
             VStack(spacing: 0) {
                 if projectServices.count > 1, let path = proj?.path {
                     ServiceSwitcher(services: projectServices, currentPort: svc?.port ?? 0, projectPath: path)
+                    Divider()
+                }
+                if let prodURL {
+                    LocalProductionSwitcher(showingProduction: $showingProduction, localURL: url, productionURL: prodURL)
                     Divider()
                 }
                 ZStack {
@@ -63,20 +125,59 @@ struct PreviewTabView: View {
                         .padding()
                         .background(.regularMaterial)
                     }
+                    if let msg = toastMessage {
+                        VStack {
+                            Spacer()
+                            Text(msg)
+                                .font(.system(size: 12, weight: .medium))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(.regularMaterial)
+                                .clipShape(Capsule())
+                                .padding(.bottom, 12)
+                        }
+                        .task(id: msg) {
+                            try? await Task.sleep(for: .seconds(2))
+                            toastMessage = nil
+                        }
+                    }
                 }
                 Divider()
                 AddressBar(
-                    url: url,
+                    url: displayURL,
                     status: holder.status,
                     viewport: $holder.viewport,
                     pid: svc?.pid,
-                    onOpenExternal: { NSWorkspace.shared.open(url) },
+                    snapshotInProgress: snapshotInProgress,
+                    onOpenExternal: { NSWorkspace.shared.open(displayURL) },
                     onReload: { holder.reload() },
+                    onSnapshot: (!showingProduction && svc != nil) ? doSnapshot : nil,
+                    onResetBaseline: (!showingProduction && svc != nil) ? {
+                        VisualSnapshotStore.deleteBaseline(projectPath: projectPath, urlSlug: slug, viewport: vp)
+                        toastMessage = "Baseline reset"
+                    } : nil,
                     onStop: svc.map { s in { Task { await store.stopServer(pid: s.pid) } } }
                 )
             }
-            .onAppear { holder.loadIfNeeded(url) }
+            .sheet(item: $diffResult) { result in
+                VisualDiffSheet(
+                    result: result,
+                    projectPath: projectPath,
+                    urlSlug: slug,
+                    viewportLabel: vp,
+                    pageURL: url,
+                    onApprove: { newImage in
+                        VisualSnapshotStore.saveBaseline(newImage, projectPath: projectPath, urlSlug: slug, viewport: vp)
+                    }
+                )
+            }
+            .onAppear { holder.loadIfNeeded(displayURL) }
             .onChange(of: url) { _, newURL in holder.loadIfNeeded(newURL) }
+            .onChange(of: showingProduction) { _, showing in
+                let target = (showing && prodURL != nil) ? prodURL! : url
+                holder.webView.load(URLRequest(url: target))
+            }
+            .onChange(of: store.selection) { _, _ in showingProduction = false }
         } else if let proj = proj {
             NotRunningView(project: proj)
         } else {
@@ -84,6 +185,43 @@ struct PreviewTabView: View {
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+private struct LocalProductionSwitcher: View {
+    @Binding var showingProduction: Bool
+    let localURL: URL
+    let productionURL: URL
+
+    var body: some View {
+        HStack(spacing: 8) {
+            pill(label: "Local", url: localURL, active: !showingProduction) { showingProduction = false }
+            pill(label: "Production", url: productionURL, active: showingProduction) { showingProduction = true }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    private func pill(label: String, url: URL, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if active {
+                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                }
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                Text(url.host ?? url.absoluteString)
+                    .font(.system(size: 11).monospaced())
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(active ? Color.accentColor.opacity(0.20) : Color.secondary.opacity(0.10))
+            .foregroundColor(active ? .accentColor : .secondary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -134,8 +272,11 @@ private struct AddressBar: View {
     let status: WebLoadStatus
     @Binding var viewport: Viewport
     let pid: Int32?
+    let snapshotInProgress: Bool
     let onOpenExternal: () -> Void
     let onReload: () -> Void
+    let onSnapshot: (() -> Void)?
+    let onResetBaseline: (() -> Void)?
     let onStop: (() -> Void)?
 
     var body: some View {
@@ -166,6 +307,27 @@ private struct AddressBar: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: 110)
+
+            if let onSnapshot {
+                Button(action: onSnapshot) {
+                    if snapshotInProgress {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "camera")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(snapshotInProgress)
+                .help("Take visual snapshot — right-click to reset baseline")
+                .frame(width: 20)
+                .contextMenu {
+                    Button("Take snapshot", action: onSnapshot)
+                    if let onReset = onResetBaseline {
+                        Divider()
+                        Button("Reset baseline for this URL", action: onReset)
+                    }
+                }
+            }
 
             Button(action: onReload) {
                 Image(systemName: "arrow.clockwise")

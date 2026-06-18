@@ -23,6 +23,8 @@ enum ProductDocGenerator {
 
     static let tabs: [DocTab] = [
         .init(id: "overview",     label: "Overview",     source: .userHtml(file: "overview.html")),
+        .init(id: "notes",        label: "Notes",        source: .userHtml(file: "notes.html")),
+        .init(id: "blocks",       label: "Blocks",       source: .blocksView),
         .init(id: "roadmap",      label: "Roadmap",      source: .generatedHtml(file: "roadmap.html")),
         .init(id: "initiatives",  label: "Initiatives",  source: .generatedHtml(file: "initiatives.html")),
         .init(id: "goals",        label: "Goals & KPIs", source: .userHtml(file: "goals.html")),
@@ -41,6 +43,7 @@ enum ProductDocGenerator {
         case generatedHtml(file: String)   // sections/<file>; we own it
         case userFolder(rel: String)       // collection of .html files
         case artifactsBrowser              // grouped view of every artifact folder
+        case blocksView                    // live JS query over typed bullets in Notes
     }
 
     /// Folders the generator reads from. Each maps to a label used in the
@@ -78,6 +81,7 @@ enum ProductDocGenerator {
 
         // User-authored stubs — only scaffold when missing.
         scaffold(at: "\(sectionsFolder)/overview.html", with: stub(.overview(projectName: projectName)))
+        scaffold(at: "\(sectionsFolder)/notes.html",    with: stub(.notes(projectName: projectName)))
         scaffold(at: "\(sectionsFolder)/goals.html",    with: stub(.goals(projectName: projectName)))
         scaffold(at: "\(sectionsFolder)/ideas.html",    with: stub(.ideas))
 
@@ -176,6 +180,15 @@ enum ProductDocGenerator {
             return readFolder(at: "\(folderPath(for: projectPath))/\(rel)", relRoot: rel, emptyMsg: emptyMsg(for: rel))
         case .artifactsBrowser:
             return renderArtifactsBrowser(projectPath: projectPath)
+        case .blocksView:
+            return """
+            <div class="doc-head">
+              <h2>Blocks</h2>
+              <span class="doc-status">Live query · types pulled from <code>sections/notes.html</code></span>
+            </div>
+            <p class="meta">Tag any bullet in Notes with <code>#task</code>, <code>#kpi</code>, <code>#goal</code>, <code>#decision</code>, <code>#risk</code>, <code>#question</code>, or <code>#idea</code> and it shows up here. Click a bullet to jump to its line in Notes.</p>
+            <div id="devdash-blocks-view"></div>
+            """
         }
     }
 
@@ -399,6 +412,7 @@ enum ProductDocGenerator {
 
     private enum Stub {
         case overview(projectName: String)
+        case notes(projectName: String)
         case goals(projectName: String)
         case ideas
     }
@@ -555,6 +569,21 @@ enum ProductDocGenerator {
                 <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">marketing</span> <em>Idea 4</em></span>\(promoteBtn(title: "Idea 4"))</div>
                 \(ideaBtn())
               </div>
+            </div>
+            """
+        case .notes(let name):
+            return """
+            <div class="doc-head">
+              <h2>\(escapeHTML(name)) — Notes</h2>
+              <span class="doc-status">Outliner · <code>sections/notes.html</code> · Tab to indent · ⇧Tab to outdent · [[ to link</span>
+            </div>
+
+            <div data-outliner="true">
+              <ul class="outliner">
+                <li>Start typing. Press <strong>Enter</strong> for a new bullet, <strong>Tab</strong> to nest.</li>
+                <li>Type <code>[[</code> anywhere to link to a task or doc.</li>
+                <li>Use this as a thinking surface — sketch, then promote to tasks later.</li>
+              </ul>
             </div>
             """
         }
@@ -1106,6 +1135,46 @@ enum ProductDocGenerator {
                 opacity: 0; transition: opacity 0.12s, color 0.12s, background 0.12s; }
       .kpi:hover .rm-btn, .item:hover .rm-btn, .triage-card:hover .rm-btn { opacity: 1; }
       .rm-btn:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+      /* Tag chips (Tana-style supertags) */
+      .devdash-tag-chip { display: inline-flex; align-items: center; gap: 3px;
+                           padding: 1px 7px; border-radius: 4px; font-size: 11px;
+                           font-weight: 600; letter-spacing: 0.2px; margin: 0 2px;
+                           user-select: none; cursor: default; vertical-align: baseline; }
+      .devdash-tag-chip[data-tag="task"]     { background: rgba(90,200,250,0.12);  color: #5ac8fa; border: 1px solid rgba(90,200,250,0.35); }
+      .devdash-tag-chip[data-tag="kpi"]      { background: rgba(48,209,88,0.12);   color: #30d158; border: 1px solid rgba(48,209,88,0.35); }
+      .devdash-tag-chip[data-tag="goal"]     { background: rgba(191,90,242,0.12);  color: #bf5af2; border: 1px solid rgba(191,90,242,0.35); }
+      .devdash-tag-chip[data-tag="decision"] { background: rgba(255,214,10,0.12);  color: #ffd60a; border: 1px solid rgba(255,214,10,0.35); }
+      .devdash-tag-chip[data-tag="risk"]     { background: rgba(255,69,58,0.12);   color: #ff453a; border: 1px solid rgba(255,69,58,0.35); }
+      .devdash-tag-chip[data-tag="question"] { background: rgba(255,159,10,0.12);  color: #ff9f0a; border: 1px solid rgba(255,159,10,0.35); }
+      .devdash-tag-chip[data-tag="idea"]     { background: rgba(100,210,255,0.12); color: #64d2ff; border: 1px solid rgba(100,210,255,0.35); }
+
+      /* Blocks view (live query results) */
+      #devdash-blocks-view .block-group { margin: 16px 0; }
+      #devdash-blocks-view .block-group h3 { margin: 0 0 8px; font-size: 13px;
+                                              text-transform: uppercase; letter-spacing: 0.5px;
+                                              color: var(--muted); }
+      #devdash-blocks-view .block-row { padding: 8px 12px; background: var(--card);
+                                         border: 1px solid var(--border); border-radius: 6px;
+                                         margin-bottom: 4px; cursor: pointer;
+                                         transition: border-color 0.12s; font-size: 13px; }
+      #devdash-blocks-view .block-row:hover { border-color: var(--accent); }
+      #devdash-blocks-view .empty-state { color: var(--muted); font-style: italic;
+                                           padding: 12px 0; font-size: 12px; }
+
+      /* Outliner (Roam-style bullet doc) */
+      [data-outliner] ul { list-style: none; padding-left: 0; margin: 0; }
+      [data-outliner] ul ul { padding-left: 22px; border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent); margin-left: 8px; }
+      [data-outliner] li { position: relative; padding: 3px 0 3px 22px; line-height: 1.55;
+                            font-family: ui-sans-serif, -apple-system, system-ui, sans-serif; font-size: 14px; }
+      [data-outliner] li::before { content: "•"; position: absolute; left: 8px; top: 3px;
+                                    color: var(--muted); font-size: 16px; line-height: 1.55;
+                                    transition: color 0.12s; }
+      [data-outliner] li:hover::before { color: var(--accent); }
+      [data-outliner] li:focus-within { background: color-mix(in srgb, var(--accent) 5%, transparent);
+                                         border-radius: 4px; }
+      [data-outliner] li > ul { margin-top: 3px; }
+      [data-outliner] .doc-status { display: none; }
 
       /* Triage board */
       .triage-controls { display: flex; gap: 6px; margin: 12px 0; }

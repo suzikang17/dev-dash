@@ -15,7 +15,7 @@ struct DocsTabView: View {
         }
         guard let p = path else { return nil }
         let name = URL(fileURLWithPath: p).lastPathComponent
-        return URL(string: "http://localhost:4123/p/\(name)/")
+        return URL(string: "http://localhost:\(DashboardStore.atlasPort)/p/\(name)/")
     }
 
     var body: some View {

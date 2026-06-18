@@ -14,7 +14,6 @@ enum RecentCommitsScanner {
             for await commits in group { all.append(contentsOf: commits) }
             return all.sorted { $0.time > $1.time }
         }
-        FileHandle.standardError.write(Data("[RecentCommits] \(projects.count) projects → \(result.count) commits\n".utf8))
         return result
     }
 
