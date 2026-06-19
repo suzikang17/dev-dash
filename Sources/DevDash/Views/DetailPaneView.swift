@@ -2,27 +2,34 @@ import SwiftUI
 
 struct DetailPaneView: View {
     @EnvironmentObject var store: DashboardStore
+    @State private var terminalHeight: CGFloat = 280
 
     var body: some View {
-        Group {
-            switch store.selection {
-            case .none, .some(.home):
-                HomeView()
-            case .some:
-                switch store.detailTab {
-                case .preview: PreviewTabView()
-                case .logs: LogsTabView()
-                case .claude: ClaudeTabView()
-                case .tasks: TasksTabView()
-                case .info: InfoTabView()
-                case .product: ProductTabView()
-                case .files: FilesTabView()
-                case .docs: DocsTabView()
-                case .daily: DailyTabView()
+        VStack(spacing: 0) {
+            Group {
+                switch store.selection {
+                case .none, .some(.home):
+                    HomeView()
+                case .some:
+                    switch store.detailTab {
+                    case .preview: PreviewTabView()
+                    case .logs: LogsTabView()
+                    case .claude: ClaudeTabView()
+                    case .tasks: TasksTabView()
+                    case .info: InfoTabView()
+                    case .product: ProductTabView()
+                    case .files: FilesTabView()
+                    case .docs: DocsTabView()
+                    case .daily: DailyTabView()
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if store.terminalOpen, let project = store.project(for: store.selection) {
+                TerminalDrawer(project: project, height: $terminalHeight)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
     }
 }

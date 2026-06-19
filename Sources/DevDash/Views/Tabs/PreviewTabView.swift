@@ -359,6 +359,7 @@ private struct AddressBar: View {
 private struct NotRunningView: View {
     let project: Project
     @EnvironmentObject var store: DashboardStore
+    @EnvironmentObject var serverStore: ServerStore
 
     var body: some View {
         VStack(spacing: 16) {
@@ -376,7 +377,7 @@ private struct NotRunningView: View {
                     Label("Start dev server", systemImage: "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(store.isStarting(project.path))
+                .disabled(serverStore.isStarting(project.path))
 
                 Button {
                     NSWorkspace.shared.open(URL(fileURLWithPath: project.path))
@@ -385,7 +386,7 @@ private struct NotRunningView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            if let err = store.startError(project.path) {
+            if let err = serverStore.startError(project.path) {
                 Text(err)
                     .font(.caption)
                     .foregroundColor(.red)

@@ -71,7 +71,7 @@ struct Project: Identifiable, Hashable {
     }
 }
 
-enum HealthStatus: String, CaseIterable {
+enum HealthStatus: String, CaseIterable, Codable {
     case active, moderate, stale, archived, noGit
 
     var label: String {

@@ -10,6 +10,9 @@ struct ProductTabView: View {
     @State private var lastRegenAt: Date?
     @State private var reloadToken: Int = 0
     @State private var showLinkedSidebar: Bool = false
+    /// Whether the generated index.html exists. Cached so `content` doesn't hit
+    /// disk (`fileExists`) on every render; updated whenever `regen` runs.
+    @State private var docExists: Bool = false
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -100,7 +103,7 @@ struct ProductTabView: View {
         let docsRoot = URL(fileURLWithPath: ProductDocGenerator.folderPath(for: project.path))
         HStack(spacing: 0) {
             Group {
-                if FileManager.default.fileExists(atPath: path) {
+                if docExists {
                     ProductWebView(
                         url: URL(fileURLWithPath: path),
                         docsRoot: docsRoot,
@@ -253,10 +256,12 @@ struct ProductTabView: View {
             projectPath: project.path,
             meta: meta,
             template: template,
-            tasks: tasks
+            tasks: tasks,
+            status: store.projectStatus(for: project.path)
         )
         lastRegenAt = Date()
         reloadToken &+= 1   // force WKWebView reload so latest HTML + JS land
+        docExists = FileManager.default.fileExists(atPath: ProductDocGenerator.indexPath(for: project.path))
     }
 
     private func openFile(_ path: String) {

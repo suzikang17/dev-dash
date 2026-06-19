@@ -3,11 +3,12 @@ import AppKit
 
 struct LogsTabView: View {
     @EnvironmentObject var store: DashboardStore
+    @EnvironmentObject var serverStore: ServerStore
     @State private var autoScroll = true
 
     var body: some View {
         if let project = store.project(for: store.selection) {
-            let lines = store.logs(for: project.path)
+            let lines = serverStore.logs(for: project.path)
             VStack(spacing: 0) {
                 HStack {
                     Image(systemName: "terminal")
@@ -23,7 +24,7 @@ struct LogsTabView: View {
                     Toggle("Auto-scroll", isOn: $autoScroll)
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                    if store.managedRunning.contains(project.path) {
+                    if serverStore.managedRunning.contains(project.path) {
                         Button(role: .destructive) {
                             Task { await store.stopServer(for: project.path) }
                         } label: {
@@ -59,9 +60,10 @@ struct LogsTabView: View {
 private struct EmptyLogsView: View {
     let projectPath: String
     @EnvironmentObject var store: DashboardStore
+    @EnvironmentObject var serverStore: ServerStore
 
     var isExternallyRunning: Bool {
-        store.runningPort(for: projectPath) != nil && !store.managedRunning.contains(projectPath)
+        store.runningPort(for: projectPath) != nil && !serverStore.managedRunning.contains(projectPath)
     }
 
     var body: some View {

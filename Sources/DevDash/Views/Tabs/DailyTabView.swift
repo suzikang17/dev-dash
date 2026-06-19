@@ -11,14 +11,38 @@ struct DailyTabView: View {
     @State private var browseSearch: String = ""
     @State private var showNewTask = false
     @State private var summarizingDate: String? = nil
+    @State private var loreInitialized = true
 
     private enum ViewMode { case daily, browse }
 
     private var project: Project? { store.project(for: store.selection) }
 
     var body: some View {
-        if let project = project {
-            HSplitView {
+        Group {
+            if let project = project {
+                if loreInitialized {
+                    content(project: project)
+                } else {
+                    LoreInitView(projectPath: project.path) {
+                        loreInitialized = LoreRunner.isInitialized(projectPath: project.path)
+                    }
+                }
+            } else {
+                ContentUnavailableView("No project selected", systemImage: "calendar.day.timeline.left")
+            }
+        }
+        .onAppear { refreshLoreState() }
+        .onChange(of: project?.path) { _, _ in refreshLoreState() }
+    }
+
+    private func refreshLoreState() {
+        guard let project else { return }
+        loreInitialized = LoreRunner.isInitialized(projectPath: project.path)
+    }
+
+    @ViewBuilder
+    private func content(project: Project) -> some View {
+        HSplitView {
                 timeline(project: project)
                     .frame(minWidth: 320, idealWidth: 400, maxWidth: 560)
                 // always present so HSplitView keeps timeline left-pinned
@@ -47,9 +71,6 @@ struct DailyTabView: View {
                     reload(project: project)
                 }
             }
-        } else {
-            ContentUnavailableView("No project selected", systemImage: "calendar.day.timeline.left")
-        }
     }
 
     @ViewBuilder
@@ -215,7 +236,7 @@ struct DailyTabView: View {
                         guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
                         let filePath = "\(dirPath)/\(file)"
                         guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else { continue }
-                        let fm = parseMdFrontmatter(content)
+                        let fm = LoreReader.parseFrontmatter(content)
                         let dateStr: String?
                         let rawDate = fm["created"] ?? fm["date"]
                         if let d = rawDate, d.count >= 10 {
@@ -693,23 +714,6 @@ private struct DailyRow: View {
         .contentShape(Rectangle())
         .onTapGesture { action?() }
     }
-}
-
-private func parseMdFrontmatter(_ content: String) -> [String: String] {
-    var result: [String: String] = [:]
-    var fences = 0
-    for line in content.components(separatedBy: "\n") {
-        if line.hasPrefix("---") { fences += 1; if fences == 2 { break }; continue }
-        guard fences == 1, let colon = line.firstIndex(of: ":") else { continue }
-        let key = String(line[line.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
-        var value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-        if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-           (value.hasPrefix("'") && value.hasSuffix("'")) {
-            value = String(value.dropFirst().dropLast())
-        }
-        if !key.isEmpty { result[key] = value }
-    }
-    return result
 }
 
 // MARK: - New Lore Task Sheet

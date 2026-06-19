@@ -549,16 +549,18 @@ struct TasksTabView: View {
         } else if let template = template {
             // Group by stage in template order. Within a stage, render only
             // root-level tasks; their descendants are rendered indented by
-            // TaskTreeNode.
+            // TaskTreeNode. Bucket the task list by stage once here rather than
+            // filtering the whole list twice per stage on every render.
+            let byStage = Dictionary(grouping: tasks, by: { $0.stage })
             ForEach(template.stages) { s in
-                let rootsInStage = tasks.filter { $0.parentId == nil && $0.stage == s.id }
-                let totalInStage = tasks.filter { $0.stage == s.id }.count
+                let inStage = byStage[s.id] ?? []
+                let rootsInStage = inStage.filter { $0.parentId == nil }
                 if !rootsInStage.isEmpty {
                     let isCurrent = s.id == currentStageId
                     TaskGroupCard(
                         title: s.title,
                         systemImage: isCurrent ? "play.circle.fill" : "circle",
-                        count: totalInStage
+                        count: inStage.count
                     ) {
                         ForEach(rootsInStage) { t in
                             TaskTreeNode(task: t, projectPath: project.path, depth: 0, allTasks: tasks)
@@ -567,8 +569,9 @@ struct TasksTabView: View {
                     }
                 }
             }
-            let unstagedRoots = tasks.filter { $0.parentId == nil && $0.stage == nil }
-            let unstagedTotal = tasks.filter { $0.stage == nil }.count
+            let unstaged = byStage[nil] ?? []
+            let unstagedRoots = unstaged.filter { $0.parentId == nil }
+            let unstagedTotal = unstaged.count
             if !unstagedRoots.isEmpty {
                 TaskGroupCard(title: "Unstaged", systemImage: "tray", count: unstagedTotal) {
                     ForEach(unstagedRoots) { t in
@@ -1237,18 +1240,6 @@ private struct MyQueueView: View {
     let project: Project
     @EnvironmentObject var store: DashboardStore
 
-    private var allTasks: [TaskItem] { store.tasksV2(for: project.path) }
-
-    private var humanTasks: [TaskItem] {
-        allTasks
-            .filter { $0.kanbanColumn.ownerIsHuman && $0.status != .done && $0.status != .skipped }
-            .sorted { urgencyScore($0) > urgencyScore($1) }
-    }
-
-    private var aiTasks: [TaskItem] {
-        allTasks.filter { $0.kanbanColumn == .aiWorking }
-    }
-
     private func urgencyScore(_ t: TaskItem) -> Int {
         switch t.kanbanColumn {
         case .blocked:  return 3
@@ -1259,7 +1250,14 @@ private struct MyQueueView: View {
     }
 
     var body: some View {
-        ScrollView {
+        // Fetch + derive once per render; humanTasks/aiTasks are each read
+        // several times below and previously re-hit the store + re-sorted each time.
+        let all = store.tasksV2(for: project.path)
+        let humanTasks = all
+            .filter { $0.kanbanColumn.ownerIsHuman && $0.status != .done && $0.status != .skipped }
+            .sorted { urgencyScore($0) > urgencyScore($1) }
+        let aiTasks = all.filter { $0.kanbanColumn == .aiWorking }
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if humanTasks.isEmpty && aiTasks.isEmpty {
                     Text("Nothing needs your attention right now.")
@@ -1366,23 +1364,41 @@ private struct QueueRow: View {
 private struct KanbanBoardView: View {
     let project: Project
     @EnvironmentObject var store: DashboardStore
-
-    private var allTasks: [TaskItem] { store.tasksV2(for: project.path) }
+    /// Task ids that have a generated manual-test file. Resolved once per project
+    /// off the render path (one directory listing) instead of a `fileExists`
+    /// disk hit per card on every render.
+    @State private var testIds: Set<String> = []
 
     var body: some View {
+        // Group tasks by column once per render rather than filtering the full
+        // list once per column (was 6× O(n) per body evaluation).
+        let allTasks = store.tasksV2(for: project.path)
+        let byColumn = Dictionary(grouping: allTasks, by: { $0.kanbanColumn })
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 12) {
                 ForEach(KanbanColumn.allCases, id: \.self) { col in
                     KanbanColumnView(
                         column: col,
-                        tasks: allTasks.filter { $0.kanbanColumn == col },
-                        projectPath: project.path
+                        tasks: byColumn[col] ?? [],
+                        projectPath: project.path,
+                        testIds: testIds
                     )
                     .environmentObject(store)
                 }
             }
             .padding(.horizontal, 4)
         }
+        .task(id: project.path) {
+            testIds = await Self.loadTestIds(projectPath: project.path)
+        }
+    }
+
+    static func loadTestIds(projectPath: String) async -> Set<String> {
+        await Task.detached(priority: .utility) {
+            let dir = "\(projectPath)/.devdash/manual-tests"
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+            return Set(files.filter { $0.hasSuffix(".md") }.map { String($0.dropLast(3)) })
+        }.value
     }
 }
 
@@ -1390,6 +1406,7 @@ private struct KanbanColumnView: View {
     let column: KanbanColumn
     let tasks: [TaskItem]
     let projectPath: String
+    let testIds: Set<String>
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
@@ -1412,7 +1429,8 @@ private struct KanbanColumnView: View {
 
             VStack(spacing: 6) {
                 ForEach(tasks.filter { $0.parentId == nil }) { task in
-                    KanbanCard(task: task, projectPath: projectPath, columnColor: columnColor)
+                    KanbanCard(task: task, projectPath: projectPath, columnColor: columnColor,
+                               hasTests: testIds.contains(task.id))
                         .environmentObject(store)
                 }
             }
@@ -1447,6 +1465,7 @@ private struct KanbanCard: View {
     let task: TaskItem
     let projectPath: String
     let columnColor: Color
+    let hasTests: Bool
     @EnvironmentObject var store: DashboardStore
     @State private var hover = false
 
@@ -1478,7 +1497,7 @@ private struct KanbanCard: View {
                     }
                 }
 
-                if FileManager.default.fileExists(atPath: "\(projectPath)/.devdash/manual-tests/\(task.id).md") {
+                if hasTests {
                     Label("Tests ready", systemImage: "checklist")
                         .font(.system(size: 9))
                         .foregroundColor(.purple)

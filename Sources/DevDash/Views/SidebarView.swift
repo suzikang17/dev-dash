@@ -38,7 +38,21 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        // Evaluate the filtered lists and running-port map once per render.
+        // These were recomputed on every access (filteredServices was read 3×,
+        // runningPort was called per row), all on the main thread.
+        let projects = filteredProjects
+        let services = filteredServices
+        let runningPorts: [String: Int] = Dictionary(
+            uniqueKeysWithValues: store.projects.compactMap { p in
+                store.runningPort(for: p.path).map { (p.path, $0) }
+            }
+        )
+        // Group running services under their owning project so a project with
+        // several processes (e.g. cliphy's web + server) shows as one entry with
+        // the processes nested, instead of N flat rows. Computed once per render.
+        let runningGroups = Self.groupRunning(services, projects: store.projects)
+        return VStack(spacing: 0) {
             Picker("Section", selection: $sidebarTab) {
                 ForEach(SidebarTab.allCases) { tab in
                     Image(systemName: tab.systemImage).tag(tab)
@@ -58,7 +72,7 @@ struct SidebarView: View {
                     if !pinned.isEmpty {
                         Section {
                             ForEach(pinned) { proj in
-                                SidebarProjectRow(project: proj, runningPort: store.runningPort(for: proj.path))
+                                SidebarProjectRow(project: proj, runningPort: runningPorts[proj.path])
                                     .tag(Selection.project(path: proj.path))
                             }
                         } header: {
@@ -78,11 +92,22 @@ struct SidebarView: View {
                             .padding(.vertical, 3)
                         }
                     }
-                    if !filteredServices.isEmpty {
+                    if !services.isEmpty {
                         Section {
-                            ForEach(filteredServices) { svc in
-                                SidebarServiceRow(service: svc)
-                                    .tag(Selection.service(serviceID: svc.id))
+                            ForEach(runningGroups) { group in
+                                if group.services.count >= 2, let proj = group.project {
+                                    SidebarRunningGroupHeader(project: proj, services: group.services)
+                                        .tag(Selection.project(path: proj.path))
+                                    ForEach(group.services) { svc in
+                                        SidebarServiceRow(service: svc, nested: true)
+                                            .tag(Selection.service(serviceID: svc.id))
+                                    }
+                                } else {
+                                    ForEach(group.services) { svc in
+                                        SidebarServiceRow(service: svc)
+                                            .tag(Selection.service(serviceID: svc.id))
+                                    }
+                                }
                             }
                         } header: {
                             HStack(spacing: 6) {
@@ -94,14 +119,14 @@ struct SidebarView: View {
                                     .tracking(1.2)
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(verbatim: String(filteredServices.count))
+                                Text(verbatim: String(services.count))
                                     .font(.system(size: 10).monospacedDigit())
                                     .foregroundColor(.secondary)
                             }
                             .padding(.vertical, 3)
                         }
                     }
-                    if filteredServices.isEmpty && pinned.isEmpty {
+                    if services.isEmpty && pinned.isEmpty {
                         Text("Nothing here yet — pin a project from its context menu")
                             .foregroundColor(.secondary)
                             .font(.system(size: 12))
@@ -110,14 +135,14 @@ struct SidebarView: View {
                             .frame(maxWidth: .infinity)
                     }
                 case .projects:
-                    let grouped = Dictionary(grouping: filteredProjects) {
+                    let grouped = Dictionary(grouping: projects) {
                         DevRoots.rootGroup(for: $0.path)
                     }
                     let groupKeys = grouped.keys.sorted()
                     ForEach(groupKeys, id: \.self) { key in
                         Section {
                             ForEach(grouped[key] ?? []) { proj in
-                                SidebarProjectRow(project: proj, runningPort: store.runningPort(for: proj.path))
+                                SidebarProjectRow(project: proj, runningPort: runningPorts[proj.path])
                                     .tag(Selection.project(path: proj.path))
                             }
                         } header: {
@@ -193,6 +218,43 @@ struct SidebarView: View {
             }
         }
     }
+
+    /// A project and the running dev services beneath it, for the RUNNING list.
+    struct RunningGroup: Identifiable {
+        let id: String              // owning project path, or "svc:<id>" if unmatched
+        let project: Project?
+        let services: [Service]     // sorted by port
+    }
+
+    /// Partition running dev services by the project that owns them (longest
+    /// matching project-path prefix). Group order follows first appearance in
+    /// the incoming `services` list so the layout stays stable across renders.
+    static func groupRunning(_ services: [Service], projects: [Project]) -> [RunningGroup] {
+        func owner(of svc: Service) -> Project? {
+            projects
+                .filter { svc.cwd == $0.path || svc.cwd.hasPrefix("\($0.path)/") }
+                .max { $0.path.count < $1.path.count }
+        }
+        var order: [String] = []
+        var byKey: [String: (project: Project?, services: [Service])] = [:]
+        for svc in services {
+            let proj = owner(of: svc)
+            let key = proj?.path ?? "svc:\(svc.id)"
+            if byKey[key] == nil {
+                order.append(key)
+                byKey[key] = (proj, [])
+            }
+            byKey[key]?.services.append(svc)
+        }
+        return order.map { key in
+            let entry = byKey[key]!
+            return RunningGroup(
+                id: key,
+                project: entry.project,
+                services: entry.services.sorted { $0.port < $1.port }
+            )
+        }
+    }
 }
 
 private struct SidebarHeader: View {
@@ -217,9 +279,58 @@ private struct SidebarHeader: View {
     }
 }
 
+/// Header row for a project running 2+ processes. Surfaces the processes' ports
+/// (instead of the git branch) and selects the project when tapped.
+private struct SidebarRunningGroupHeader: View {
+    let project: Project
+    let services: [Service]
+    @EnvironmentObject var store: DashboardStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            PulsingDot()
+            Text(project.name)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Text(services.map { String($0.port) }.joined(separator: " · "))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.green)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 2)
+        .contextMenu {
+            ForEach(services, id: \.id) { svc in
+                Button {
+                    if let url = URL(string: "http://localhost:\(svc.port)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: { Label("Open :\(svc.port) in browser", systemImage: "arrow.up.forward.app") }
+            }
+            Divider()
+            Button(role: .destructive) {
+                Task { await store.stopServer(for: project.path) }
+            } label: { Label("Stop all servers", systemImage: "stop.fill") }
+        }
+    }
+}
+
+/// One running process. When `nested` it sits under a project group header, so
+/// it shows just the short process name (e.g. "server") and drops the branch —
+/// the project + ports already live on the header above it.
 private struct SidebarServiceRow: View {
     let service: Service
+    var nested: Bool = false
     @EnvironmentObject var store: DashboardStore
+
+    /// The trailing component of a "project › process" name, used when nested.
+    private var shortName: String {
+        service.name
+            .components(separatedBy: "›")
+            .last?
+            .trimmingCharacters(in: .whitespaces) ?? service.name
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -231,11 +342,11 @@ private struct SidebarServiceRow: View {
                     .foregroundColor(.green)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(service.name)
+                Text(nested ? shortName : service.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 HStack(spacing: 4) {
-                    if let proj = store.project(for: .service(serviceID: service.id)) {
+                    if !nested, let proj = store.project(for: .service(serviceID: service.id)) {
                         GitRefLabel(path: proj.path, branch: proj.branch)
                     }
                     Text(service.framework)
@@ -250,7 +361,8 @@ private struct SidebarServiceRow: View {
                 .foregroundColor(.secondary)
         }
         .padding(.vertical, 5)
-        .padding(.horizontal, 2)
+        .padding(.leading, nested ? 18 : 2)
+        .padding(.trailing, 2)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if !service.isInfra {
                 Button(role: .destructive) {

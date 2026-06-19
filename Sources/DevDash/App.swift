@@ -10,6 +10,7 @@ struct DevDashApp: App {
         WindowGroup("Dev Dashboard", id: "main") {
             ContentView()
                 .environmentObject(store)
+                .environmentObject(store.serverStore)
                 .frame(minWidth: 900, minHeight: 600)
                 .preferredColorScheme(.dark)
                 .overlay {

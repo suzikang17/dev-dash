@@ -18,10 +18,18 @@ struct AppleAppPreview: View {
 
     private var isIOS: Bool { project.framework == "iOS App" }
     private var isMacApp: Bool { project.framework == "macOS App" }
-    private var isSPM: Bool { FileManager.default.fileExists(atPath: "\(project.path)/Package.swift") }
-    private var hasXcodeProj: Bool {
-        (try? FileManager.default.contentsOfDirectory(atPath: project.path))?
-            .contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) ?? false
+
+    // Filesystem probes, resolved once when the view appears instead of on every
+    // body evaluation — these hit disk (fileExists / contentsOfDirectory) and
+    // were previously recomputed on each render.
+    @State private var isSPM = false
+    @State private var hasXcodeProj = false
+
+    private func detectProjectKind() {
+        let path = project.path
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+        isSPM = FileManager.default.fileExists(atPath: "\(path)/Package.swift")
+        hasXcodeProj = entries.contains { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }
     }
 
     var body: some View {
@@ -36,7 +44,8 @@ struct AppleAppPreview: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { refreshRunning() }
+        .onAppear { detectProjectKind(); refreshRunning() }
+        .onChange(of: project.path) { _, _ in detectProjectKind(); refreshRunning() }
     }
 
     @ViewBuilder

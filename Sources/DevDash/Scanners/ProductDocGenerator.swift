@@ -64,7 +64,8 @@ enum ProductDocGenerator {
         projectPath: String,
         meta: ProjectMeta,
         template: LaunchTemplate?,
-        tasks: [TaskItem]
+        tasks: [TaskItem],
+        status: ProjectStatus? = nil
     ) -> String? {
         let folder = folderPath(for: projectPath)
         // Vendor JS (Alpine + components) into <project>/docs/devdash/.assets/.
@@ -95,7 +96,12 @@ enum ProductDocGenerator {
         // Compose the full page.
         var sections: [String] = []
         for tab in tabs {
-            let body = readSection(tab: tab, projectPath: projectPath)
+            var body = readSection(tab: tab, projectPath: projectPath)
+            // Pin the auto-synthesized snapshot to the top of Overview so the
+            // page reads as a one-pager: snapshot → overview → roadmap → docs.
+            if tab.id == "overview", let status = status {
+                body = renderStatus(status) + body
+            }
             let active = (tab.id == "overview") ? " active" : ""
             sections.append("""
               <section id="tab-\(tab.id)" class="tab-pane\(active)">
@@ -158,6 +164,50 @@ enum ProductDocGenerator {
         } catch {
             return nil
         }
+    }
+
+    // MARK: - Status snapshot
+
+    /// Render the auto-synthesized status snapshot as an HTML block. Deterministic;
+    /// shown at the top of the Overview tab so the page reads as a one-pager.
+    static func renderStatus(_ s: ProjectStatus) -> String {
+        func row(_ label: String, _ value: String) -> String {
+            "<div class=\"status-row\"><span class=\"status-k\">\(escapeHTML(label))</span>"
+            + "<span class=\"status-v\">\(value)</span></div>"
+        }
+        let dash = "—"
+        let lastSession = s.lastSession.map {
+            "\($0.date.map(Self.shortDate) ?? "") \(escapeHTML($0.title))".trimmingCharacters(in: .whitespaces)
+        } ?? dash
+        let decision = s.recentDecision.map { escapeHTML($0.title) } ?? dash
+        let tasks = "\(s.activeTaskCount) active"
+            + (s.blockedTaskCount > 0 ? " · \(s.blockedTaskCount) blocked" : "")
+        let ports = s.runningPorts.isEmpty
+            ? "none"
+            : s.runningPorts.map { ":\($0)" }.joined(separator: " ")
+        let tagline = s.tagline.map(escapeHTML) ?? ""
+
+        return """
+        <div class="status-card">
+          <div class="status-head">
+            <span class="status-title">Snapshot</span>
+            <span class="status-tag">\(tagline)</span>
+          </div>
+          \(row("Last session", lastSession))
+          \(row("Tasks", escapeHTML(tasks)))
+          \(row("Recent decision", decision))
+          \(row("Commits / 7d", escapeHTML("\(s.commits7d)")))
+          \(row("Running", escapeHTML(ports)))
+          \(row("Health", escapeHTML(s.health.label)))
+        </div>
+        """
+    }
+
+    /// "Jun 19" style short date for the snapshot.
+    private static func shortDate(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: d)
     }
 
     // MARK: - Section reading
@@ -1014,6 +1064,16 @@ enum ProductDocGenerator {
       .wrap { max-width: 960px; margin: 0 auto; padding: 24px 28px 80px; }
       h1 { font-size: 22px; margin: 0 0 4px; }
       .crumbs { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+      .status-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+                     margin: 0 0 20px; background: var(--card); }
+      .status-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+      .status-title { font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+                      font-size: 11px; color: var(--muted); }
+      .status-tag { font-size: 12px; color: var(--muted); }
+      .status-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+                    font-size: 13px; }
+      .status-k { color: var(--muted); }
+      .status-v { font-variant-numeric: tabular-nums; text-align: right; }
       nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
                  margin-bottom: 22px; position: sticky; top: 0; background: var(--bg);
                  z-index: 5; padding-top: 4px; }

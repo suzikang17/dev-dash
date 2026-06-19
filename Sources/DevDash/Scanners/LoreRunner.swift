@@ -21,6 +21,40 @@ enum LoreRunner {
         return nil
     }
 
+    // MARK: - lore binary
+
+    /// Locate the `lore` CLI, mirroring `claudePath()`.
+    static func lorePath() async -> String? {
+        let candidates = [
+            NSHomeDirectory() + "/.local/bin/lore",
+            "/usr/local/bin/lore",
+            "/opt/homebrew/bin/lore",
+        ]
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path) { return path }
+        }
+        if let found = await ShellRunner.run("/usr/bin/which", args: ["lore"]) {
+            let t = found.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { return t }
+        }
+        return nil
+    }
+
+    /// Whether lore has been initialized for a project (the `docs/.lore` marker dir exists).
+    static func isInitialized(projectPath: String) -> Bool {
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(
+            atPath: "\(projectPath)/docs/.lore", isDirectory: &isDir)
+        return exists && isDir.boolValue
+    }
+
+    /// Run `lore init docs` from the project root. Returns true if lore is initialized afterward.
+    static func runInit(projectPath: String) async -> (ok: Bool, output: String?) {
+        guard let lore = await lorePath() else { return (false, nil) }
+        let out = await ShellRunner.run(lore, args: ["init", "docs"], cwd: projectPath, timeout: 60)
+        return (isInitialized(projectPath: projectPath), out)
+    }
+
     // MARK: - Schema prompt
 
     /// Extract the `prompt: |` block from a .lore/types/<type>.schema.yaml file.

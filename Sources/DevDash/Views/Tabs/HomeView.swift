@@ -7,16 +7,23 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                let activeWithHeat = store.projects
-                    .filter { (store.heatmaps[$0.path]?.totalCommits ?? 0) > 0 }
-                    .sorted { lhs, rhs in
-                        let lRunning = store.runningPort(for: lhs.path) != nil
-                        let rRunning = store.runningPort(for: rhs.path) != nil
-                        if lRunning != rRunning { return lRunning }
-                        let lc = store.heatmaps[lhs.path]?.totalCommits ?? 0
-                        let rc = store.heatmaps[rhs.path]?.totalCommits ?? 0
-                        return lc > rc
+                // Resolve each project's running port once up front, so the sort
+                // comparator and the cards below do O(1) dict lookups instead of
+                // re-deriving services per comparison (this runs every render).
+                let active = store.projects.filter { (store.heatmaps[$0.path]?.totalCommits ?? 0) > 0 }
+                let runningPorts: [String: Int] = Dictionary(
+                    uniqueKeysWithValues: active.compactMap { p in
+                        store.runningPort(for: p.path).map { (p.path, $0) }
                     }
+                )
+                let activeWithHeat = active.sorted { lhs, rhs in
+                    let lRunning = runningPorts[lhs.path] != nil
+                    let rRunning = runningPorts[rhs.path] != nil
+                    if lRunning != rRunning { return lRunning }
+                    let lc = store.heatmaps[lhs.path]?.totalCommits ?? 0
+                    let rc = store.heatmaps[rhs.path]?.totalCommits ?? 0
+                    return lc > rc
+                }
                 if !activeWithHeat.isEmpty {
                     Section(label: "Active Projects", systemImage: "square.grid.3x3") {
                         ScrollView(.horizontal, showsIndicators: false) {

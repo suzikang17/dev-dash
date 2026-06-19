@@ -17,6 +17,9 @@ struct TaskDetailSheet: View {
     @State private var stage: String = ""
     @State private var status: TaskStatus = .open
     @State private var loaded = false
+    /// Whether this task has a generated manual-test file. Resolved on load so
+    /// `artifactsSection` doesn't hit disk (`fileExists`) on every render.
+    @State private var hasTests = false
     @FocusState private var titleFocused: Bool
 
     private var task: TaskItem? {
@@ -419,7 +422,6 @@ struct TaskDetailSheet: View {
     @ViewBuilder
     private var artifactsSection: some View {
         let testsPath = "\(projectPath)/.devdash/manual-tests/\(task?.id ?? "").md"
-        let hasTests = FileManager.default.fileExists(atPath: testsPath)
 
         if hasTests {
             VStack(alignment: .leading, spacing: 6) {
@@ -509,6 +511,8 @@ struct TaskDetailSheet: View {
         stage = t.stage ?? ""
         status = t.status
         loaded = true
+        hasTests = FileManager.default.fileExists(
+            atPath: "\(projectPath)/.devdash/manual-tests/\(t.id).md")
     }
 
     private func saveAndDismiss() {

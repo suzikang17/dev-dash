@@ -3,7 +3,17 @@ import SwiftUI
 
 @MainActor
 final class DashboardStore: ObservableObject {
-    @Published var services: [Service] = []
+    @Published var services: [Service] = [] {
+        didSet {
+            _devServices = services.filter { !$0.isInfra }
+            _infraServices = services.filter { $0.isInfra }
+        }
+    }
+    /// Cached partitions of `services`, recomputed only when `services` changes
+    /// (not on every access). `devServices`/`infraServices` are read inside view
+    /// bodies and sort comparators, so re-filtering on each call was costly.
+    private var _devServices: [Service] = []
+    private var _infraServices: [Service] = []
     @Published var projects: [Project] = []
     @Published var sessions: [ClaudeSession] = []
     @Published var tasksByProject: [ProjectTasks] = []
@@ -83,6 +93,10 @@ final class DashboardStore: ObservableObject {
     @Published var gitStatuses: [String: GitStatus] = [:]
     @Published var gitOpInProgress: Set<String> = []
 
+    // Embedded terminal drawer (VS Code–style, one live shell per project).
+    @Published var terminalOpen: Bool = false
+    let terminals = TerminalSessionStore()
+
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
     }
@@ -145,10 +159,11 @@ final class DashboardStore: ObservableObject {
         }
         if let resolved { selection = resolved }
     }
-    @Published var startingProjects: Set<String> = []
-    @Published var startErrors: [String: String] = [:]
-    @Published var serverLogs: [String: [String]] = [:]
-    @Published var managedRunning: Set<String> = []
+    /// Dev-server management state lives in its own store so high-frequency log
+    /// streaming doesn't re-render every view bound to DashboardStore. Injected
+    /// separately as an `@EnvironmentObject` (see App.swift); the action methods
+    /// (`startServer`/`stopServer`) stay here and write through to it.
+    let serverStore = ServerStore()
 
     enum HealthFilter: Hashable {
         case all
@@ -225,8 +240,8 @@ final class DashboardStore: ObservableObject {
         refreshTask = nil
     }
 
-    var devServices: [Service] { services.filter { !$0.isInfra } }
-    var infraServices: [Service] { services.filter { $0.isInfra } }
+    var devServices: [Service] { _devServices }
+    var infraServices: [Service] { _infraServices }
     var activeProjects: [Project] { projects.filter { $0.health == .active } }
 
     var filteredProjects: [Project] {
@@ -240,6 +255,21 @@ final class DashboardStore: ObservableObject {
         primaryService(for: projectPath)?.port
     }
 
+    /// Synthesize the current status snapshot for a project. Gathers already-loaded
+    /// store data + lore reads and hands them to the pure synthesizer. Returns nil
+    /// if `projectPath` isn't a known project.
+    func projectStatus(for projectPath: String) -> ProjectStatus? {
+        guard let project = projects.first(where: { $0.path == projectPath }) else { return nil }
+        return ProjectStatusSynthesizer.synthesize(
+            project: project,
+            meta: meta(for: projectPath),
+            tasks: tasksV2(for: projectPath),
+            heatmap: heatmaps[projectPath],
+            services: services(for: projectPath),
+            now: Date()
+        )
+    }
+
     /// All running dev services that belong to a project, sorted by port.
     func services(for projectPath: String) -> [Service] {
         devServices
@@ -250,9 +280,17 @@ final class DashboardStore: ObservableObject {
     private let primaryServiceKey = "devdash.primaryServiceByProject"
 
     /// User-pinned primary port per project (overrides framework heuristic).
+    /// Backed by an in-memory cache: the getter is hit inside `primaryService`,
+    /// which runs inside view bodies and sort comparators, so reading
+    /// `UserDefaults` on every access was a real cost. Loaded lazily once.
+    private lazy var _primaryServiceMap: [String: Int] =
+        (UserDefaults.standard.dictionary(forKey: primaryServiceKey) as? [String: Int]) ?? [:]
     private var primaryServiceMap: [String: Int] {
-        get { (UserDefaults.standard.dictionary(forKey: primaryServiceKey) as? [String: Int]) ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: primaryServiceKey) }
+        get { _primaryServiceMap }
+        set {
+            _primaryServiceMap = newValue
+            UserDefaults.standard.set(newValue, forKey: primaryServiceKey)
+        }
     }
 
     /// Pick the "primary" service for a project — preferring user override,
@@ -594,7 +632,8 @@ final class DashboardStore: ObservableObject {
         // one, the Roadmap tab just shows an "apply a template" prompt.
         _ = ProductDocGenerator.generate(
             projectName: name, projectPath: projectPath,
-            meta: meta, template: template, tasks: tasks
+            meta: meta, template: template, tasks: tasks,
+            status: projectStatus(for: projectPath)
         )
     }
 
@@ -1393,13 +1432,6 @@ final class DashboardStore: ObservableObject {
         }
     }
 
-    func isStarting(_ projectPath: String) -> Bool {
-        startingProjects.contains(projectPath)
-    }
-
-    func startError(_ projectPath: String) -> String? {
-        startErrors[projectPath]
-    }
 
     // URL-style host:port patterns (localhost, loopback, any-interface, IPv6 any)
     private static let portSnifferURL = try! NSRegularExpression(
@@ -1411,18 +1443,18 @@ final class DashboardStore: ObservableObject {
     )
 
     func startServer(for projectPath: String) async {
-        startErrors[projectPath] = nil
-        startingProjects.insert(projectPath)
-        serverLogs[projectPath] = []
-        managedRunning.insert(projectPath)
+        serverStore.startErrors[projectPath] = nil
+        serverStore.startingProjects.insert(projectPath)
+        serverStore.serverLogs[projectPath] = []
+        serverStore.managedRunning.insert(projectPath)
 
         let lineHandler: @Sendable (String) -> Void = { [weak self] line in
             Task { @MainActor in
                 guard let self = self else { return }
-                var lines = self.serverLogs[projectPath] ?? []
+                var lines = self.serverStore.serverLogs[projectPath] ?? []
                 lines.append(line)
                 if lines.count > 500 { lines.removeFirst(lines.count - 500) }
-                self.serverLogs[projectPath] = lines
+                self.serverStore.serverLogs[projectPath] = lines
 
                 // Auto-detect port and trigger an immediate refresh so it shows
                 // in the sidebar without waiting for the next 15s scan tick.
@@ -1443,16 +1475,16 @@ final class DashboardStore: ObservableObject {
 
         do {
             _ = try await ServerRunner.shared.start(projectPath: projectPath, onLine: lineHandler)
-            startingProjects.remove(projectPath)
+            serverStore.startingProjects.remove(projectPath)
             // Backup refreshes in case nothing matched the regex
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             await refreshAll()
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await refreshAll()
         } catch {
-            startErrors[projectPath] = error.localizedDescription
-            startingProjects.remove(projectPath)
-            managedRunning.remove(projectPath)
+            serverStore.startErrors[projectPath] = error.localizedDescription
+            serverStore.startingProjects.remove(projectPath)
+            serverStore.managedRunning.remove(projectPath)
         }
     }
 
@@ -1472,16 +1504,16 @@ final class DashboardStore: ObservableObject {
                 ServerStateStore.remove(projectPath: path)
                 continue
             }
-            managedRunning.insert(path)
-            if serverLogs[path] == nil { serverLogs[path] = [] }
+            serverStore.managedRunning.insert(path)
+            if serverStore.serverLogs[path] == nil { serverStore.serverLogs[path] = [] }
 
             let lineHandler: @Sendable (String) -> Void = { [weak self] line in
                 Task { @MainActor in
                     guard let self = self else { return }
-                    var lines = self.serverLogs[path] ?? []
+                    var lines = self.serverStore.serverLogs[path] ?? []
                     lines.append(line)
                     if lines.count > 500 { lines.removeFirst(lines.count - 500) }
-                    self.serverLogs[path] = lines
+                    self.serverStore.serverLogs[path] = lines
                 }
             }
             await ServerRunner.shared.reattach(projectPath: path, entry: entry, onLine: lineHandler)
@@ -1504,14 +1536,11 @@ final class DashboardStore: ObservableObject {
         for svc in services(for: projectPath) {
             await ServerRunner.shared.stop(pid: svc.pid)
         }
-        managedRunning.remove(projectPath)
+        serverStore.managedRunning.remove(projectPath)
         try? await Task.sleep(nanoseconds: 800_000_000)
         await refreshAll()
     }
 
-    func logs(for projectPath: String) -> [String] {
-        serverLogs[projectPath] ?? []
-    }
 
     // MARK: - Git
 

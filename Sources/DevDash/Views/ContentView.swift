@@ -55,6 +55,14 @@ struct ContentView: View {
                     TimeAgoLabel()
                 }
                 Button {
+                    store.terminalOpen.toggle()
+                } label: {
+                    Image(systemName: "terminal")
+                }
+                .keyboardShortcut("`", modifiers: .command)
+                .disabled(store.project(for: store.selection) == nil)
+                .help("Toggle terminal (⌘`)")
+                Button {
                     Task { await store.refreshAll(); await store.refreshTodos() }
                 } label: {
                     Image(systemName: "arrow.clockwise")

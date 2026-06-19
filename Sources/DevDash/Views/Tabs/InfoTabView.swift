@@ -3,6 +3,7 @@ import AppKit
 
 struct InfoTabView: View {
     @EnvironmentObject var store: DashboardStore
+    @EnvironmentObject var serverStore: ServerStore
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -58,7 +59,7 @@ struct InfoTabView: View {
                                 Label("Start dev server", systemImage: "play.fill")
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(store.isStarting(project.path))
+                            .disabled(serverStore.isStarting(project.path))
                         } else {
                             Button(role: .destructive) {
                                 Task { await store.stopServer(for: project.path) }
@@ -85,7 +86,7 @@ struct InfoTabView: View {
                         }
                     }
 
-                    if let err = store.startError(project.path) {
+                    if let err = serverStore.startError(project.path) {
                         Text(err)
                             .font(.caption)
                             .foregroundColor(.red)

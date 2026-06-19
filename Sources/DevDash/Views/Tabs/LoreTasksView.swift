@@ -85,6 +85,7 @@ struct LoreTasksView: View {
     @State private var ideas: [LoreIdeaItem] = []
     @State private var selectedIdea: LoreIdeaItem? = nil
     @State private var generatingIdeaFile: String? = nil
+    @State private var loreInitialized = true
 
     private var filtered: [LoreTaskItem] {
         guard !search.isEmpty else { return tasks }
@@ -116,6 +117,23 @@ struct LoreTasksView: View {
     }
 
     var body: some View {
+        Group {
+            if loreInitialized {
+                mainBody
+            } else {
+                LoreInitView(projectPath: projectPath) { refreshLoreState() }
+            }
+        }
+        .onAppear { refreshLoreState() }
+        .onChange(of: projectPath) { _, _ in refreshLoreState() }
+    }
+
+    private func refreshLoreState() {
+        // mainBody's own .onAppear runs reload() when it enters the hierarchy.
+        loreInitialized = LoreRunner.isInitialized(projectPath: projectPath)
+    }
+
+    private var mainBody: some View {
         HSplitView {
             VStack(spacing: 0) {
                 Picker("", selection: $viewMode) {
