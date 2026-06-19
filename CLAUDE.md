@@ -10,16 +10,17 @@ Native macOS SwiftUI dashboard app for project/task management, devlogs, and AI-
   - `Views/` — shared views and sheets
 - `DevDash.app/` — app bundle (binary gitignored, `Info.plist` + `MacOS/.gitkeep` committed)
 - `docs/` — project docs managed by lore
-  - `docs/.lore/types/` — schema files (devlog, task, decision, idea)
+  - `docs/.lore/` — marker dir; schemas come from the lore package (run `lore eject <type>` to customize one locally)
   - `docs/devlog/` — session logs (day 1 = 2026-06-18)
   - `docs/tasks/` — task files
   - `docs/decisions/` — ADRs
+  - `docs/ideas/` — idea backlog (promote to tasks)
 
 ## Tech stack
 
 - Swift / SwiftUI, macOS 14+
 - No external Swift dependencies (stdlib + AppKit/WebKit only)
-- Node.js CLI: `~/dev/lore` (`@lore/core` + `@lore/cli`) for doc indexing
+- `lore` CLI on PATH (symlinked from `~/dev/lore/packages/cli/bin/lore.js` → `~/.local/bin/lore`) for doc indexing
 - `claude -p` subprocess for AI generation (via `LoreRunner.swift`)
 
 ## Commands
@@ -27,7 +28,8 @@ Native macOS SwiftUI dashboard app for project/task management, devlogs, and AI-
 - `bash run.sh` — debug build + codesign + launch
 - `bash dist.sh` — release build, packages `DevDash-YYYYMMDD.zip`
 - `swift build` — build only
-- `node ~/dev/lore/packages/cli/dist/cli/index.js reindex <type>` — reindex a lore doc type (run from repo root)
+- `lore reindex <type>` — reindex a lore doc type (run from repo root)
+- `lore add <type> --title "..."` — create a doc; `lore eject <type>` — make a local schema override
 
 ## Conventions
 
@@ -40,5 +42,5 @@ Native macOS SwiftUI dashboard app for project/task management, devlogs, and AI-
 ## Lore doc flow
 
 - Log a devlog entry in `docs/devlog/` after each session
-- Run `node ~/dev/lore/packages/cli/dist/cli/index.js reindex devlog` after adding entries
+- Run `lore reindex devlog` after adding entries
 - Add decisions to `docs/decisions/` when a tool/pattern is chosen
