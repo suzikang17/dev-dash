@@ -1,0 +1,39 @@
+name: task
+dir: tasks
+heading: Tasks
+id: { strategy: sequential, pad: 4 }
+body: free
+groupBy: { field: status, order: [open, in_progress, blocked, done, skipped] }
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: status, type: enum, values: [open, in_progress, blocked, done, skipped], required: true }
+  - { name: owner, type: enum, values: [none, human, ai] }
+  - { name: ai_run, type: boolean }
+  - { name: category, type: enum, values: [engineering, design, qa, ops, distribution, content, marketing, research, other] }
+  - { name: priority, type: enum, values: [high, medium, low] }
+  - { name: effort, type: enum, values: [quick, small, medium, large] }
+  - { name: notes, type: string }
+  - { name: platform, type: string }
+  - { name: spec, type: reference, target: spec }
+  - { name: plan, type: reference, target: plan }
+  - { name: created, type: date }
+  - { name: completed, type: date }
+index:
+  - { header: "#", source: id }
+  - { header: Task, source: title, link: true }
+  - { header: Status, source: status }
+  - { header: Owner, source: owner }
+  - { header: Category, source: category }
+  - { header: Priority, source: priority }
+  - { header: Completed, source: completed, format: date }
+prompt: |
+  You are writing a task doc for a software project. Given a title, produce the markdown body only (no frontmatter).
+
+  Structure:
+  - Start with one sentence describing what needs to be done and why it matters.
+  - ## Acceptance criteria — a checklist of 2-5 concrete, verifiable outcomes.
+  - ## Notes — (optional) known blockers, dependencies, or context worth capturing.
+
+  Keep it tight. No padding. If you don't know the why or blockers, omit those sections.
+
+  Note: the `## Status history` section at the bottom of task files is machine-written by dev-dash and the lore CLI. Never write or edit it manually.

@@ -1,0 +1,29 @@
+name: decision
+dir: decisions
+heading: Decisions Log
+id: { strategy: sequential, pad: 4 }
+body: sections
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: date, type: date, required: true }
+  - { name: category, type: string }
+  - { name: revisit, type: boolean }
+sections:
+  - Why this choice
+  - Options considered
+  - Tradeoffs
+index:
+  - { header: "#", source: id }
+  - { header: Date, source: date, format: date }
+  - { header: Decision, source: title, link: true }
+  - { header: Category, source: category }
+  - { header: "Revisit?", source: revisit, format: yesno }
+prompt: |
+  You are writing an architectural decision record (ADR) for a software project. Given a title, produce the markdown body only (no frontmatter).
+
+  Structure:
+  - ## Why this choice — the motivation; what problem this solves or constraint it satisfies.
+  - ## Options considered — a short list of alternatives that were evaluated.
+  - ## Tradeoffs — what you gain and what you give up with this choice.
+
+  Be specific. Name the actual tools, patterns, or approaches. Avoid generic filler.

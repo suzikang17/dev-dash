@@ -1,0 +1,34 @@
+name: devlog
+dir: devlog
+heading: Devlog
+id: { strategy: dated }
+body: free
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: date, type: date, required: true }
+  - { name: day, type: number }
+  - { name: phase, type: string }
+index:
+  - { header: Day, source: day }
+  - { header: Date, source: date, format: date }
+  - { header: Entry, source: title, link: true }
+  - { header: Phase, source: phase }
+prompt: |
+  You are writing a dev session log for a software project. Given a title/date, produce the markdown body only (no frontmatter).
+
+  Sections in order (omit any that are empty):
+  - One-line TL;DR at the very top (bold).
+  - ## What got done — bullet list of concrete things completed.
+  - ## Decisions — architectural or tooling choices made and why.
+  - ## Issues — bugs hit, gotchas discovered, dead ends.
+  - ## What to remember — non-obvious things a future reader needs to know.
+  - --- (horizontal rule)
+  - ## Commits — list of commit hashes and messages from this session.
+  - ## Task details — per-task notes if relevant.
+  - ## Tomorrow's plan — (optional) what's next.
+
+  Rules:
+  - Write in past tense.
+  - Be specific about what changed and why.
+  - No "What went well" section.
+  - Omit empty sections entirely — don't include a header with no content.
