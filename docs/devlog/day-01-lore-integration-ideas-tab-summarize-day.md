@@ -1,7 +1,7 @@
 ---
-title: "Day 63 — dev-dash: lore integration, Ideas tab, summarize-day"
+title: "Day 1 — dev-dash: lore integration, Ideas tab, summarize-day"
 date: "2026-06-18"
-day: 63
+day: 1
 phase: Tooling
 ---
 
