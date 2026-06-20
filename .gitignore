@@ -19,3 +19,4 @@ DevDash.app/Contents/MacOS/DevDash
 DevDash.app/Contents/Resources/
 DevDash.app/Contents/_CodeSignature/
 DevDash-*.zip
+**/.index.json

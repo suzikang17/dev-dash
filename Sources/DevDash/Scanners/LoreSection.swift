@@ -21,7 +21,9 @@ struct LoreSection: Hashable {
                     bodyIsFree: true,
                     requiredSections: [],
                     newDocFields: ["status=raw"]),
-        LoreSection(dir: "notes", loreType: "note", label: "Notes",
+        // Label is "Knowledge" (not "Notes") to avoid colliding with the existing
+        // outliner Notes tab (sections/notes.html, which the Blocks view reads).
+        LoreSection(dir: "notes", loreType: "note", label: "Knowledge",
                     bodyIsFree: true,
                     requiredSections: [],
                     newDocFields: []),   // local `note` type (docs/.lore/types/note.schema.yaml)

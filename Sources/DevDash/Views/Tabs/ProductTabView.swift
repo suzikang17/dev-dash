@@ -192,7 +192,6 @@ struct ProductTabView: View {
 
     /// Bridge handler: write the edited HTML back to its source file.
     /// Doesn't trigger a regen — that would clobber the cursor mid-edit.
-    /// Refreshes the queryable manifest so cross-doc filters stay current.
     private func saveSection(projectPath: String, rel: String, html: String) {
         let docsRoot = "\(projectPath)/docs/devdash"
         guard let target = containedPath("\(docsRoot)/\(rel)", within: docsRoot) else { return }
