@@ -13,6 +13,9 @@ struct ProductTabView: View {
     /// Whether the generated index.html exists. Cached so `content` doesn't hit
     /// disk (`fileExists`) on every render; updated whenever `regen` runs.
     @State private var docExists: Bool = false
+    /// Single-flights lore create/delete so rapid clicks can't race the lore CLI's
+    /// sequential-id allocation (which would clobber freshly-created docs).
+    @State private var loreMutating = false
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -192,18 +195,24 @@ struct ProductTabView: View {
         guard let existing = try? String(contentsOfFile: absPath, encoding: .utf8) else {
             return (Markdown.bodyHTML(markdownBody), nil)
         }
+        // Normalize away a BOM + CRLF before fence detection — otherwise the first
+        // line reads "\u{FEFF}---" or "---\r", the exact-match fence check misses,
+        // and the frontmatter is silently dropped on write (data loss).
+        let normalized = existing
+            .replacingOccurrences(of: "\u{FEFF}", with: "")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
         // Preserve the leading `--- … ---` frontmatter verbatim; swap only the body.
-        // Detect fences by EXACT trimmed "---" (tolerate a leading blank/BOM line),
-        // and if frontmatter opens but never closes, refuse to write rather than
-        // silently drop it (which would corrupt the doc).
-        let lines = existing.components(separatedBy: "\n")
+        let lines = normalized.components(separatedBy: "\n")
         var frontmatter = ""
         if let open = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }),
            lines[..<open].allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
             guard let close = lines[(open + 1)...].firstIndex(where: {
                 $0.trimmingCharacters(in: .whitespaces) == "---"
             }) else {
-                return (Markdown.bodyHTML(markdownBody), nil)   // unterminated frontmatter — abort
+                // Frontmatter opens but never closes — refuse to write (would corrupt)
+                // AND surface it, so the green "saved" flash doesn't imply a phantom save.
+                return (Markdown.bodyHTML(markdownBody), "not saved: frontmatter fences (---) are malformed")
             }
             frontmatter = lines[0...close].joined(separator: "\n")
         }
@@ -326,7 +335,9 @@ struct ProductTabView: View {
     /// required fields (the doc would fail validation), so we pass them via
     /// `--field`: per-type `newDocFields` plus `date` for `sections` schemas.
     private func createLoreDoc(project: Project, loreType: String) {
+        guard !loreMutating else { return }
         guard let section = LoreSection.all.first(where: { $0.loreType == loreType }) else { return }
+        loreMutating = true
         let dir = "\(project.path)/docs/\(section.dir)"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         var args = ["add", loreType, "--title", "Untitled"]
@@ -339,19 +350,21 @@ struct ProductTabView: View {
         Task {
             _ = await ShellRunner.run(bin, args: args, cwd: project.path)
             _ = await ShellRunner.run(bin, args: ["reindex", loreType], cwd: project.path)
-            await MainActor.run { regen(project: project) }
+            await MainActor.run { regen(project: project); loreMutating = false }
         }
     }
 
     /// Delete a lore doc from the living document, then reindex + regen.
     private func deleteLoreDoc(project: Project, absPath: String) {
+        guard !loreMutating else { return }
+        loreMutating = true
         try? FileManager.default.removeItem(atPath: absPath)
         let dir = ((absPath as NSString).deletingLastPathComponent as NSString).lastPathComponent
         let loreType = LoreSection.byDir(dir)?.loreType ?? dir
         let bin = Self.loreBinary
         Task {
             _ = await ShellRunner.run(bin, args: ["reindex", loreType], cwd: project.path)
-            await MainActor.run { regen(project: project) }
+            await MainActor.run { regen(project: project); loreMutating = false }
         }
     }
 

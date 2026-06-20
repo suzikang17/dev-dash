@@ -1052,10 +1052,18 @@ struct ProductWebView: NSViewRepresentable {
 
       // Keyboard shortcuts inside the living document.
       document.addEventListener('keydown', function(e) {
-        // ⌘N → "+ new" in the currently-visible section.
-        if ((e.metaKey || e.ctrlKey) && (e.key === 'n' || e.key === 'N')) {
+        // ⌘⌥N → "+ new" in the active section. ⌥ avoids the macOS ⌘N "New Window"
+        // key-equivalent (which the menu would swallow). e.code is used because ⌥
+        // rewrites e.key on macOS.
+        if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyN') {
+          e.preventDefault();
+          // Creating triggers a regen/reload — flush any open dirty editor first so
+          // an unsaved edit elsewhere isn't discarded.
+          document.querySelectorAll('.lore-card .lore-src').forEach(function(s) {
+            if (s.style.display !== 'none' && s.classList.contains('is-dirty')) save(s);
+          });
           var newBtn = document.querySelector('.tab-pane.active .lore-new');
-          if (newBtn) { e.preventDefault(); newBtn.click(); }
+          if (newBtn) newBtn.click();
           return;
         }
         // Esc → finish editing the open card (collapse the textarea).

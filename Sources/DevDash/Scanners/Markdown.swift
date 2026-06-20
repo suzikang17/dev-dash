@@ -141,22 +141,27 @@ enum Markdown {
     // MARK: - Inline
 
     private static func processInline(_ s: String) -> String {
-        var t = s
+        // Escape ALL literal text up front so raw HTML in the source (e.g.
+        // `<script>` or `<img onerror=…>`) can't inject into the rendered page.
+        // Markdown markers (* [ ] ( ) `) survive escaping, so the inline regexes
+        // below still match; their captured groups are already escaped, so we must
+        // NOT re-escape them.
+        var t = s.htmlEscaped
         // Inline code (do first so its content isn't further parsed)
         t = replace(t, pattern: "`([^`]+)`") { groups in
-            "<code>\(groups[1].htmlEscaped)</code>"
+            "<code>\(groups[1])</code>"
         }
         // Links [text](url)
         t = replace(t, pattern: #"\[([^\]]+)\]\(([^\)]+)\)"#) { groups in
-            "<a href=\"\(escapeAttr(groups[2]))\">\(groups[1].htmlEscaped)</a>"
+            "<a href=\"\(escapeAttr(groups[2]))\">\(groups[1])</a>"
         }
         // Bold **
         t = replace(t, pattern: #"\*\*([^*]+)\*\*"#) { groups in
-            "<strong>\(groups[1].htmlEscaped)</strong>"
+            "<strong>\(groups[1])</strong>"
         }
         // Italic *
         t = replace(t, pattern: #"(?<!\*)\*([^*\n]+)\*(?!\*)"#) { groups in
-            "<em>\(groups[1].htmlEscaped)</em>"
+            "<em>\(groups[1])</em>"
         }
         return t
     }

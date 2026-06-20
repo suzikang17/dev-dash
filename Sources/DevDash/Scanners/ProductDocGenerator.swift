@@ -372,7 +372,7 @@ enum ProductDocGenerator {
                 </span>
               </div>
               <div class="lore-body">\(Markdown.bodyHTML(bodyMd))</div>
-              <textarea class="lore-src" style="display:none">\(escapeHTML(bodyMd))</textarea>
+              <textarea class="lore-src" style="display:none">\n\(escapeHTML(bodyMd))</textarea>
             </div>
             """)
         }
@@ -383,13 +383,17 @@ enum ProductDocGenerator {
     }
 
     /// Drop a leading `--- … ---` frontmatter block so only the body is rendered.
+    /// Uses the SAME exact-fence rule as `ProductTabView.saveLoreDoc` (trimmed
+    /// `== "---"`, tolerating leading blanks) so the textarea body and the saved
+    /// body agree on where frontmatter ends — a loose `hasPrefix` mismatch could
+    /// otherwise round-trip a `---`-prefixed body line incorrectly.
     private static func stripFrontmatter(_ s: String) -> String {
         let lines = s.components(separatedBy: "\n")
-        guard lines.first?.hasPrefix("---") == true else { return s }
-        var i = 1
-        while i < lines.count, !lines[i].hasPrefix("---") { i += 1 }
-        if i < lines.count { i += 1 }   // skip the closing fence
-        return lines[i...].joined(separator: "\n")
+        guard let open = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }),
+              lines[..<open].allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }),
+              let close = lines[(open + 1)...].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" })
+        else { return s }
+        return lines[(close + 1)...].joined(separator: "\n")
     }
 
     // MARK: - Section reading
