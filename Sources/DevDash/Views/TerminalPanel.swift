@@ -44,7 +44,7 @@ struct TerminalPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: DSSpace.sm) {
+        let row = HStack(spacing: DSSpace.sm) {
             titleRegion
             Spacer(minLength: DSSpace.sm)
             ForEach(quickCommands, id: \.label) { cmd in
@@ -63,6 +63,22 @@ struct TerminalPanel: View {
         .padding(.horizontal, DSSpace.sm)
         .padding(.vertical, DSSpace.xs)
         .background(DSColor.cardBg)
+        .contentShape(Rectangle())   // the whole header row is the drag handle
+
+        return Group {
+            if let move = moveHandler {
+                // Drag anywhere in the header (title + empty space) to move the panel.
+                // Buttons still work: .gesture lets the child tap gestures win, and only a
+                // real drag arms the move. .global avoids coordinate feedback as it moves.
+                row.gesture(
+                    DragGesture(coordinateSpace: .global)
+                        .onChanged { move.onChanged($0.translation) }
+                        .onEnded { _ in move.onEnded() }
+                )
+            } else {
+                row
+            }
+        }
     }
 
     /// Find-in-terminal bar (Feature E). Visible only while searching; closing
@@ -104,26 +120,13 @@ struct TerminalPanel: View {
     }
 
     private var titleRegion: some View {
-        let region = HStack(spacing: DSSpace.xs) {
+        HStack(spacing: DSSpace.xs) {
             Image(systemName: "terminal").font(DSFont.micro).foregroundColor(.secondary)
             Text(project.name).font(DSFont.micro.weight(.semibold))
             Text(abbreviatedPath)
                 .font(DSFont.mono(.caption2))
                 .foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.middle)
-        }
-        .contentShape(Rectangle())
-
-        return Group {
-            if let move = moveHandler {
-                region.gesture(
-                    DragGesture()
-                        .onChanged { move.onChanged($0.translation) }
-                        .onEnded { _ in move.onEnded() }
-                )
-            } else {
-                region
-            }
         }
     }
 
@@ -356,7 +359,9 @@ struct FloatingTerminalPanel: View {
             .contentShape(Rectangle())
             .hoverCursor(.crosshair)
             .gesture(
-                DragGesture()
+                // .global: the bottom-trailing corner moves away as the panel grows,
+                // so a .local translation under-counts each frame and feels choppy.
+                DragGesture(coordinateSpace: .global)
                     .onChanged { v in
                         let start = resizeStart ?? frame.size
                         if resizeStart == nil { resizeStart = start }
