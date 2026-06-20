@@ -151,9 +151,10 @@ enum Markdown {
         t = replace(t, pattern: "`([^`]+)`") { groups in
             "<code>\(groups[1])</code>"
         }
-        // Links [text](url)
+        // Links [text](url) — escapeAttr handles quotes/<; also gate the scheme.
         t = replace(t, pattern: #"\[([^\]]+)\]\(([^\)]+)\)"#) { groups in
-            "<a href=\"\(escapeAttr(groups[2]))\">\(groups[1])</a>"
+            let href = Self.safeHref(escapeAttr(groups[2]))
+            return href.isEmpty ? groups[1] : "<a href=\"\(href)\">\(groups[1])</a>"
         }
         // Bold **
         t = replace(t, pattern: #"\*\*([^*]+)\*\*"#) { groups in
@@ -164,6 +165,16 @@ enum Markdown {
             "<em>\(groups[1])</em>"
         }
         return t
+    }
+
+    /// Reject script-y URL schemes in links (`javascript:`/`data:`/`vbscript:`).
+    /// Input is already attribute-escaped; this only gates the scheme.
+    private static func safeHref(_ escapedURL: String) -> String {
+        let lowered = escapedURL.trimmingCharacters(in: .whitespaces).lowercased()
+        if lowered.hasPrefix("javascript:") || lowered.hasPrefix("data:") || lowered.hasPrefix("vbscript:") {
+            return ""
+        }
+        return escapedURL
     }
 
     private static func headingPrefix(_ s: String) -> (Int, String)? {

@@ -36,27 +36,28 @@ private func markdownToHTML(_ md: String) -> String {
     <!DOCTYPE html><html><head><meta charset="utf-8">
     <style>
     *{box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;font-size:13px;line-height:1.65;color:#d4d4d4;background:transparent;margin:0;padding:12px 16px}
-    h1{font-size:1.45em;font-weight:700;margin:0.9em 0 0.35em;color:#f0f0f0;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:.2em}
-    h2{font-size:1.2em;font-weight:600;margin:0.85em 0 0.3em;color:#f0f0f0}
-    h3{font-size:1.05em;font-weight:600;margin:0.75em 0 0.25em;color:#e0e0e0}
-    h4{font-size:.95em;font-weight:600;margin:0.65em 0 0.2em;color:#e0e0e0}
+    :root{color-scheme:light dark}
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;font-size:13px;line-height:1.65;color:-apple-system-text;background:transparent;margin:0;padding:12px 16px}
+    h1,h2,h3,h4{line-height:1.3}
+    h1{font-size:1.45em;font-weight:700;margin:0.9em 0 0.35em;border-bottom:1px solid color-mix(in srgb,currentColor 14%,transparent);padding-bottom:.2em}
+    h2{font-size:1.2em;font-weight:600;margin:0.85em 0 0.3em}
+    h3{font-size:1.05em;font-weight:600;margin:0.75em 0 0.25em}
+    h4{font-size:.95em;font-weight:600;margin:0.65em 0 0.2em}
     p{margin:.45em 0}
     ul,ol{margin:.35em 0;padding-left:1.5em}
     li{margin:.15em 0}
     li>p{margin:.1em 0}
-    blockquote{margin:.5em 0;padding:.3em .8em;border-left:3px solid rgba(255,255,255,.2);color:#aaa;background:rgba(255,255,255,.03);border-radius:0 4px 4px 0}
-    code{font-family:"SF Mono",Monaco,Menlo,Consolas,monospace;font-size:.88em;background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px;color:#e0c080}
-    pre{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:10px 14px;overflow-x:auto;margin:.6em 0}
-    pre code{background:none;padding:0;color:#d4d4d4;font-size:.9em}
-    hr{border:none;border-top:1px solid rgba(255,255,255,.1);margin:.8em 0}
-    a{color:#60a5fa;text-decoration:none}
+    blockquote{margin:.5em 0;padding:.3em .8em;color:color-mix(in srgb,currentColor 70%,transparent);background:color-mix(in srgb,currentColor 6%,transparent);border-radius:6px}
+    code{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.88em;background:color-mix(in srgb,currentColor 10%,transparent);padding:1px 5px;border-radius:3px}
+    pre{background:color-mix(in srgb,currentColor 8%,transparent);border-radius:6px;padding:10px 14px;overflow-x:auto;margin:.6em 0}
+    pre code{background:none;padding:0;font-size:.9em}
+    hr{border:none;border-top:1px solid color-mix(in srgb,currentColor 14%,transparent);margin:.8em 0}
+    a{color:-apple-system-blue;text-decoration:none}
     a:hover{text-decoration:underline}
-    strong{color:#f0f0f0;font-weight:600}
-    em{color:#d0d0d0}
+    strong{font-weight:600}
     table{border-collapse:collapse;width:100%;margin:.5em 0;font-size:.9em}
-    th,td{text-align:left;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.1)}
-    th{color:#f0f0f0;font-weight:600;background:rgba(255,255,255,.05)}
+    th,td{text-align:left;padding:5px 10px;border-bottom:1px solid color-mix(in srgb,currentColor 12%,transparent)}
+    th{font-weight:600;background:color-mix(in srgb,currentColor 5%,transparent)}
     </style></head><body>\(body)</body></html>
     """
 }
@@ -194,6 +195,16 @@ private func convertBody(_ md: String) -> String {
     return out
 }
 
+/// Reject script-y URL schemes in links and escape any remaining quote. The input
+/// has already had `& < >` escaped by `inline`, so this only gates scheme + quote.
+private func mdSafeHref(_ escapedURL: String) -> String {
+    let lowered = escapedURL.trimmingCharacters(in: .whitespaces).lowercased()
+    if lowered.hasPrefix("javascript:") || lowered.hasPrefix("data:") || lowered.hasPrefix("vbscript:") {
+        return ""
+    }
+    return escapedURL.replacingOccurrences(of: "\"", with: "&quot;")
+}
+
 private func orderedListPrefix(_ s: String) -> String? {
     guard let dot = s.firstIndex(of: ".") else { return nil }
     let num = String(s[s.startIndex..<dot])
@@ -222,8 +233,11 @@ private func inline(_ s: String) -> String {
     r = r.replacingMatches(of: #"_(.+?)_"#)            { "<em>\($0.groups[0])</em>" }
     // strikethrough
     r = r.replacingMatches(of: #"~~(.+?)~~"#) { "<del>\($0.groups[0])</del>" }
-    // links
-    r = r.replacingMatches(of: #"\[([^\]]+)\]\(([^)]+)\)"#) { "<a href=\"\($0.groups[1])\">\($0.groups[0])</a>" }
+    // links — href is already &<>-escaped; gate the scheme + escape quotes.
+    r = r.replacingMatches(of: #"\[([^\]]+)\]\(([^)]+)\)"#) { m in
+        let href = mdSafeHref(m.groups[1])
+        return href.isEmpty ? m.groups[0] : "<a href=\"\(href)\">\(m.groups[0])</a>"
+    }
     // restore code spans
     for (idx, span) in spans.enumerated() {
         r = r.replacingOccurrences(of: "§SPAN\(idx)§", with: span)

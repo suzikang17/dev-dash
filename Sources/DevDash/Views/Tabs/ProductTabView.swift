@@ -26,6 +26,7 @@ struct ProductTabView: View {
             }
             .onAppear { regen(project: project) }
             .onChange(of: project.path) { _, _ in regen(project: project) }
+            .onChange(of: store.docRegenToken) { _, _ in reloadToken &+= 1 }
         } else {
             Text("Select a project to view its living document")
                 .foregroundColor(.secondary)
@@ -122,7 +123,7 @@ struct ProductTabView: View {
                             saveAlpineSection(projectPath: project.path, rel: rel, state: state)
                         },
                         onSaveLore: { absPath, markdown in
-                            saveLoreDoc(absPath: absPath, markdownBody: markdown)
+                            saveLoreDoc(projectPath: project.path, absPath: absPath, markdownBody: markdown)
                         },
                         onAction: { payload in
                             handleAction(project: project, payload: payload)
@@ -179,11 +180,21 @@ struct ProductTabView: View {
     /// Doesn't trigger a regen — that would clobber the cursor mid-edit.
     /// Refreshes the queryable manifest so cross-doc filters stay current.
     private func saveSection(projectPath: String, rel: String, html: String) {
-        let target = "\(projectPath)/docs/devdash/\(rel)"
+        let docsRoot = "\(projectPath)/docs/devdash"
+        guard let target = containedPath("\(docsRoot)/\(rel)", within: docsRoot) else { return }
         let dir = (target as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try? html.write(toFile: target, atomically: true, encoding: .utf8)
         DocIndexGenerator.generate(projectPath: projectPath)
+    }
+
+    /// Reject page-supplied paths that escape `root`. The living-doc WKWebView is
+    /// editable and its HTML can be injected, so bridge writes/deletes must not
+    /// trust the paths it hands back (path traversal → arbitrary file write).
+    private func containedPath(_ candidate: String, within root: String) -> String? {
+        let resolved = URL(fileURLWithPath: candidate).standardizedFileURL.path
+        let base = URL(fileURLWithPath: root).standardizedFileURL.path
+        return (resolved == base || resolved.hasPrefix(base + "/")) ? resolved : nil
     }
 
     /// SPIKE: write an inline-edited lore doc back to its `.md`, losslessly.
@@ -191,7 +202,11 @@ struct ProductTabView: View {
     /// the edited markdown, then best-effort re-indexes via the lore CLI. This is
     /// the write path of "lore as the living doc's engine".
     @discardableResult
-    private func saveLoreDoc(absPath: String, markdownBody: String) -> (html: String, warning: String?) {
+    private func saveLoreDoc(projectPath: String, absPath rawPath: String, markdownBody: String) -> (html: String, warning: String?) {
+        // Containment: the page hands back the target path — never write outside docs/.
+        guard let absPath = containedPath(rawPath, within: "\(projectPath)/docs") else {
+            return (Markdown.bodyHTML(markdownBody), "not saved: path is outside docs/")
+        }
         guard let existing = try? String(contentsOfFile: absPath, encoding: .utf8) else {
             return (Markdown.bodyHTML(markdownBody), nil)
         }
@@ -258,7 +273,8 @@ struct ProductTabView: View {
     /// block is missing, regenerate the entire artifact from the triage template
     /// scaffold and embed the new state.
     private func saveAlpineSection(projectPath: String, rel: String, state: String) {
-        let target = "\(projectPath)/docs/devdash/\(rel)"
+        let docsRoot = "\(projectPath)/docs/devdash"
+        guard let target = containedPath("\(docsRoot)/\(rel)", within: docsRoot) else { return }
         let dir = (target as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
@@ -355,8 +371,9 @@ struct ProductTabView: View {
     }
 
     /// Delete a lore doc from the living document, then reindex + regen.
-    private func deleteLoreDoc(project: Project, absPath: String) {
+    private func deleteLoreDoc(project: Project, absPath rawPath: String) {
         guard !loreMutating else { return }
+        guard let absPath = containedPath(rawPath, within: "\(project.path)/docs") else { return }
         loreMutating = true
         try? FileManager.default.removeItem(atPath: absPath)
         let dir = ((absPath as NSString).deletingLastPathComponent as NSString).lastPathComponent

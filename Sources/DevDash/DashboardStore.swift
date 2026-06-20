@@ -177,11 +177,21 @@ final class DashboardStore: ObservableObject {
             mono: stack(docFontMono, fallback: DocFontPreset.monoStack))
     }
 
-    /// Regenerate every known project's living doc so a global appearance change
-    /// (accent/font) takes effect immediately across open Product tabs.
+    private var docRegenTask: Task<Void, Never>?
+
+    /// Regenerate living docs after a global appearance change. Debounced and off
+    /// the synchronous didSet path so a burst of preference toggles coalesces into
+    /// a single pass instead of stalling the main thread on every change.
     func regenerateAllDocs() {
-        for project in projects { regenerateRoadmap(for: project.path) }
-        docRegenToken &+= 1
+        docRegenTask?.cancel()
+        docRegenTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            await MainActor.run {
+                guard let self, !Task.isCancelled else { return }
+                for project in self.projects { self.regenerateRoadmap(for: project.path) }
+                self.docRegenToken &+= 1
+            }
+        }
     }
 
     func toggleTheme() { appTheme = appTheme.toggled }
