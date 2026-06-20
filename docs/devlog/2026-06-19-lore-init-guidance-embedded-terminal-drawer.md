@@ -28,4 +28,10 @@ day: 3
 - **Lore detection signal is the `docs/.lore/` marker dir.** Every scanner hardcodes `<projectPath>/docs/...`, so the init command is always `lore init docs` run from the project root.
 - A foreground job under shell job-control lives in its **own** process group, so the SIGKILL backstop targets the shell's group while the PTY-close SIGHUP covers the foreground job. Together they tear down realistic cases (claude/builds don't trap SIGHUP); a deliberately-detached `nohup`/`&` daemon can still survive — expected terminal behavior, not a bug to chase.
 - The `claude` tab (`ClaudeTabView`) is a `claude -p` composer, NOT an interactive terminal — kept as-is; the drawer is the interactive path.
-- Work is **uncommitted** on `main` as of this entry; SourceKit "cannot find X in scope" on the new files was stale-index noise (build was clean).
+- SourceKit "cannot find X in scope" on the new files was stale-index noise (build was clean).
+
+---
+
+## Commits
+- 1116198 harden embedded terminal lifecycle; add runtime self-test
+- (the lore-init guidance + initial terminal drawer landed in an earlier working-tree commit alongside the project one-pager / perf work)
