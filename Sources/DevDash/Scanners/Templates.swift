@@ -17,7 +17,7 @@ extension Templates {
     static let saasMvp = LaunchTemplate(
         id: "saas-mvp",
         name: "SaaS MVP Launch",
-        summary: "Idea → MVP → Refine → Launch → Growth. Opinionated path that keeps you out of premature optimization and pre-mature marketing.",
+        summary: "Idea → MVP → Refine → Launch → Growth. Opinionated path that keeps you out of premature optimization and premature marketing.",
         methodology: """
         Bias toward conviction over polish. Each stage should produce evidence \
         that the next stage is worth doing. Don't add tasks just because they \
@@ -279,7 +279,7 @@ extension Templates {
                 guidingQuestions: [
                     "What stack (static + markdown / Astro / Next / WordPress / something else)?",
                     "Where does writing happen — markdown in repo, headless CMS, Notion + sync?",
-                    "What's the publishing cadence you can actually sustain (weekly? bi-weekly?)",
+                    "What publishing cadence can you actually sustain — weekly, bi-weekly?",
                     "What are the first 5-10 pieces — and do they collectively define the niche?",
                     "Is SEO foundation in place (sitemap.xml, OG tags, schema markup, semantic HTML)?",
                     "What's the URL structure — and will you regret it in 2 years?"
@@ -358,7 +358,7 @@ extension Templates {
     static let marketingSite = LaunchTemplate(
         id: "marketing-site",
         name: "Marketing Site",
-        summary: "Audience → message → site → ship → measure. For landing pages, brochureware, content sites.",
+        summary: "Audience → message → site → ship → measure. For landing pages and brochureware.",
         methodology: """
         Don't write copy for everyone. Pick a person and write to them. The \
         site exists to do one job — make sure that job is unmistakable.
@@ -377,7 +377,7 @@ extension Templates {
                     "What's the single CTA?"
                 ],
                 exitCriteria: [
-                    "ICP written down",
+                    "ICP (ideal customer profile) written down",
                     "Headline + subhead approved",
                     "3 key value props chosen",
                     "Primary CTA chosen"
