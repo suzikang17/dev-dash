@@ -6,29 +6,40 @@ struct ContentView: View {
     @EnvironmentObject var tabStore: TabStore
     @StateObject private var cmd = CommandBarModel()
     @FocusState private var cmdFocused: Bool
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
-        } detail: {
-            DetailPaneView()
-        }
-        .navigationTitle(store.selection.map(titleFor) ?? "Dev Dashboard")
-        .toolbar { toolbarContent }
-        .background { tabShortcuts }
-        .background { commandShortcut }
-        // Results drop from the top bar as a same-window overlay (not a popover)
-        // so the toolbar field keeps key focus while you type and navigate.
-        .overlay(alignment: .topTrailing) {
-            if cmd.isActive {
-                CommandResultsView(model: cmd, dismiss: dismissCommand)
-                    .environmentObject(store)
-                    .padding(.trailing, DSSpace.md)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        HStack(spacing: 0) {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView()
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+            } detail: {
+                DetailPaneView()
+            }
+            .navigationTitle(store.selection.map(titleFor) ?? "Dev Dashboard")
+            .toolbar { toolbarContent }
+            .background { tabShortcuts }
+            .background { commandShortcut }
+            // Results drop from the top bar as a same-window overlay (not a popover)
+            // so the toolbar field keeps key focus while you type and navigate.
+            .overlay(alignment: .topTrailing) {
+                if cmd.isActive {
+                    CommandResultsView(model: cmd, dismiss: dismissCommand)
+                        .environmentObject(store)
+                        .padding(.trailing, DSSpace.md)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.28, dampingFraction: 0.85), value: cmd.isActive)
+
+            // Side terminal lives BESIDE the split view (not inside the detail), so it
+            // can't starve the toolbar/detail and collapse the sidebar.
+            if store.terminalOpen, store.terminalPlacement == .side,
+               let project = store.project(for: store.selection) {
+                Divider()
+                SideTerminalContainer(project: project, initialWidth: store.terminalWidth)
             }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: cmd.isActive)
     }
 
     /// Hidden buttons binding ⌘1–9 to the nine detail tabs (only while a
@@ -82,6 +93,17 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    columnVisibility = (columnVisibility == .detailOnly) ? .all : .detailOnly
+                }
+            } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .keyboardShortcut("s", modifiers: .command)
+            .help("Toggle sidebar (⌘S)")
+            .accessibilityLabel("Toggle sidebar")
+
             Button {
                 store.goBack()
             } label: {

@@ -17,11 +17,8 @@ struct DetailPaneView: View {
                     BottomTerminalContainer(project: project, initialHeight: store.terminalHeight)
                 }
             }
-            .safeAreaInset(edge: .trailing, spacing: 0) {
-                if placement == .side, let project {
-                    SideTerminalContainer(project: project, initialWidth: store.terminalWidth)
-                }
-            }
+            // Side placement is rendered beside the NavigationSplitView in ContentView,
+            // not here, so it doesn't fight the detail/toolbar for width.
             .overlay {
                 if placement == .floating, let project {
                     GeometryReader { geo in
@@ -32,6 +29,8 @@ struct DetailPaneView: View {
                 }
             }
             .background(Color(NSColor.windowBackgroundColor))
+            // Animate the floating drop-down's slide-in/out (and other placement swaps).
+            .animation(.easeOut(duration: 0.25), value: store.terminalOpen)
     }
 
     private var tabArea: some View {
