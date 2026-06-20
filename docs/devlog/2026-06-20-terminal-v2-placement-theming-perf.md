@@ -3,7 +3,7 @@ lore_type: devlog
 created: 2026-06-20
 title: "Terminal v2: placement, theming, perf, quick-run"
 date: 2026-06-20
-day: 5
+day: 3
 ---
 
 **Extended the embedded terminal with configurable placement (bottom/side/floating), theme-following colors, font zoom, quick-run, and persistence — then an adversarial review caught 8 issues (off-screen stranding, per-frame reflow, stuck cursor, tab rebuilds) which were fixed and committed in `874355e`.**

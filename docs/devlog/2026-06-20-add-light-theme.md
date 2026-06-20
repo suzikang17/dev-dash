@@ -3,7 +3,7 @@ lore_type: devlog
 created: 2026-06-20
 title: "Add light theme"
 date: 2026-06-20
-day: 4
+day: 3
 ---
 
 **Shipped a light/dark theme toggle, persisted across launches, reachable from a new settings modal and the command bar.**

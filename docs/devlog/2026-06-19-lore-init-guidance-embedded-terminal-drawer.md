@@ -3,7 +3,7 @@ lore_type: devlog
 created: 2026-06-19
 title: "Lore init guidance + embedded per-project terminal drawer"
 date: 2026-06-19
-day: 3
+day: 2
 ---
 
 **Added a "lore not initialized" guided empty state, then built a VS Code–style per-project terminal drawer on SwiftTerm — caught and fixed 4 process-lifecycle leaks via an adversarial multi-agent review.**

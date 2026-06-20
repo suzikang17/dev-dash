@@ -3,7 +3,7 @@ lore_type: devlog
 created: 2026-06-20
 title: "Design token systems: living-doc de-slop + native chrome"
 date: 2026-06-20
-day: 6
+day: 3
 ---
 
 **Ran an Impeccable design audit on the whole app, then built two mirrored token systems — an OKLCH-hue-parameterized palette + font selector for the living-doc HTML, and a `DesignSystem.swift` token layer the native SwiftUI chrome was bulk-migrated onto via a 10-agent workflow.**
