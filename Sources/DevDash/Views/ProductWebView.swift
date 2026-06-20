@@ -1055,13 +1055,15 @@ struct ProductWebView: NSViewRepresentable {
       //  viewing, since the document isn't first responder then.)
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-          var openCard = null;
+          var openSrc = null;
           document.querySelectorAll('.lore-card .lore-src').forEach(function(s) {
-            if (s.style.display !== 'none') openCard = s.closest('.lore-card');
+            if (s.style.display !== 'none') openSrc = s;
           });
-          if (openCard) {
-            var toggle = openCard.querySelector('.lore-edit-toggle');
-            if (toggle) { e.preventDefault(); toggle.click(); }
+          if (openSrc) {
+            e.preventDefault();
+            if (openSrc.classList.contains('is-dirty')) save(openSrc);   // explicit — don't rely on blur
+            var toggle = openSrc.closest('.lore-card').querySelector('.lore-edit-toggle');
+            if (toggle) toggle.click();
           }
         }
       }, true);

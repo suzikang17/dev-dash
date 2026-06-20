@@ -159,7 +159,7 @@ enum ProductDocGenerator {
         ("prd",        "PRDs",                 "Product requirements docs."),
         ("plans",      "Implementation Plans", "Milestones, timelines, risks."),
         ("status",     "Status Reports",       "Weekly snapshots."),
-        ("decisions",  "Decisions",            "Append-only decision log."),
+        ("decisions",  "Decision docs (legacy)", "Bespoke HTML decisions — superseded by the lore Decisions tab."),
         ("concepts",   "Concept Explainers",   "How something works, for the team."),
         ("retros",     "Retrospectives",       "What went well, what didn't, what's next."),
         ("docs",       "Documents",            "Catch-all narrative docs.")
@@ -361,11 +361,17 @@ enum ProductDocGenerator {
             let category = front["category"] ?? front["status"] ?? ""
             let meta = [date, category].filter { !$0.isEmpty }.joined(separator: " · ")
             let bodyMd = stripFrontmatter(raw)
+            // Show the schema warning at render time (not only after an inline edit):
+            // a `sections` doc missing a required H2 gets a visible chip on load.
+            let missing = section.bodyIsFree ? [] : section.requiredSections.filter { !bodyMd.contains("## \($0)") }
+            let warnSpan = missing.isEmpty
+                ? "<span class=\"lore-warn\" style=\"display:none\"></span>"
+                : "<span class=\"lore-warn\">⚠ missing section: \(escapeHTML(missing.joined(separator: ", ")))</span>"
             cards.append("""
             <div class="lore-card" data-lore-file="\(escapeHTML(absPath))" data-lore-type="\(escapeHTML(section.loreType))">
               <div class="lore-card-head">
                 <span class="lore-card-meta">\(escapeHTML(meta))</span>
-                <span class="lore-warn" style="display:none"></span>
+                \(warnSpan)
                 <span class="lore-card-actions">
                   <button class="lore-edit-toggle" type="button">✎ edit source</button>
                   <button class="lore-del" data-action="lore-delete" data-lore-file="\(escapeHTML(absPath))" title="Delete" type="button">✕</button>
@@ -471,9 +477,9 @@ enum ProductDocGenerator {
 
     private static func emptyMsg(for rel: String) -> String {
         switch rel {
-        case "prds":      return "No PRDs yet. Use “New PRD…” in the Product tab toolbar."
-        case "documents": return "No documents yet. Use “New document…” in the Product tab toolbar."
-        default:          return "Empty."
+        case "prd":  return "No PRDs yet. Use “New PRD…” in the Product tab toolbar."
+        case "docs": return "No documents yet. Use “New document…” in the Product tab toolbar."
+        default:     return "Empty."
         }
     }
 
