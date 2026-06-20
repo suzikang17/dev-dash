@@ -16,6 +16,7 @@ struct TasksTabView: View {
     @FocusState private var addFocused: Bool
     @AppStorage("taskViewMode") private var viewMode: String = "board"
     @AppStorage("taskSource") private var taskSource: String = "devdash"
+    @State private var migrateMsg: String?
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -100,6 +101,19 @@ struct TasksTabView: View {
             .pickerStyle(.segmented)
             .frame(width: 180)
             Spacer()
+            if let msg = migrateMsg {
+                Text(msg).font(.caption).foregroundColor(.secondary)
+            }
+            Button("Migrate → Lore") {
+                if let p = store.project(for: store.selection)?.path {
+                    let r = TaskLoreMigrator.migrate(projectPath: p)
+                    migrateMsg = "exported \(r.created), skipped \(r.skipped)"
+                    taskSource = "lore"   // switch so the migrated tasks are visible
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Export Dev Dash tasks (.devdash/tasks.json) to lore (docs/tasks/*.md) — idempotent")
         }
         .padding(.horizontal, DSSpace.lg)
         .padding(.vertical, DSSpace.sm)

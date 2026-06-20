@@ -1,0 +1,44 @@
+name: task
+dir: tasks
+heading: Tasks
+id: { strategy: sequential, pad: 4 }
+body: free
+groupBy: { field: status, order: [open, in_progress, blocked, done, skipped] }
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: status, type: enum, values: [open, in_progress, blocked, done, skipped], required: true }
+  - { name: owner, type: enum, values: [none, human, ai] }
+  - { name: category, type: enum, values: [engineering, design, qa, ops, distribution, content, marketing, research, other] }
+  - { name: priority, type: enum, values: [high, medium, low] }
+  - { name: effort, type: enum, values: [quick, small, medium, large] }
+  - { name: created, type: date }
+  - { name: completed, type: date }
+  # --- dev-dash TaskStore fields, ported during migration (single-line scalars
+  # so both lore (gray-matter) and the app's line-based parser read them) ---
+  - { name: started, type: date }
+  - { name: stage, type: string }
+  - { name: parent, type: string }            # lore id of parent task (remapped from UUID)
+  - { name: ai_run, type: boolean }          # LoreTasksView reads/writes this key
+  - { name: source, type: enum, values: [local, template, suggested, github] }
+  - { name: ghIssue, type: string }
+  - { name: phases, type: string }            # comma-joined
+  - { name: completedPhases, type: string }   # comma-joined
+  - { name: persona, type: string }
+  - { name: linkedDoc, type: string }
+  - { name: devdash_id, type: string }        # origin UUID — idempotency + parent remap
+index:
+  - { header: "#", source: id }
+  - { header: Task, source: title, link: true }
+  - { header: Status, source: status }
+  - { header: Owner, source: owner }
+  - { header: Category, source: category }
+  - { header: Completed, source: completed, format: date }
+prompt: |
+  You are writing a task doc for a software project. Given a title, produce the markdown body only (no frontmatter).
+
+  Structure:
+  - Start with one sentence describing what needs to be done and why it matters.
+  - ## Acceptance criteria — a checklist of 2-5 concrete, verifiable outcomes.
+  - ## Notes — (optional) known blockers, dependencies, or context worth capturing.
+
+  Keep it tight. The `## Status history` section is machine-written; never edit it manually.
