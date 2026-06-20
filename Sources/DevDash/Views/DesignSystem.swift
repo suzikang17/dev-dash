@@ -41,7 +41,6 @@ enum DSRadius {
 
 enum DSColor {
     static let cardBg   = Color(nsColor: .controlBackgroundColor)
-    static let subtleBg = Color.primary.opacity(0.05)
     static let hairline = Color.primary.opacity(0.10)
     // Status — theme-adaptive system colors (meaning-bearing; do not hardcode raw RGB).
     static let success = Color.green

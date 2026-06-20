@@ -56,20 +56,3 @@ struct DetailPaneView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
-private struct EmptySelectionView: View {
-    var body: some View {
-        VStack(spacing: DSSpace.md) {
-            Image(systemName: "sparkles.rectangle.stack")
-                .font(DSFont.display)
-                .foregroundColor(.secondary)
-            Text("Select a server or project")
-                .font(.title2)
-            Text("Choose an item from the sidebar to preview it, see tasks, or browse docs.")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
