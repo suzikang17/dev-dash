@@ -119,7 +119,6 @@ final class DashboardStore: ObservableObject {
     /// Open a TaskDetailSheet for this task. Set to nil to dismiss.
     @Published var openTaskId: String? = nil
     @Published var openTaskProjectPath: String? = nil
-    @Published var isCommandBarVisible: Bool = false
     @Published var isSettingsVisible: Bool = false
     @Published var appTheme: AppTheme =
         AppTheme(rawValue: UserDefaults.standard.string(forKey: "devdash.theme") ?? "") ?? .dark {
