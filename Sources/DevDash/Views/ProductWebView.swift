@@ -15,6 +15,7 @@ struct ProductWebView: NSViewRepresentable {
     let reloadToken: Int                                   // bump to force reload
     let onSave: (String, String) -> Void                   // (relPath, html)
     let onSaveAlpine: (String, String) -> Void             // (relPath, jsonState)
+    var onSaveLore: (String, String) -> String = { _, _ in "" } // (absLorePath, markdownBody) → rendered body HTML — SPIKE
     let onAction: ([String: Any]) -> Void                  // generic dispatch
     var onSearchItems: ((String) -> [[String: Any]])? = nil  // (query) → [{id,title,type,status}]
     var onCreateTask: ((String, String?) -> [String: Any])? = nil  // (title, linkedDocPath) → {id,title,status}
@@ -53,6 +54,11 @@ struct ProductWebView: NSViewRepresentable {
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         ))
+        controller.addUserScript(WKUserScript(
+            source: Self.loreEditJS,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         config.userContentController = controller
         let wv = WKWebView(frame: .zero, configuration: config)
         // Enable Web Inspector so right-click → Inspect Element works.
@@ -75,6 +81,7 @@ struct ProductWebView: NSViewRepresentable {
         }
         context.coordinator.onSave = onSave
         context.coordinator.onSaveAlpine = onSaveAlpine
+        context.coordinator.onSaveLore = onSaveLore
         context.coordinator.onAction = onAction
         context.coordinator.onSearchItems = onSearchItems
         context.coordinator.onCreateTask = onCreateTask
@@ -82,6 +89,7 @@ struct ProductWebView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         let c = Coordinator(onSave: onSave, onSaveAlpine: onSaveAlpine, onAction: onAction)
+        c.onSaveLore = onSaveLore
         c.onSearchItems = onSearchItems
         c.onCreateTask = onCreateTask
         return c
@@ -90,6 +98,7 @@ struct ProductWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var onSave: (String, String) -> Void
         var onSaveAlpine: (String, String) -> Void
+        var onSaveLore: (String, String) -> String = { _, _ in "" }
         var onAction: ([String: Any]) -> Void
         var onSearchItems: ((String) -> [[String: Any]])?
         var onCreateTask: ((String, String?) -> [String: Any])?
@@ -116,6 +125,14 @@ struct ProductWebView: NSViewRepresentable {
                 if let path = body["path"] as? String,
                    let state = body["state"] as? String {
                     onSaveAlpine(path, state)
+                }
+            case "save-lore":
+                if let path = body["path"] as? String,
+                   let markdown = body["markdown"] as? String {
+                    let renderedHTML = onSaveLore(path, markdown)
+                    if let cb = body["callbackId"] as? String {
+                        resolve(callbackId: cb, value: ["html": renderedHTML])
+                    }
                 }
             case "search-items":
                 guard let query = body["query"] as? String,
@@ -952,4 +969,81 @@ struct ProductWebView: NSViewRepresentable {
       });
     })();
     """#
+
+    /// SPIKE: lossless source editing for lore-backed cards. The "edit source"
+    /// button flips a `.lore-card` from its formatted body to a contenteditable
+    /// `<pre>` of the raw markdown; on blur / ⌘S it posts the markdown straight
+    /// to Swift, which writes it back to the card's `data-lore-file` (the lore
+    /// .md). No HTML→markdown conversion — the text round-trips verbatim.
+    private static let loreEditJS = """
+    (function() {
+      function post(p) {
+        try { window.webkit.messageHandlers.devdash.postMessage(p); }
+        catch (e) { console.error('lore-edit bridge failed', e); }
+      }
+      // `ta` is the per-card <textarea class="lore-src"> — its .value round-trips
+      // the markdown byte-exact (unlike contenteditable + innerText).
+      function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+      function save(ta) {
+        var card = ta.closest('.lore-card');
+        if (!card) return;
+        // Callback round-trip: Swift writes the .md, renders it, and hands the
+        // fresh body HTML back so the formatted view updates the instant we save.
+        var id = Math.random().toString(36).slice(2);
+        window._devdashCallbacks = window._devdashCallbacks || {};
+        window._devdashCallbacks[id] = function(result) {
+          if (result && typeof result.html === 'string') {
+            var bodyEl = card.querySelector('.lore-body');
+            if (bodyEl) bodyEl.innerHTML = result.html;   // live re-render
+          }
+        };
+        post({ action: 'save-lore', path: card.dataset.loreFile, markdown: ta.value, callbackId: id });
+        ta.classList.remove('is-dirty');
+        ta.classList.add('is-saved');
+        setTimeout(function() { ta.classList.remove('is-saved'); }, 1500);
+      }
+      function wire(ta) {
+        if (ta.dataset.wired) return;
+        ta.dataset.wired = '1';
+        ta.spellcheck = false;
+        var t = null;
+        ta.addEventListener('input', function() {
+          ta.classList.add('is-dirty');
+          autosize(ta);
+          clearTimeout(t);
+          t = setTimeout(function() { save(ta); }, 900);
+        });
+        ta.addEventListener('blur', function() {
+          if (ta.classList.contains('is-dirty')) { clearTimeout(t); save(ta); }
+        });
+        ta.addEventListener('keydown', function(e) {
+          if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); clearTimeout(t); save(ta); }
+        });
+      }
+      document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.lore-edit-toggle');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var card = btn.closest('.lore-card');
+        if (!card) return;
+        var bodyEl = card.querySelector('.lore-body');
+        var src = card.querySelector('.lore-src');
+        if (!src) return;
+        var editing = src.style.display !== 'none';
+        if (editing) {
+          src.style.display = 'none';
+          if (bodyEl) bodyEl.style.display = '';
+          btn.textContent = '✎ edit source';
+        } else {
+          if (bodyEl) bodyEl.style.display = 'none';
+          src.style.display = '';
+          btn.textContent = '✓ done';
+          wire(src);
+          autosize(src);
+          src.focus();
+        }
+      }, true);
+    })();
+    """
 }

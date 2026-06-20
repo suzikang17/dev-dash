@@ -114,6 +114,9 @@ struct ProductTabView: View {
                         onSaveAlpine: { rel, state in
                             saveAlpineSection(projectPath: project.path, rel: rel, state: state)
                         },
+                        onSaveLore: { absPath, markdown in
+                            saveLoreDoc(absPath: absPath, markdownBody: markdown)
+                        },
                         onAction: { payload in
                             handleAction(project: project, payload: payload)
                         },
@@ -175,6 +178,57 @@ struct ProductTabView: View {
         try? html.write(toFile: target, atomically: true, encoding: .utf8)
         DocIndexGenerator.generate(projectPath: projectPath)
     }
+
+    /// SPIKE: write an inline-edited lore doc back to its `.md`, losslessly.
+    /// Preserves the file's existing frontmatter and replaces only the body with
+    /// the edited markdown, then best-effort re-indexes via the lore CLI. This is
+    /// the write path of "lore as the living doc's engine".
+    @discardableResult
+    private func saveLoreDoc(absPath: String, markdownBody: String) -> String {
+        guard let existing = try? String(contentsOfFile: absPath, encoding: .utf8) else {
+            return Markdown.bodyHTML(markdownBody)
+        }
+        // Preserve the leading `--- … ---` frontmatter verbatim; swap only the body.
+        // Detect fences by EXACT trimmed "---" (tolerate a leading blank/BOM line),
+        // and if frontmatter opens but never closes, refuse to write rather than
+        // silently drop it (which would corrupt the doc).
+        let lines = existing.components(separatedBy: "\n")
+        var frontmatter = ""
+        if let open = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }),
+           lines[..<open].allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            guard let close = lines[(open + 1)...].firstIndex(where: {
+                $0.trimmingCharacters(in: .whitespaces) == "---"
+            }) else {
+                return Markdown.bodyHTML(markdownBody)   // unterminated frontmatter — abort
+            }
+            frontmatter = lines[0...close].joined(separator: "\n")
+        }
+        let body = markdownBody.hasSuffix("\n") ? markdownBody : markdownBody + "\n"
+        let content = frontmatter.isEmpty ? body : frontmatter + "\n" + body
+        try? content.write(toFile: absPath, atomically: true, encoding: .utf8)
+
+        // Re-index through lore. Map the plural folder (docs/decisions) to the
+        // singular lore type (decision) — the spike passed the plural folder name,
+        // which lore rejects with "unknown type", so reindex silently never ran.
+        let dir = ((absPath as NSString).deletingLastPathComponent as NSString).lastPathComponent
+        let loreType = LoreSection.byDir(dir)?.loreType ?? dir
+        if let projectRoot = absPath.range(of: "/docs/").map({ String(absPath[..<$0.lowerBound]) }) {
+            let bin = Self.loreBinary
+            Task.detached(priority: .utility) {
+                _ = await ShellRunner.run(bin, args: ["reindex", loreType], cwd: projectRoot)
+            }
+        }
+        // Hand the freshly-rendered body HTML back so the card's formatted view
+        // updates the moment we save (no full regen needed).
+        return Markdown.bodyHTML(markdownBody)
+    }
+
+    /// Resolve the lore binary — PATH inside the app host process isn't reliable.
+    private static let loreBinary: String = {
+        let local = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".local/bin/lore").path
+        return FileManager.default.isExecutableFile(atPath: local) ? local : "lore"
+    }()
 
     /// Bridge handler for Alpine-managed sections (currently triage). The browser
     /// sends just the JSON state — we regex-replace the contents of the

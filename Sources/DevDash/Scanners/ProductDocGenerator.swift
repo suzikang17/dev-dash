@@ -1,5 +1,101 @@
 import Foundation
 
+/// Warm accent hues for the living doc. Each is a single OKLCH hue angle plus an
+/// accent chroma; the *entire* palette — neutrals included — is derived from these
+/// in the generated stylesheet, so choosing a hue tints every surface toward it.
+/// Replaces the old fixed cyan accent.
+enum DocAccent: String, CaseIterable {
+    case amber, terracotta, ochre, olive
+
+    /// OKLCH hue angle.
+    var hue: Int {
+        switch self {
+        case .amber:      return 75
+        case .terracotta: return 45
+        case .ochre:      return 85
+        case .olive:      return 130
+        }
+    }
+
+    /// Accent chroma — olive sits lower so warm-green doesn't read as neon.
+    var chroma: Double {
+        switch self {
+        case .amber:      return 0.13
+        case .terracotta: return 0.14
+        case .ochre:      return 0.12
+        case .olive:      return 0.085
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .amber:      return "Amber"
+        case .terracotta: return "Terracotta"
+        case .ochre:      return "Ochre"
+        case .olive:      return "Olive"
+        }
+    }
+
+    /// A representative swatch color for the Settings UI (approx, sRGB).
+    var swatchHex: String {
+        switch self {
+        case .amber:      return "#d39124"
+        case .terracotta: return "#c2643f"
+        case .ochre:      return "#c79a2c"
+        case .olive:      return "#7d8a3f"
+        }
+    }
+}
+
+/// Resolved font-family stacks injected into the doc as `--font-*` variables.
+struct DocFontSet {
+    var display: String
+    var body: String
+    var mono: String
+}
+
+/// Named font pairings offered in Settings. `.custom` defers to user-picked
+/// families resolved by the store. Faces ship with macOS, with graceful fallbacks.
+enum DocFontPreset: String, CaseIterable {
+    case system, typewriter, almanac, humanist, custom
+
+    var label: String {
+        switch self {
+        case .system:     return "System"
+        case .typewriter: return "Typewriter"
+        case .almanac:    return "Almanac"
+        case .humanist:   return "Humanist"
+        case .custom:     return "Custom"
+        }
+    }
+
+    static let monoStack = "ui-monospace, \"SF Mono\", SFMono-Regular, Menlo, monospace"
+    static let systemStack = "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, sans-serif"
+
+    /// Preset stacks. `.custom` returns the system base; the store overrides it.
+    var fontSet: DocFontSet {
+        switch self {
+        case .system, .custom:
+            return DocFontSet(display: Self.systemStack, body: Self.systemStack, mono: Self.monoStack)
+        case .typewriter:
+            return DocFontSet(
+                display: "\"American Typewriter\", \"Iowan Old Style\", Georgia, serif",
+                body: "\"Iowan Old Style\", Palatino, Georgia, serif",
+                mono: Self.monoStack)
+        case .almanac:
+            return DocFontSet(
+                display: "Superclarendon, \"Hoefler Text\", Georgia, serif",
+                body: "Charter, \"Iowan Old Style\", Georgia, serif",
+                mono: Self.monoStack)
+        case .humanist:
+            return DocFontSet(
+                display: "Optima, \"Avenir Next\", system-ui, sans-serif",
+                body: "\"Avenir Next\", Optima, system-ui, sans-serif",
+                mono: Self.monoStack)
+        }
+    }
+}
+
 /// Renders the project's living product document at `docs/devdash/index.html`.
 /// Section content lives as standalone .html files (sections/*.html, prds/*.html,
 /// documents/*.html) and gets composed into the tabbed shell. HTML is the
@@ -21,16 +117,27 @@ enum ProductDocGenerator {
         "\(folderPath(for: projectPath))/\(indexName)"
     }
 
-    static let tabs: [DocTab] = [
-        .init(id: "overview",     label: "Overview",     source: .userHtml(file: "overview.html")),
-        .init(id: "notes",        label: "Notes",        source: .userHtml(file: "notes.html")),
-        .init(id: "blocks",       label: "Blocks",       source: .blocksView),
-        .init(id: "roadmap",      label: "Roadmap",      source: .generatedHtml(file: "roadmap.html")),
-        .init(id: "initiatives",  label: "Initiatives",  source: .generatedHtml(file: "initiatives.html")),
-        .init(id: "goals",        label: "Goals & KPIs", source: .userHtml(file: "goals.html")),
-        .init(id: "ideas",        label: "Ideas",        source: .userHtml(file: "ideas.html")),
-        .init(id: "artifacts",    label: "Artifacts",    source: .artifactsBrowser)
-    ]
+    /// Tab list. Lore-backed sections (Decisions, Ideas, …) are spliced in from
+    /// `LoreSection.all` with distinct `lore-<dir>` ids. The old `.userHtml`
+    /// Ideas tab is replaced by the lore Ideas section (the kanban-ideas /
+    /// promote-idea flow is unaffected — it reads TaskStore, not this tab).
+    static var tabs: [DocTab] {
+        var t: [DocTab] = [
+            .init(id: "overview",     label: "Overview",     source: .userHtml(file: "overview.html")),
+            .init(id: "notes",        label: "Notes",        source: .userHtml(file: "notes.html")),
+            .init(id: "blocks",       label: "Blocks",       source: .blocksView),
+            .init(id: "roadmap",      label: "Roadmap",      source: .generatedHtml(file: "roadmap.html")),
+            .init(id: "initiatives",  label: "Initiatives",  source: .generatedHtml(file: "initiatives.html")),
+        ]
+        t += LoreSection.all.map {
+            .init(id: "lore-\($0.dir)", label: $0.label, source: .generatedHtml(file: "lore-\($0.dir).html"))
+        }
+        t += [
+            .init(id: "goals",        label: "Goals & KPIs", source: .userHtml(file: "goals.html")),
+            .init(id: "artifacts",    label: "Artifacts",    source: .artifactsBrowser),
+        ]
+        return t
+    }
 
     struct DocTab {
         let id: String
@@ -65,7 +172,9 @@ enum ProductDocGenerator {
         meta: ProjectMeta,
         template: LaunchTemplate?,
         tasks: [TaskItem],
-        status: ProjectStatus? = nil
+        status: ProjectStatus? = nil,
+        accent: DocAccent = .amber,
+        fonts: DocFontSet = DocFontPreset.system.fontSet
     ) -> String? {
         let folder = folderPath(for: projectPath)
         // Vendor JS (Alpine + components) into <project>/docs/devdash/.assets/.
@@ -93,6 +202,14 @@ enum ProductDocGenerator {
         let initiativesHtml = renderInitiatives(tasks: tasks)
         try? initiativesHtml.write(toFile: "\(sectionsFolder)/initiatives.html", atomically: true, encoding: .utf8)
 
+        // Lore-backed sections — rendered straight from docs/<dir>/*.md.
+        for section in LoreSection.all {
+            let html = renderLoreSection(section, projectPath: projectPath)
+            try? html.write(toFile: "\(sectionsFolder)/lore-\(section.dir).html", atomically: true, encoding: .utf8)
+        }
+        // Remove the spike's stale single-file output if present.
+        try? FileManager.default.removeItem(atPath: "\(sectionsFolder)/decisions.html")
+
         // Compose the full page.
         var sections: [String] = []
         for tab in tabs {
@@ -104,15 +221,18 @@ enum ProductDocGenerator {
             }
             let active = (tab.id == "overview") ? " active" : ""
             sections.append("""
-              <section id="tab-\(tab.id)" class="tab-pane\(active)">
+              <section id="tab-\(tab.id)" class="tab-pane\(active)" role="tabpanel" aria-labelledby="tab-btn-\(tab.id)" tabindex="0">
                 \(body)
               </section>
             """)
         }
 
         let nav = tabs.map { t in
-            let active = t.id == "overview" ? " active" : ""
-            return "<button class=\"tab\(active)\" data-tab=\"\(t.id)\">\(escapeHTML(t.label))</button>"
+            let isActive = t.id == "overview"
+            let active = isActive ? " active" : ""
+            return "<button class=\"tab\(active)\" data-tab=\"\(t.id)\" role=\"tab\" id=\"tab-btn-\(t.id)\""
+                + " aria-controls=\"tab-\(t.id)\" aria-selected=\"\(isActive ? "true" : "false")\""
+                + " tabindex=\"\(isActive ? "0" : "-1")\">\(escapeHTML(t.label))</button>"
         }.joined(separator: "\n      ")
 
         let crumbs: String = {
@@ -136,7 +256,7 @@ enum ProductDocGenerator {
         \(header)
         <meta charset="utf-8">
         <title>\(escapeHTML(projectName)) — Product</title>
-        \(sharedStyles)
+        \(sharedStyles(accent: accent, fonts: fonts))
         <script defer src=".assets/devdash-components.js"></script>
         <script defer src=".assets/alpine.min.js"></script>
         </head>
@@ -144,7 +264,7 @@ enum ProductDocGenerator {
           <div class="wrap">
             <h1>\(escapeHTML(projectName))</h1>
             <div class="crumbs">\(crumbs)</div>
-            <nav class="tabs">
+            <nav class="tabs" role="tablist" aria-label="Document sections">
               \(nav)
             </nav>
         \(sections.joined(separator: "\n"))
@@ -208,6 +328,61 @@ enum ProductDocGenerator {
         let f = DateFormatter()
         f.dateFormat = "MMM d"
         return f.string(from: d)
+    }
+
+    // MARK: - Lore-backed sections (SPIKE)
+
+    /// Render a lore-backed section (`docs/<dir>/*.md`) as editable cards — lore
+    /// is the engine, this is the living doc's render+edit surface over it. Each
+    /// card carries `data-lore-file` (absolute path) + `data-lore-type` (singular
+    /// CLI type) so the save/reindex paths never re-derive the type from the folder.
+    /// Editing uses a `<textarea>` so the markdown round-trips byte-exact.
+    static func renderLoreSection(_ section: LoreSection, projectPath: String) -> String {
+        let dir = "\(projectPath)/docs/\(section.dir)"
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+        let mdFiles = files
+            .filter { $0.hasSuffix(".md") && $0.lowercased() != "index.md" }
+            .sorted(by: >)   // numeric id prefix → newest first
+        let lower = section.label.lowercased()
+        guard !mdFiles.isEmpty else {
+            return "<p class=\"doc-status\">No \(escapeHTML(lower)) at <code>docs/\(escapeHTML(section.dir))/</code> yet. Run <code>lore add \(escapeHTML(section.loreType))</code>.</p>"
+        }
+
+        var cards: [String] = []
+        for file in mdFiles {
+            let absPath = "\(dir)/\(file)"
+            guard let raw = try? String(contentsOfFile: absPath, encoding: .utf8) else { continue }
+            let front = LoreReader.parseFrontmatter(raw)
+            let date = front["date"] ?? front["created"] ?? ""
+            let category = front["category"] ?? front["status"] ?? ""
+            let meta = [date, category].filter { !$0.isEmpty }.joined(separator: " · ")
+            let bodyMd = stripFrontmatter(raw)
+            cards.append("""
+            <div class="lore-card" data-lore-file="\(escapeHTML(absPath))" data-lore-type="\(escapeHTML(section.loreType))">
+              <div class="lore-card-head">
+                <span class="lore-card-meta">\(escapeHTML(meta))</span>
+                <button class="lore-edit-toggle" type="button">✎ edit source</button>
+              </div>
+              <div class="lore-body">\(Markdown.bodyHTML(bodyMd))</div>
+              <textarea class="lore-src" style="display:none">\(escapeHTML(bodyMd))</textarea>
+            </div>
+            """)
+        }
+        return """
+        <p class="doc-status">⚙ Engine: <code>lore</code> · \(mdFiles.count) \(escapeHTML(lower)) read live from <code>docs/\(escapeHTML(section.dir))/*.md</code></p>
+        \(cards.joined(separator: "\n"))
+        """
+    }
+
+    /// Drop a leading `--- … ---` frontmatter block so only the body is rendered.
+    private static func stripFrontmatter(_ s: String) -> String {
+        let lines = s.components(separatedBy: "\n")
+        guard lines.first?.hasPrefix("---") == true else { return s }
+        var i = 1
+        while i < lines.count, !lines[i].hasPrefix("---") { i += 1 }
+        if i < lines.count { i += 1 }   // skip the closing fence
+        return lines[i...].joined(separator: "\n")
     }
 
     // MARK: - Section reading
@@ -589,9 +764,8 @@ enum ProductDocGenerator {
             }
             func promoteBtn(title: String) -> String {
                 """
-                <button data-action="promote-idea" data-title="\(title)" contenteditable="false" \
-                onclick="this.textContent='\\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';" \
-                style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(90,200,250,0.4);background:rgba(90,200,250,0.08);color:#5ac8fa;cursor:pointer;white-space:nowrap;flex-shrink:0;">\\u2192 task</button>
+                <button class="promote-btn" data-action="promote-idea" data-title="\(title)" contenteditable="false" \
+                onclick="this.textContent='\\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';">\\u2192 task</button>
                 """
             }
             return """
@@ -1048,24 +1222,77 @@ enum ProductDocGenerator {
 
     // MARK: - Style + script (kept inline so the HTML is self-contained)
 
-    private static let sharedStyles = """
-    <style>
-      :root { --bg: #0f1115; --fg: #e8e8ec; --muted: #9aa0a8; --accent: #5ac8fa;
-              --border: #23262d; --card: #181a1f; --code: #1c1f26;
-              --green: #2ecc71; --red: #ff6b6b; --orange: #ffa502; --purple: #b388ff; }
-      @media (prefers-color-scheme: light) {
-        :root { --bg: #ffffff; --fg: #1c1c1e; --muted: #6e6e73; --accent: #007aff;
-                --border: #e5e5ea; --card: #f7f7f9; --code: #f1f3f5;
-                --green: #2ecc71; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; }
-      }
+    private static func sharedStyles(accent: DocAccent, fonts: DocFontSet) -> String {
+        "<style>\n" + rootVars(accent: accent, fonts: fonts) + styleRules + "\n    </style>"
+    }
+
+    /// The `:root` custom-property block. The whole palette is derived from a single
+    /// OKLCH hue + chroma so picking an accent tints every neutral toward it; fonts
+    /// arrive as `--font-*` variables. Semantic colors keep their own hues (meaning).
+    private static func rootVars(accent: DocAccent, fonts: DocFontSet) -> String {
+        """
+          :root {
+            --h: \(accent.hue); --ca: \(accent.chroma);
+            --font-display: \(fonts.display);
+            --font-body: \(fonts.body);
+            --font-mono: \(fonts.mono);
+
+            /* Dark — warm charcoal; neutrals carry a whisper of the brand hue */
+            --bg:         oklch(0.17 0.006 var(--h));
+            --fg:         oklch(0.92 0.008 var(--h));
+            --muted:      oklch(0.68 0.012 var(--h));
+            --card:       oklch(0.205 0.008 var(--h));
+            --border:     oklch(0.30 0.012 var(--h));
+            --code:       oklch(0.225 0.010 var(--h));
+            --accent:     oklch(0.80 var(--ca) var(--h));
+            --accent-ink: oklch(0.86 var(--ca) var(--h));
+            --green:  oklch(0.78 0.13 150);
+            --red:    oklch(0.68 0.16 25);
+            --orange: oklch(0.77 0.13 65);
+            --yellow: oklch(0.82 0.12 95);
+            --purple: oklch(0.74 0.12 300);
+            --blue:   oklch(0.76 0.10 235);
+            /* Supertag chips ride the semantic + brand ramp (resolved live, so they
+               follow the light/dark redefinitions below automatically). */
+            --c-task: var(--accent-ink); --c-kpi: var(--green); --c-goal: var(--purple);
+            --c-decision: var(--yellow); --c-risk: var(--red);
+            --c-question: var(--orange); --c-idea: var(--blue);
+          }
+          @media (prefers-color-scheme: light) {
+            :root {
+              /* Light — warm paper; accents darken for contrast on a bright ground */
+              --bg:         oklch(0.985 0.004 var(--h));
+              --fg:         oklch(0.26 0.012 var(--h));
+              --muted:      oklch(0.47 0.014 var(--h));
+              --card:       oklch(0.965 0.007 var(--h));
+              --border:     oklch(0.90 0.012 var(--h));
+              --code:       oklch(0.955 0.008 var(--h));
+              --accent:     oklch(0.58 var(--ca) var(--h));
+              --accent-ink: oklch(0.47 var(--ca) var(--h));
+              --green:  oklch(0.55 0.15 150);
+              --red:    oklch(0.55 0.20 25);
+              --orange: oklch(0.58 0.16 65);
+              --yellow: oklch(0.60 0.13 90);
+              --purple: oklch(0.52 0.18 300);
+              --blue:   oklch(0.52 0.16 235);
+            }
+          }
+
+        """
+    }
+
+    private static let styleRules = """
       html, body { background: var(--bg); color: var(--fg); margin: 0; padding: 0;
-                   font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
-                   line-height: 1.55; }
+                   font: 14px/1.6 var(--font-body); }
+      .wrap { animation: dd-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+      @keyframes dd-rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
       .wrap { max-width: 960px; margin: 0 auto; padding: 24px 28px 80px; }
-      h1 { font-size: 22px; margin: 0 0 4px; }
+      h1 { font-size: 23px; margin: 0 0 4px; font-family: var(--font-display);
+           font-weight: 600; letter-spacing: -0.01em; }
       .crumbs { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
       .status-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
-                     margin: 0 0 20px; background: var(--card); }
+                     margin: 0 0 20px; background: color-mix(in srgb, var(--accent) 4%, var(--card)); }
       .status-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
       .status-title { font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
                       font-size: 11px; color: var(--muted); }
@@ -1073,7 +1300,24 @@ enum ProductDocGenerator {
       .status-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
                     font-size: 13px; }
       .status-k { color: var(--muted); }
-      .status-v { font-variant-numeric: tabular-nums; text-align: right; }
+      .status-v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+      .lore-card { border: 1px solid var(--border); border-radius: 10px; padding: 4px 16px 14px;
+                   margin: 0 0 14px; background: var(--card); }
+      .lore-card-meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+      .lore-card h1, .lore-card h2 { font-size: 15px; margin: 6px 0 8px; }
+      .lore-card-head { display: flex; justify-content: space-between; align-items: center;
+                        padding-top: 10px; }
+      .lore-edit-toggle { font-size: 11px; color: var(--muted); background: none;
+                          border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px;
+                          cursor: pointer; }
+      .lore-edit-toggle:hover { color: var(--fg); border-color: var(--accent); }
+      .lore-src { display: block; box-sizing: border-box; width: 100%; min-height: 120px;
+                  white-space: pre-wrap; font: 12px/1.55 var(--font-mono); color: var(--fg);
+                  background: var(--code); border: none; border-radius: 8px; padding: 12px;
+                  margin: 8px 0 0; outline: none; resize: vertical; }
+      .lore-src:focus { box-shadow: inset 0 0 0 1px var(--accent); }
+      .lore-src.is-dirty { box-shadow: inset 0 0 0 1px var(--orange); }
+      .lore-src.is-saved { box-shadow: inset 0 0 0 1px var(--green); }
       nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
                  margin-bottom: 22px; position: sticky; top: 0; background: var(--bg);
                  z-index: 5; padding-top: 4px; }
@@ -1081,17 +1325,19 @@ enum ProductDocGenerator {
                       padding: 8px 12px; font: inherit; cursor: pointer; border-radius: 6px 6px 0 0;
                       border-bottom: 2px solid transparent; }
       nav.tabs .tab:hover { color: var(--fg); }
-      nav.tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+      nav.tabs .tab.active { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
       .tab-pane { display: none; }
       .tab-pane.active { display: block; }
-      h2 { font-size: 18px; margin-top: 22px; margin-bottom: 8px; }
-      h3 { font-size: 15px; margin-top: 18px; margin-bottom: 6px; }
+      h2 { font-size: 18px; margin-top: 22px; margin-bottom: 8px;
+           font-family: var(--font-display); font-weight: 600; }
+      h3 { font-size: 15px; margin-top: 18px; margin-bottom: 6px;
+           font-family: var(--font-display); font-weight: 600; }
       h4 { font-size: 13px; margin-top: 14px; margin-bottom: 4px; color: var(--muted);
            text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
       p { margin: 8px 0; }
-      a { color: var(--accent); text-decoration: none; }
+      a { color: var(--accent-ink); text-decoration: none; }
       a:hover { text-decoration: underline; }
-      code, pre { background: var(--code); border-radius: 4px; }
+      code, pre { background: var(--code); border-radius: 4px; font-family: var(--font-mono); }
       code { padding: 1px 5px; font-size: 12px; }
       pre { padding: 10px 12px; overflow-x: auto; font-size: 12px; }
       ul { padding-left: 22px; }
@@ -1100,18 +1346,27 @@ enum ProductDocGenerator {
       ul.progress li { padding: 4px 0; }
       ul.checklist { padding-left: 0; list-style: none; }
       ul.checklist li { padding: 2px 0; font-family: ui-monospace, "SF Mono", monospace; font-size: 13px; }
-      blockquote { border-left: 3px solid var(--border); padding: 4px 12px; color: var(--muted);
-                   margin: 6px 0; font-style: italic; }
-      blockquote.unanswered { color: var(--muted); opacity: 0.6; }
+      blockquote { color: var(--muted); margin: 8px 0; padding: 2px 0 2px 20px;
+                   font-style: italic; position: relative; }
+      blockquote::before { content: "\\201C"; position: absolute; left: 0; top: 1px;
+                           font-family: var(--font-display); font-size: 24px; line-height: 1;
+                           color: color-mix(in srgb, var(--accent) 50%, transparent); }
+      blockquote.unanswered { color: var(--muted); opacity: 0.55; }
+      blockquote.unanswered::before { opacity: 0.4; }
 
       /* Cards & callouts */
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
               padding: 14px 18px; margin: 12px 0; }
-      .callout { padding: 12px 16px; border-radius: 8px; margin: 12px 0;
-                 border-left: 3px solid var(--accent); background: var(--card); }
-      .callout.tldr { border-left-color: var(--accent); }
-      .callout.warn { border-left-color: var(--orange); }
-      .callout.risk { border-left-color: var(--red); }
+      .callout { padding: 12px 16px; border-radius: 8px; margin: 14px 0;
+                 border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+                 background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+      .callout h4 { color: var(--accent-ink); margin-top: 0; }
+      .callout.warn { border-color: color-mix(in srgb, var(--orange) 34%, var(--border));
+                      background: color-mix(in srgb, var(--orange) 8%, var(--card)); }
+      .callout.warn h4 { color: var(--orange); }
+      .callout.risk { border-color: color-mix(in srgb, var(--red) 34%, var(--border));
+                      background: color-mix(in srgb, var(--red) 8%, var(--card)); }
+      .callout.risk h4 { color: var(--red); }
 
       /* Pills / badges */
       .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
@@ -1125,14 +1380,14 @@ enum ProductDocGenerator {
       .pill.idea    { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 40%, transparent); }
 
       /* KPI dashboard */
-      .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                  gap: 12px; margin: 12px 0; }
-      .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-             padding: 14px; }
-      .kpi .k-label { font-size: 11px; color: var(--muted); text-transform: uppercase;
-                      letter-spacing: 0.6px; font-weight: 600; }
-      .kpi .k-value { font-size: 24px; font-weight: 700; margin: 6px 0 2px;
-                      font-feature-settings: "tnum"; }
+      .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                  gap: 0 28px; margin: 14px 0; }
+      .kpi { position: relative; padding: 10px 0; border-top: 1px solid var(--border); }
+      .kpi .k-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+                      letter-spacing: 0.8px; font-weight: 600; }
+      .kpi .k-value { font-size: 19px; font-weight: 600; margin: 5px 0 2px;
+                      font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+                      letter-spacing: -0.01em; }
       .kpi .k-target { font-size: 11px; color: var(--muted); }
       .kpi .k-delta { font-size: 11px; font-weight: 600; }
       .kpi .k-delta.up { color: var(--green); }
@@ -1153,16 +1408,15 @@ enum ProductDocGenerator {
       /* Tagged board (idea backlog) */
       .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
                gap: 12px; margin: 12px 0; }
-      .board .col { background: var(--card); border: 1px solid var(--border);
-                    border-radius: 10px; padding: 12px; }
+      .board .col { background: var(--card); border-radius: 10px; padding: 12px; }
       .board .col h4 { margin-top: 0; }
-      .board .col .item { padding: 8px 10px; border-radius: 6px; background: var(--bg);
+      .board .col .item { position: relative; padding: 8px 10px; border-radius: 6px; background: var(--bg);
                           border: 1px solid var(--border); font-size: 12px; margin-bottom: 6px; }
 
       /* Tag chips */
       .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px;
              background: color-mix(in srgb, var(--accent) 15%, transparent);
-             color: var(--accent); margin-right: 4px; }
+             color: var(--accent-ink); margin-right: 4px; }
 
       /* PRD / Plan structure */
       .doc-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -1186,14 +1440,21 @@ enum ProductDocGenerator {
       .add-btn { background: transparent; border: 1px dashed var(--border); color: var(--muted);
                  padding: 6px 12px; border-radius: 6px; font: inherit; font-size: 12px;
                  cursor: pointer; margin: 6px 0; }
-      .add-btn:hover { color: var(--accent); border-color: var(--accent); }
+      .add-btn:hover { color: var(--accent-ink); border-color: var(--accent); }
+      .promote-btn { font-size: 10px; padding: 2px 8px; border-radius: 5px;
+                     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+                     background: color-mix(in srgb, var(--accent) 10%, transparent);
+                     color: var(--accent-ink); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+      .promote-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
       /* Inline remove (✕) buttons injected on .kpi / .item / .triage-card */
       .rm-btn { position: absolute; top: 4px; right: 4px; background: transparent;
                 border: 0; color: var(--muted); font-size: 11px; line-height: 1;
                 padding: 2px 5px; border-radius: 3px; cursor: pointer;
                 opacity: 0; transition: opacity 0.12s, color 0.12s, background 0.12s; }
-      .kpi:hover .rm-btn, .item:hover .rm-btn, .triage-card:hover .rm-btn { opacity: 1; }
+      .kpi:hover .rm-btn, .item:hover .rm-btn, .triage-card:hover .rm-btn,
+      .kpi:focus-within .rm-btn, .item:focus-within .rm-btn, .triage-card:focus-within .rm-btn,
+      .rm-btn:focus-visible { opacity: 1; }
       .rm-btn:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
 
       /* Tag chips (Tana-style supertags) */
@@ -1201,13 +1462,16 @@ enum ProductDocGenerator {
                            padding: 1px 7px; border-radius: 4px; font-size: 11px;
                            font-weight: 600; letter-spacing: 0.2px; margin: 0 2px;
                            user-select: none; cursor: default; vertical-align: baseline; }
-      .devdash-tag-chip[data-tag="task"]     { background: rgba(90,200,250,0.12);  color: #5ac8fa; border: 1px solid rgba(90,200,250,0.35); }
-      .devdash-tag-chip[data-tag="kpi"]      { background: rgba(48,209,88,0.12);   color: #30d158; border: 1px solid rgba(48,209,88,0.35); }
-      .devdash-tag-chip[data-tag="goal"]     { background: rgba(191,90,242,0.12);  color: #bf5af2; border: 1px solid rgba(191,90,242,0.35); }
-      .devdash-tag-chip[data-tag="decision"] { background: rgba(255,214,10,0.12);  color: #ffd60a; border: 1px solid rgba(255,214,10,0.35); }
-      .devdash-tag-chip[data-tag="risk"]     { background: rgba(255,69,58,0.12);   color: #ff453a; border: 1px solid rgba(255,69,58,0.35); }
-      .devdash-tag-chip[data-tag="question"] { background: rgba(255,159,10,0.12);  color: #ff9f0a; border: 1px solid rgba(255,159,10,0.35); }
-      .devdash-tag-chip[data-tag="idea"]     { background: rgba(100,210,255,0.12); color: #64d2ff; border: 1px solid rgba(100,210,255,0.35); }
+      .devdash-tag-chip[data-tag="task"]     { --c: var(--c-task); }
+      .devdash-tag-chip[data-tag="kpi"]      { --c: var(--c-kpi); }
+      .devdash-tag-chip[data-tag="goal"]     { --c: var(--c-goal); }
+      .devdash-tag-chip[data-tag="decision"] { --c: var(--c-decision); }
+      .devdash-tag-chip[data-tag="risk"]     { --c: var(--c-risk); }
+      .devdash-tag-chip[data-tag="question"] { --c: var(--c-question); }
+      .devdash-tag-chip[data-tag="idea"]     { --c: var(--c-idea); }
+      .devdash-tag-chip[data-tag] { color: var(--c);
+                                    background: color-mix(in srgb, var(--c) 14%, transparent);
+                                    border: 1px solid color-mix(in srgb, var(--c) 36%, transparent); }
 
       /* Blocks view (live query results) */
       #devdash-blocks-view .block-group { margin: 16px 0; }
@@ -1240,15 +1504,14 @@ enum ProductDocGenerator {
       .triage-controls { display: flex; gap: 6px; margin: 12px 0; }
       .triage-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
                      margin: 12px 0 24px; }
-      .triage-col { background: var(--card); border: 1px solid var(--border);
-                    border-radius: 10px; padding: 10px; min-height: 200px; }
+      .triage-col { background: var(--card); border-radius: 10px; padding: 10px; min-height: 200px; }
       .triage-col h4 { margin-top: 0; display: flex; justify-content: space-between;
                        align-items: baseline; }
       .triage-list { min-height: 120px; }
       .triage-list.is-drop-target { background: color-mix(in srgb, var(--accent) 12%, transparent);
                                     border-radius: 6px; outline: 2px dashed var(--accent);
                                     outline-offset: -4px; }
-      .triage-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      .triage-card { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
                      padding: 8px 10px; margin-bottom: 6px; cursor: grab; font-size: 12px; }
       .triage-card:active { cursor: grabbing; }
       .triage-card.dragging { opacity: 0.4; }
@@ -1268,7 +1531,11 @@ enum ProductDocGenerator {
                           font-size: 10px; color: var(--muted); }
       .bars .bar .b-label { position: absolute; bottom: -18px; left: 0; right: 0; text-align: center;
                             font-size: 10px; color: var(--muted); }
-    </style>
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+                                 transition-duration: 0.001ms !important; }
+      }
     """
 
     private static let tabScript = """
@@ -1276,17 +1543,31 @@ enum ProductDocGenerator {
       (function() {
         // No URL fragment manipulation — file:// origin treats each fragment
         // as a unique origin and WKWebView blocks the navigation, which
-        // looks like the page reverting to Overview.
-        var btns = document.querySelectorAll('nav.tabs .tab');
+        // looks like the page reverting to Overview. Tabs follow the WAI-ARIA
+        // tablist pattern: roving tabindex + arrow-key navigation.
+        var btns = Array.prototype.slice.call(document.querySelectorAll('nav.tabs .tab'));
         var panes = document.querySelectorAll('.tab-pane');
-        btns.forEach(function(b) {
-          b.addEventListener('click', function(e) {
-            e.preventDefault();
-            btns.forEach(function(x) { x.classList.remove('active'); });
-            panes.forEach(function(p) { p.classList.remove('active'); });
-            b.classList.add('active');
-            var t = document.getElementById('tab-' + b.dataset.tab);
-            if (t) t.classList.add('active');
+        function activate(b, moveFocus) {
+          btns.forEach(function(x) {
+            var on = x === b;
+            x.classList.toggle('active', on);
+            x.setAttribute('aria-selected', on ? 'true' : 'false');
+            x.tabIndex = on ? 0 : -1;
+          });
+          panes.forEach(function(p) { p.classList.remove('active'); });
+          var t = document.getElementById('tab-' + b.dataset.tab);
+          if (t) t.classList.add('active');
+          if (moveFocus) b.focus();
+        }
+        btns.forEach(function(b, i) {
+          b.addEventListener('click', function(e) { e.preventDefault(); activate(b, false); });
+          b.addEventListener('keydown', function(e) {
+            var idx = null;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') idx = (i + 1) % btns.length;
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') idx = (i - 1 + btns.length) % btns.length;
+            else if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = btns.length - 1;
+            if (idx !== null) { e.preventDefault(); activate(btns[idx], true); }
           });
         });
       })();
