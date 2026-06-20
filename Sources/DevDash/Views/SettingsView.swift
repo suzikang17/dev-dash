@@ -1,11 +1,28 @@
 import SwiftUI
 
 /// App preferences modal. Opened via ⌘, or the command bar.
+/// Presented as an overlay so a click outside (or Esc) dismisses it.
 struct SettingsView: View {
     @EnvironmentObject var store: DashboardStore
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        ZStack {
+            // Dimmed backdrop — tapping anywhere outside the card dismisses.
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { dismiss() }
+
+            card
+                // Swallow taps on the card so they don't reach the backdrop.
+                .onTapGesture {}
+                .shadow(color: .black.opacity(0.4), radius: 30, y: 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onKeyPress(.escape) { dismiss(); return .handled }
+    }
+
+    private var card: some View {
         VStack(spacing: 0) {
             header
             Divider()
@@ -18,7 +35,11 @@ struct SettingsView: View {
             }
         }
         .frame(width: 460, height: 360)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
+
+    private func dismiss() { store.isSettingsVisible = false }
 
     private var header: some View {
         HStack {

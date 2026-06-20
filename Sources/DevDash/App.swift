@@ -23,6 +23,12 @@ struct DevDashApp: App {
                             .environmentObject(store)
                     }
                 }
+                .overlay {
+                    if store.isSettingsVisible {
+                        SettingsView()
+                            .environmentObject(store)
+                    }
+                }
                 // Invisible buttons hold the ⌘K / ⌘, shortcut bindings
                 .background {
                     Button("") { store.isCommandBarVisible.toggle() }
@@ -33,10 +39,6 @@ struct DevDashApp: App {
                         .keyboardShortcut(",", modifiers: .command)
                         .frame(width: 0, height: 0)
                         .opacity(0)
-                }
-                .sheet(isPresented: $store.isSettingsVisible) {
-                    SettingsView()
-                        .environmentObject(store)
                 }
                 .sheet(isPresented: Binding(
                     get: { store.openSessionId != nil },
