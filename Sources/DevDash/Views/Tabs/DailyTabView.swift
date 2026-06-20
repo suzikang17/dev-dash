@@ -57,8 +57,20 @@ struct DailyTabView: View {
                     } else if let session = selectedSession {
                         SessionPanel(digest: session, onClose: { selectedSession = nil })
                             .environmentObject(store)
+                    } else {
+                        // Nothing selected — fill the pane with a hint instead of a
+                        // blank void. The second HSplitView column otherwise renders
+                        // empty and shows the bare window background.
+                        VStack(spacing: DSSpace.sm) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(DSFont.display)
+                                .foregroundStyle(.tertiary)
+                            Text("Select a day, note, or session to read it here")
+                                .font(DSFont.body)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    // invisible placeholder keeps the pane alive when nothing is selected
                 }
                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
             }
