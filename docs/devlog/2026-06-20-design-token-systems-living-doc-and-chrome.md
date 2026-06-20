@@ -15,6 +15,11 @@ day: 3
 - **Settings → Document:** accent-hue swatches + font-pairing presets (System/Typewriter/Almanac/Humanist) + live pickers over `NSFontManager` installed families (Display/Body/Mono → flips to Custom). Persisted in `DashboardStore` (`docAccent`/`docFontPreset`/custom families), regenerates open docs on change. Default = System + Amber.
 - **Chrome audit (native SwiftUI):** scored ~5.5/16 — 457 fixed `.font(.system(size:))` vs 41 semantic, **0** `.accessibilityLabel` across all Views, 99 `RoundedRectangle` (card-soup), hardcoded status colors colliding (purple = both "assistant" and "worktree").
 - **Chrome remediation (workflow `chrome-design-remediation`):** new `DesignSystem.swift` (`DSFont`/`DSSpace`/`DSRadius`/`DSColor` + `SectionHeader` + `.cardSurface()`/`.dsHairline()`/`.dsHitTarget()`). 10 parallel agents over disjoint file buckets migrated the tree: fixed fonts **457 → 20**, `.accessibilityLabel` **0 → 59**, `RoundedRectangle` **99 → 56**, `DSColor` 190 uses, `DSSpace`/`DSRadius` 550 uses. Build green; adversarial review found no behavioral regressions.
+- **Gap audit (perf / security / correctness — the dimensions the design passes skipped):** parallel agents surfaced a stored-XSS → arbitrary-file-write chain in the living-doc bridge, a main-thread regen footgun in the new font/accent feature, and `MarkdownWebView` + `VisualSnapshotStore` still on dark-only slop CSS.
+- **Hardening fixes:** base-escaped markdown inline text + `javascript:`-scheme guard on links; path-containment on all four WKWebView save/delete bridge handlers; debounced + coalesced `regenerateAllDocs` off the main-thread `didSet` (and live-reload the open doc on appearance change); de-slopped `MarkdownWebView` and the visual-diff report to theme-adaptive CSS (`color-mix` / `Canvas`/`CanvasText`).
+- **Editorial pass on `Templates.swift`:** fixed a `pre-mature` typo, a category overlap in the Marketing summary, question punctuation, and an `ICP` expansion — the launch-template copy is otherwise strong; intentional voice left alone.
+- **Layout fix:** Daily tab's detail pane rendered a blank void when nothing was selected (the `HSplitView` second column's empty case was a comment, not a view) — added a centered empty state.
+- **TabStore extraction:** split the active detail tab + per-project tab memory out of `DashboardStore` into a dedicated `@MainActor` store, so switching tabs only re-renders `DetailPaneView` + the toolbar picker (the granular-store split the perf audit recommended).
 
 ## Decisions
 - **Parameterize the whole palette by one OKLCH hue**, not per-hue hand-tuned palettes — one formula × an injected `--h` gives genuine neutral-tinting for all four accents with no 4× duplication.
@@ -38,3 +43,8 @@ day: 3
 
 ## Commits
 - 922f845 add keyboard shortcuts + lore-as-engine Phase 1 Tasks 3-4 _(bundled this session's design work: living-doc OKLCH/font system, Settings Document selectors, `DesignSystem.swift`, and the chrome token migration)_
+- 54ebd38 harden living-doc bridge: escape markdown, contain write paths, debounce regen
+- a1437a1 de-slop visual-diff report: theme-adaptive CSS via Canvas/CanvasText
+- 7a1219e edit launch-template copy: typo, category overlap, punctuation, ICP expansion
+- d4a9eb9 fix Daily detail pane rendering a blank void when nothing is selected
+- 878562f extract TabStore from DashboardStore for granular tab re-render
