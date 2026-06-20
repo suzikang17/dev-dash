@@ -16,6 +16,10 @@ struct ProductTabView: View {
     /// Single-flights lore create/delete so rapid clicks can't race the lore CLI's
     /// sequential-id allocation (which would clobber freshly-created docs).
     @State private var loreMutating = false
+    /// loreType of the currently-visible lore section (reported by the webview),
+    /// so the native ⌘⌥N new-doc shortcut knows where to create. nil = not on a
+    /// lore section.
+    @State private var activeLoreType: String?
 
     var body: some View {
         if let project = store.project(for: store.selection) {
@@ -27,6 +31,16 @@ struct ProductTabView: View {
             .onAppear { regen(project: project) }
             .onChange(of: project.path) { _, _ in regen(project: project) }
             .onChange(of: store.docRegenToken) { _, _ in reloadToken &+= 1 }
+            .background {
+                // Native ⌘⌥N → new doc in the active lore section. Native (not
+                // webview) so it fires even when the document isn't first responder.
+                Button("") {
+                    if let lt = activeLoreType { createLoreDoc(project: project, loreType: lt) }
+                }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+                .frame(width: 0, height: 0)
+                .opacity(0)
+            }
         } else {
             Text("Select a project to view its living document")
                 .foregroundColor(.secondary)
@@ -342,6 +356,9 @@ struct ProductTabView: View {
             if let file = payload["loreFile"] as? String {
                 deleteLoreDoc(project: project, absPath: file)
             }
+        case "lore-section-active":
+            let t = payload["loreType"] as? String
+            activeLoreType = (t?.isEmpty ?? true) ? nil : t
         default:
             break
         }

@@ -1050,23 +1050,10 @@ struct ProductWebView: NSViewRepresentable {
         }
       }, true);
 
-      // Keyboard shortcuts inside the living document.
+      // Esc finishes editing — works because the textarea has key focus here.
+      // (New-doc is a NATIVE ⌘⌥N: webview keydown can't catch it when you're just
+      //  viewing, since the document isn't first responder then.)
       document.addEventListener('keydown', function(e) {
-        // ⌘⌥N → "+ new" in the active section. ⌥ avoids the macOS ⌘N "New Window"
-        // key-equivalent (which the menu would swallow). e.code is used because ⌥
-        // rewrites e.key on macOS.
-        if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyN') {
-          e.preventDefault();
-          // Creating triggers a regen/reload — flush any open dirty editor first so
-          // an unsaved edit elsewhere isn't discarded.
-          document.querySelectorAll('.lore-card .lore-src').forEach(function(s) {
-            if (s.style.display !== 'none' && s.classList.contains('is-dirty')) save(s);
-          });
-          var newBtn = document.querySelector('.tab-pane.active .lore-new');
-          if (newBtn) newBtn.click();
-          return;
-        }
-        // Esc → finish editing the open card (collapse the textarea).
         if (e.key === 'Escape') {
           var openCard = null;
           document.querySelectorAll('.lore-card .lore-src').forEach(function(s) {
@@ -1078,6 +1065,17 @@ struct ProductWebView: NSViewRepresentable {
           }
         }
       }, true);
+
+      // Tell the app which lore section is showing, so the native ⌘⌥N new-doc
+      // shortcut knows where to create. Reports on load + on every tab switch.
+      function reportActiveSection() {
+        var nb = document.querySelector('.tab-pane.active .lore-new');
+        post({ action: 'lore-section-active', loreType: nb ? (nb.dataset.loreType || '') : '' });
+      }
+      document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
+        b.addEventListener('click', function() { setTimeout(reportActiveSection, 40); });
+      });
+      setTimeout(reportActiveSection, 60);
     })();
     """
 }
