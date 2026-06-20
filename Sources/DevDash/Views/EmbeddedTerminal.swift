@@ -13,15 +13,20 @@ struct EmbeddedTerminal: NSViewRepresentable {
     let cwd: String?
     /// Optional environment overrides.
     let environment: [String: String]
+    /// Resolved look (palette/font/cursor/scrollback). Defaults to the persisted
+    /// app settings so nvim matches the rest of the app.
+    let appearance: TerminalAppearance
 
     init(executable: String,
          arguments: [String] = [],
          cwd: String? = nil,
-         environment: [String: String] = [:]) {
+         environment: [String: String] = [:],
+         appearance: TerminalAppearance = .current()) {
         self.executable = executable
         self.arguments = arguments
         self.cwd = cwd
         self.environment = environment
+        self.appearance = appearance
     }
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
@@ -40,10 +45,17 @@ struct EmbeddedTerminal: NSViewRepresentable {
             execName: nil,
             currentDirectory: cwd
         )
+        // Full parity with the cached shells: palette/font/cursor/scrollback.
+        applyTerminalAppearance(appearance, to: view)
         return view
     }
 
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
+    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
+        // Live re-theme: when the app theme or terminal settings change, SwiftUI
+        // re-creates this representable with a fresh `appearance` and calls us with
+        // the existing view, so the open nvim session repaints without respawning.
+        applyTerminalAppearance(appearance, to: nsView)
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -58,7 +70,8 @@ struct EmbeddedTerminal: NSViewRepresentable {
 /// Convenience: spawn nvim editing a specific file. Resolves the binary by
 /// looking in common install locations + scanning PATH so fnm/asdf shims work.
 extension EmbeddedTerminal {
-    static func neovim(filePath: String, readOnly: Bool = false) -> EmbeddedTerminal? {
+    static func neovim(filePath: String, readOnly: Bool = false,
+                       appearance: TerminalAppearance = .current()) -> EmbeddedTerminal? {
         guard let nvim = resolveNvim() else { return nil }
         let dir = (filePath as NSString).deletingLastPathComponent
 
@@ -81,7 +94,8 @@ extension EmbeddedTerminal {
         return EmbeddedTerminal(
             executable: nvim,
             arguments: args,
-            cwd: dir
+            cwd: dir,
+            appearance: appearance
         )
     }
 

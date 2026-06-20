@@ -1,0 +1,75 @@
+{
+  "artifacts" : [
+    {
+      "modified" : "2026-06-20T05:09:43Z",
+      "path" : "sections\/decisions.html",
+      "tags" : [
+
+      ],
+      "title" : "decisions",
+      "type" : "sections",
+      "wordCount" : 11
+    },
+    {
+      "modified" : "2026-06-20T05:09:43Z",
+      "path" : "sections\/initiatives.html",
+      "tags" : [
+
+      ],
+      "title" : "initiatives",
+      "type" : "sections",
+      "wordCount" : 20
+    },
+    {
+      "modified" : "2026-06-20T05:09:43Z",
+      "path" : "sections\/roadmap.html",
+      "tags" : [
+
+      ],
+      "title" : "Personal Tool",
+      "type" : "sections",
+      "wordCount" : 824
+    },
+    {
+      "modified" : "2026-06-20T05:08:45Z",
+      "path" : "sections\/ideas.html",
+      "tags" : [
+
+      ],
+      "title" : "Ideas",
+      "type" : "sections",
+      "wordCount" : 87
+    },
+    {
+      "modified" : "2026-06-20T05:08:45Z",
+      "path" : "sections\/goals.html",
+      "tags" : [
+
+      ],
+      "title" : "dev-dash — Goals &amp; KPIs",
+      "type" : "sections",
+      "wordCount" : 69
+    },
+    {
+      "modified" : "2026-06-20T05:08:45Z",
+      "path" : "sections\/notes.html",
+      "tags" : [
+
+      ],
+      "title" : "dev-dash — Notes",
+      "type" : "sections",
+      "wordCount" : 47
+    },
+    {
+      "modified" : "2026-05-10T18:47:53Z",
+      "path" : "sections\/overview.html",
+      "tags" : [
+
+      ],
+      "title" : "dev-dash",
+      "type" : "sections",
+      "wordCount" : 124
+    }
+  ],
+  "generatedAt" : "2026-06-20T05:09:43Z"
+}

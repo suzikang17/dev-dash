@@ -1,14 +1,71 @@
 import SwiftUI
 
+/// One selectable row in the command palette. The list is built fresh on every
+/// keystroke (`actions`), and `selectedIndex` tracks the vim-navigable highlight.
+private struct PaletteAction: Identifiable {
+    let id: String
+    let icon: String
+    let color: Color
+    let label: String
+    var subtitle: String? = nil
+    let run: () -> Void
+}
+
 struct CommandBarView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var query: String = ""
+    @State private var selectedIndex: Int = 0
     @FocusState private var isFocused: Bool
 
     private var projectPath: String { store.selection.flatMap { store.project(for: $0)?.path } ?? "" }
 
+    /// Repos whose name matches the query, for jump-to navigation. Mirrors the
+    /// sidebar's case-insensitive name filter; capped so the palette stays short.
+    private var matchingProjects: [Project] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return [] }
+        let currentPath = projectPath
+        return store.projects
+            .filter { $0.name.lowercased().contains(q) && $0.path != currentPath }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    /// The full, ordered list of actions for the current query. Repo jumps come
+    /// first so the default highlight (index 0) lands on the top repo match.
+    private var actions: [PaletteAction] {
+        var result: [PaletteAction] = []
+        for proj in matchingProjects {
+            result.append(PaletteAction(
+                id: "repo:\(proj.path)", icon: "folder.fill", color: .accentColor,
+                label: "Go to \(proj.name)", subtitle: proj.path
+            ) { navigate(to: proj) })
+        }
+        result.append(PaletteAction(
+            id: "create", icon: "plus.circle.fill", color: .blue,
+            label: "Create task: \(query)"
+        ) { createTask() })
+        result.append(PaletteAction(
+            id: "idea", icon: "lightbulb.fill", color: .yellow,
+            label: "Capture idea: \(query)"
+        ) { captureIdea() })
+        if matches("theme", "light", "dark", "appearance", "mode") {
+            result.append(PaletteAction(
+                id: "theme", icon: store.appTheme.toggled.icon, color: .purple,
+                label: "Switch to \(store.appTheme.toggled.label) theme"
+            ) { store.toggleTheme(); dismiss() })
+        }
+        if matches("settings", "preferences", "config") {
+            result.append(PaletteAction(
+                id: "settings", icon: "gearshape.fill", color: .gray,
+                label: "Open settings"
+            ) { dismiss(); store.isSettingsVisible = true })
+        }
+        return result
+    }
+
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: .topTrailing) {
             Color.clear
                 .contentShape(Rectangle())
                 .ignoresSafeArea()
@@ -21,15 +78,50 @@ struct CommandBarView: View {
                     actionList
                 }
             }
-            .frame(width: 420)
+            .frame(width: 560)
             .background(.ultraThickMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
-            .padding(.top, 80)
+            .padding(.top, 12)
+            .padding(.trailing, 16)
+            .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { isFocused = true }
+        .onChange(of: query) { selectedIndex = 0 }
         .onKeyPress(.escape) { dismiss(); return .handled }
+        .onKeyPress(phases: .down) { handleKey($0) }
+    }
+
+    /// Vim-style navigation over the action list. Bare j/k can't be used while
+    /// the search field has focus (they'd type into it), so movement is bound to
+    /// Ctrl-J/Ctrl-K (and Ctrl-N/P + arrow keys). Enter activates the highlight.
+    private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        switch press.key {
+        case .downArrow: moveSelection(1); return .handled
+        case .upArrow: moveSelection(-1); return .handled
+        default: break
+        }
+        if press.modifiers.contains(.control) {
+            switch press.characters.lowercased() {
+            case "j", "n": moveSelection(1); return .handled
+            case "k", "p": moveSelection(-1); return .handled
+            default: break
+            }
+        }
+        return .ignored
+    }
+
+    private func moveSelection(_ delta: Int) {
+        let count = actions.count
+        guard count > 0 else { return }
+        selectedIndex = (selectedIndex + delta + count) % count
+    }
+
+    private func activateSelected() {
+        let current = actions
+        guard current.indices.contains(selectedIndex) else { dismiss(); return }
+        current[selectedIndex].run()
     }
 
     private var searchField: some View {
@@ -37,11 +129,11 @@ struct CommandBarView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .imageScale(.medium)
-            TextField("Create a task, idea, or search…", text: $query)
+            TextField("Jump to a repo, or create a task or idea…", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
                 .focused($isFocused)
-                .onSubmit { createTask() }
+                .onSubmit { activateSelected() }
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -50,31 +142,15 @@ struct CommandBarView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 17)
     }
 
     private var actionList: some View {
         VStack(spacing: 2) {
-            actionRow(
-                icon: "plus.circle.fill", color: .blue,
-                label: "Create task: \(query)"
-            ) { createTask() }
-            actionRow(
-                icon: "lightbulb.fill", color: .yellow,
-                label: "Capture idea: \(query)"
-            ) { captureIdea() }
-            if matches("theme", "light", "dark", "appearance", "mode") {
-                actionRow(
-                    icon: store.appTheme.toggled.icon, color: .purple,
-                    label: "Switch to \(store.appTheme.toggled.label) theme"
-                ) { store.toggleTheme(); dismiss() }
-            }
-            if matches("settings", "preferences", "config") {
-                actionRow(
-                    icon: "gearshape.fill", color: .gray,
-                    label: "Open settings"
-                ) { dismiss(); store.isSettingsVisible = true }
+            ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
+                actionRow(action, isSelected: index == selectedIndex)
+                    .onHover { hovering in if hovering { selectedIndex = index } }
             }
         }
         .padding(.vertical, 6)
@@ -87,27 +163,46 @@ struct CommandBarView: View {
         return keywords.contains { q.contains($0) }
     }
 
-    private func actionRow(icon: String, color: Color, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func actionRow(_ action: PaletteAction, isSelected: Bool) -> some View {
+        Button(action: action.run) {
             HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .foregroundStyle(color)
+                Image(systemName: action.icon)
+                    .foregroundStyle(action.color)
                     .frame(width: 20)
-                Text(label)
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(action.label)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    if let subtitle = action.subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
-                Text("↵")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                if isSelected {
+                    Text("↵")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(Color.primary.opacity(0.0001))
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isSelected ? Color.primary.opacity(0.1) : Color.clear)
+        )
+    }
+
+    private func navigate(to project: Project) {
+        store.selection = .project(path: project.path)
+        dismiss()
     }
 
     private func createTask() {

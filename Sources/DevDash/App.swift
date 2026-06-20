@@ -23,6 +23,7 @@ struct DevDashApp: App {
                             .environmentObject(store)
                     }
                 }
+                .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.isCommandBarVisible)
                 .overlay {
                     if store.isSettingsVisible {
                         SettingsView()

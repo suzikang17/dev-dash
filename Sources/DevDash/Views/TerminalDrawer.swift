@@ -16,7 +16,14 @@ final class TerminalSessionStore {
     private var sessions: [String: Session] = [:]
     private var terminationToken: NSObjectProtocol?
 
-    init() {
+    private var appearance: TerminalAppearance
+
+    /// The live look, so non-cached terminals (e.g. nvim's `EmbeddedTerminal`)
+    /// can theme themselves from the same source and re-theme when it changes.
+    var currentAppearance: TerminalAppearance { appearance }
+
+    init(appearance: TerminalAppearance) {
+        self.appearance = appearance
         // Deterministically tear down every shell on app quit. Without this,
         // forkpty()'d login shells (and their children — a running claude/build)
         // get reparented to launchd and leak past app exit.
@@ -80,6 +87,74 @@ final class TerminalSessionStore {
         }
     }
 
+    // MARK: - Appearance, input, focus
+
+    /// Retheme every live terminal (called when the app theme changes).
+    func applyTheme(_ theme: AppTheme) {
+        appearance.theme = theme
+        reapplyAll()
+    }
+
+    /// Resize the font of every live terminal (zoom).
+    func setFontSize(_ size: Double) {
+        appearance.fontSize = CGFloat(size)
+        reapplyAll()
+    }
+
+    /// Change the monospace family of every live terminal.
+    func setFontFamily(_ family: TerminalFontFamily) {
+        appearance.fontFamily = family
+        reapplyAll()
+    }
+
+    /// Change the cursor shape of every live terminal.
+    func setCursorStyle(_ style: TerminalCursorStyle) {
+        appearance.cursorStyle = style
+        reapplyAll()
+    }
+
+    /// Change the scrollback line count of every live terminal.
+    func setScrollback(_ lines: Int) {
+        appearance.scrollback = lines
+        reapplyAll()
+    }
+
+    private func reapplyAll() {
+        for session in sessions.values { applyTerminalAppearance(appearance, to: session.view) }
+    }
+
+    // MARK: - Search (find-in-terminal, bound to the active session)
+
+    @discardableResult
+    func findNext(_ term: String, in projectPath: String) -> Bool {
+        guard let view = sessions[projectPath]?.view, !term.isEmpty else { return false }
+        return view.findNext(term, options: SearchOptions(caseSensitive: false), scrollToResult: true)
+    }
+
+    @discardableResult
+    func findPrevious(_ term: String, in projectPath: String) -> Bool {
+        guard let view = sessions[projectPath]?.view, !term.isEmpty else { return false }
+        return view.findPrevious(term, options: SearchOptions(caseSensitive: false), scrollToResult: true)
+    }
+
+    func clearSearch(in projectPath: String) {
+        sessions[projectPath]?.view.clearSearch()
+    }
+
+    /// Send text to a project's shell (quick-run buttons). Focuses first so the
+    /// keystrokes land and the user can keep typing.
+    func send(_ text: String, to projectPath: String) {
+        guard let view = sessions[projectPath]?.view else { return }
+        view.window?.makeFirstResponder(view)
+        view.send(txt: text)
+    }
+
+    /// Make a project's terminal the first responder so the user can type at once.
+    func focus(projectPath: String) {
+        guard let view = sessions[projectPath]?.view else { return }
+        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+    }
+
     private func makeShell(cwd: String) -> Session {
         let view = LocalProcessTerminalView(frame: .zero)
         let delegate = ShellTerminalDelegate()
@@ -102,6 +177,8 @@ final class TerminalSessionStore {
             execName: nil,
             currentDirectory: cwd
         )
+        // Apply after startProcess so cursor/scrollback land on the live emulator.
+        applyTerminalAppearance(appearance, to: view)
         return Session(view: view, delegate: delegate)
     }
 }
@@ -121,92 +198,4 @@ struct TerminalHostView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> LocalProcessTerminalView { terminal }
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
-}
-
-/// VS Code–style bottom terminal panel: drag-to-resize handle, a header with the
-/// project's cwd plus restart/close, and the project's live shell filling the rest.
-struct TerminalDrawer: View {
-    @EnvironmentObject var store: DashboardStore
-    let project: Project
-    @Binding var height: CGFloat
-
-    @State private var dragStartHeight: CGFloat? = nil
-    @State private var restartTick = 0
-
-    private let minHeight: CGFloat = 120
-    private let maxHeight: CGFloat = 800
-
-    var body: some View {
-        VStack(spacing: 0) {
-            resizeHandle
-            header
-            Divider()
-            TerminalHostView(terminal: store.terminals.session(for: project.path))
-                .id("\(project.path)#\(restartTick)")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(height: height)
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-
-    private var resizeHandle: some View {
-        Rectangle()
-            .fill(Color.clear)
-            .frame(height: 6)
-            .overlay(Divider(), alignment: .top)
-            .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-            }
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        let start = dragStartHeight ?? height
-                        if dragStartHeight == nil { dragStartHeight = start }
-                        height = min(maxHeight, max(minHeight, start - value.translation.height))
-                    }
-                    .onEnded { _ in dragStartHeight = nil }
-            )
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "terminal")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-            Text(project.name)
-                .font(.system(size: 11, weight: .semibold))
-            Text(abbreviatedPath)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
-            Button {
-                store.terminals.restart(projectPath: project.path)
-                restartTick += 1
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .help("Restart shell")
-            Button {
-                store.terminalOpen = false
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.borderless)
-            .help("Close terminal (⌘`)")
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Color(NSColor.controlBackgroundColor))
-    }
-
-    private var abbreviatedPath: String {
-        let home = NSHomeDirectory()
-        return project.path.hasPrefix(home)
-            ? "~" + project.path.dropFirst(home.count)
-            : project.path
-    }
 }

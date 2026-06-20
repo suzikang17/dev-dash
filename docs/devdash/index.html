@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- managed by devdash — content comes from sibling .html files; this file is regenerated -->
+<meta charset="utf-8">
+<title>dev-dash — Product</title>
+<style>
+  :root { --bg: #0f1115; --fg: #e8e8ec; --muted: #9aa0a8; --accent: #5ac8fa;
+          --border: #23262d; --card: #181a1f; --code: #1c1f26;
+          --green: #2ecc71; --red: #ff6b6b; --orange: #ffa502; --purple: #b388ff; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #ffffff; --fg: #1c1c1e; --muted: #6e6e73; --accent: #007aff;
+            --border: #e5e5ea; --card: #f7f7f9; --code: #f1f3f5;
+            --green: #2ecc71; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; }
+  }
+  html, body { background: var(--bg); color: var(--fg); margin: 0; padding: 0;
+               font: 14px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+               line-height: 1.55; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 28px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .crumbs { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .status-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+                 margin: 0 0 20px; background: var(--card); }
+  .status-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .status-title { font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+                  font-size: 11px; color: var(--muted); }
+  .status-tag { font-size: 12px; color: var(--muted); }
+  .status-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+                font-size: 13px; }
+  .status-k { color: var(--muted); }
+  .status-v { font-variant-numeric: tabular-nums; text-align: right; }
+  .lore-card { border: 1px solid var(--border); border-radius: 10px; padding: 4px 16px 14px;
+               margin: 0 0 14px; background: var(--card); }
+  .lore-card-meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums;
+                    padding-top: 10px; }
+  .lore-card h1, .lore-card h2 { font-size: 15px; margin: 6px 0 8px; }
+  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
+             margin-bottom: 22px; position: sticky; top: 0; background: var(--bg);
+             z-index: 5; padding-top: 4px; }
+  nav.tabs .tab { background: transparent; color: var(--muted); border: 0;
+                  padding: 8px 12px; font: inherit; cursor: pointer; border-radius: 6px 6px 0 0;
+                  border-bottom: 2px solid transparent; }
+  nav.tabs .tab:hover { color: var(--fg); }
+  nav.tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  h2 { font-size: 18px; margin-top: 22px; margin-bottom: 8px; }
+  h3 { font-size: 15px; margin-top: 18px; margin-bottom: 6px; }
+  h4 { font-size: 13px; margin-top: 14px; margin-bottom: 4px; color: var(--muted);
+       text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  p { margin: 8px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { background: var(--code); border-radius: 4px; }
+  code { padding: 1px 5px; font-size: 12px; }
+  pre { padding: 10px 12px; overflow-x: auto; font-size: 12px; }
+  ul { padding-left: 22px; }
+  li { margin: 3px 0; }
+  ul.progress { padding-left: 0; list-style: none; }
+  ul.progress li { padding: 4px 0; }
+  ul.checklist { padding-left: 0; list-style: none; }
+  ul.checklist li { padding: 2px 0; font-family: ui-monospace, "SF Mono", monospace; font-size: 13px; }
+  blockquote { border-left: 3px solid var(--border); padding: 4px 12px; color: var(--muted);
+               margin: 6px 0; font-style: italic; }
+  blockquote.unanswered { color: var(--muted); opacity: 0.6; }
+
+  /* Cards & callouts */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px 18px; margin: 12px 0; }
+  .callout { padding: 12px 16px; border-radius: 8px; margin: 12px 0;
+             border-left: 3px solid var(--accent); background: var(--card); }
+  .callout.tldr { border-left-color: var(--accent); }
+  .callout.warn { border-left-color: var(--orange); }
+  .callout.risk { border-left-color: var(--red); }
+
+  /* Pills / badges */
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+          background: var(--card); border: 1px solid var(--border); color: var(--muted);
+          margin-right: 4px; }
+  .pill.done    { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+  .pill.current { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  .pill.pending { color: var(--muted); }
+  .pill.warn    { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 40%, transparent); }
+  .pill.risk    { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+  .pill.idea    { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 40%, transparent); }
+
+  /* KPI dashboard */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+              gap: 12px; margin: 12px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+         padding: 14px; }
+  .kpi .k-label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+                  letter-spacing: 0.6px; font-weight: 600; }
+  .kpi .k-value { font-size: 24px; font-weight: 700; margin: 6px 0 2px;
+                  font-feature-settings: "tnum"; }
+  .kpi .k-target { font-size: 11px; color: var(--muted); }
+  .kpi .k-delta { font-size: 11px; font-weight: 600; }
+  .kpi .k-delta.up { color: var(--green); }
+  .kpi .k-delta.down { color: var(--red); }
+
+  /* Timeline (vertical) */
+  .timeline { list-style: none; padding-left: 0; margin: 14px 0;
+              border-left: 2px solid var(--border); }
+  .timeline > li { position: relative; margin: 0; padding: 8px 0 14px 22px; }
+  .timeline > li::before { content: ""; position: absolute; left: -6px; top: 14px;
+                           width: 10px; height: 10px; border-radius: 50%;
+                           background: var(--card); border: 2px solid var(--accent); }
+  .timeline > li.done::before { background: var(--green); border-color: var(--green); }
+  .timeline > li.current::before { background: var(--accent); border-color: var(--accent); }
+  .timeline > li .t-meta { color: var(--muted); font-size: 11px; font-family: ui-monospace, "SF Mono", monospace; }
+  .timeline > li .t-title { font-weight: 600; }
+
+  /* Tagged board (idea backlog) */
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+           gap: 12px; margin: 12px 0; }
+  .board .col { background: var(--card); border: 1px solid var(--border);
+                border-radius: 10px; padding: 12px; }
+  .board .col h4 { margin-top: 0; }
+  .board .col .item { padding: 8px 10px; border-radius: 6px; background: var(--bg);
+                      border: 1px solid var(--border); font-size: 12px; margin-bottom: 6px; }
+
+  /* Tag chips */
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px;
+         background: color-mix(in srgb, var(--accent) 15%, transparent);
+         color: var(--accent); margin-right: 4px; }
+
+  /* PRD / Plan structure */
+  .doc-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .doc-head .doc-status { font-size: 11px; color: var(--muted); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* Status / risk tables */
+  .file-list { display: grid; gap: 8px; }
+  .file-list .embed { margin-top: 10px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left;
+           vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+       letter-spacing: 0.5px; }
+  .empty { color: var(--muted); font-style: italic; padding: 14px 0; }
+  details > summary { cursor: pointer; padding: 6px 0; }
+
+  /* Inline add buttons (data-action="dom-insert-template" etc.) */
+  .add-btn { background: transparent; border: 1px dashed var(--border); color: var(--muted);
+             padding: 6px 12px; border-radius: 6px; font: inherit; font-size: 12px;
+             cursor: pointer; margin: 6px 0; }
+  .add-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Inline remove (✕) buttons injected on .kpi / .item / .triage-card */
+  .rm-btn { position: absolute; top: 4px; right: 4px; background: transparent;
+            border: 0; color: var(--muted); font-size: 11px; line-height: 1;
+            padding: 2px 5px; border-radius: 3px; cursor: pointer;
+            opacity: 0; transition: opacity 0.12s, color 0.12s, background 0.12s; }
+  .kpi:hover .rm-btn, .item:hover .rm-btn, .triage-card:hover .rm-btn { opacity: 1; }
+  .rm-btn:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+  /* Tag chips (Tana-style supertags) */
+  .devdash-tag-chip { display: inline-flex; align-items: center; gap: 3px;
+                       padding: 1px 7px; border-radius: 4px; font-size: 11px;
+                       font-weight: 600; letter-spacing: 0.2px; margin: 0 2px;
+                       user-select: none; cursor: default; vertical-align: baseline; }
+  .devdash-tag-chip[data-tag="task"]     { background: rgba(90,200,250,0.12);  color: #5ac8fa; border: 1px solid rgba(90,200,250,0.35); }
+  .devdash-tag-chip[data-tag="kpi"]      { background: rgba(48,209,88,0.12);   color: #30d158; border: 1px solid rgba(48,209,88,0.35); }
+  .devdash-tag-chip[data-tag="goal"]     { background: rgba(191,90,242,0.12);  color: #bf5af2; border: 1px solid rgba(191,90,242,0.35); }
+  .devdash-tag-chip[data-tag="decision"] { background: rgba(255,214,10,0.12);  color: #ffd60a; border: 1px solid rgba(255,214,10,0.35); }
+  .devdash-tag-chip[data-tag="risk"]     { background: rgba(255,69,58,0.12);   color: #ff453a; border: 1px solid rgba(255,69,58,0.35); }
+  .devdash-tag-chip[data-tag="question"] { background: rgba(255,159,10,0.12);  color: #ff9f0a; border: 1px solid rgba(255,159,10,0.35); }
+  .devdash-tag-chip[data-tag="idea"]     { background: rgba(100,210,255,0.12); color: #64d2ff; border: 1px solid rgba(100,210,255,0.35); }
+
+  /* Blocks view (live query results) */
+  #devdash-blocks-view .block-group { margin: 16px 0; }
+  #devdash-blocks-view .block-group h3 { margin: 0 0 8px; font-size: 13px;
+                                          text-transform: uppercase; letter-spacing: 0.5px;
+                                          color: var(--muted); }
+  #devdash-blocks-view .block-row { padding: 8px 12px; background: var(--card);
+                                     border: 1px solid var(--border); border-radius: 6px;
+                                     margin-bottom: 4px; cursor: pointer;
+                                     transition: border-color 0.12s; font-size: 13px; }
+  #devdash-blocks-view .block-row:hover { border-color: var(--accent); }
+  #devdash-blocks-view .empty-state { color: var(--muted); font-style: italic;
+                                       padding: 12px 0; font-size: 12px; }
+
+  /* Outliner (Roam-style bullet doc) */
+  [data-outliner] ul { list-style: none; padding-left: 0; margin: 0; }
+  [data-outliner] ul ul { padding-left: 22px; border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent); margin-left: 8px; }
+  [data-outliner] li { position: relative; padding: 3px 0 3px 22px; line-height: 1.55;
+                        font-family: ui-sans-serif, -apple-system, system-ui, sans-serif; font-size: 14px; }
+  [data-outliner] li::before { content: "•"; position: absolute; left: 8px; top: 3px;
+                                color: var(--muted); font-size: 16px; line-height: 1.55;
+                                transition: color 0.12s; }
+  [data-outliner] li:hover::before { color: var(--accent); }
+  [data-outliner] li:focus-within { background: color-mix(in srgb, var(--accent) 5%, transparent);
+                                     border-radius: 4px; }
+  [data-outliner] li > ul { margin-top: 3px; }
+  [data-outliner] .doc-status { display: none; }
+
+  /* Triage board */
+  .triage-controls { display: flex; gap: 6px; margin: 12px 0; }
+  .triage-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+                 margin: 12px 0 24px; }
+  .triage-col { background: var(--card); border: 1px solid var(--border);
+                border-radius: 10px; padding: 10px; min-height: 200px; }
+  .triage-col h4 { margin-top: 0; display: flex; justify-content: space-between;
+                   align-items: baseline; }
+  .triage-list { min-height: 120px; }
+  .triage-list.is-drop-target { background: color-mix(in srgb, var(--accent) 12%, transparent);
+                                border-radius: 6px; outline: 2px dashed var(--accent);
+                                outline-offset: -4px; }
+  .triage-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+                 padding: 8px 10px; margin-bottom: 6px; cursor: grab; font-size: 12px; }
+  .triage-card:active { cursor: grabbing; }
+  .triage-card.dragging { opacity: 0.4; }
+  .triage-card .t-title { font-weight: 500; }
+  .triage-card .t-tags { margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .triage-card .t-tags .tag { cursor: pointer; }
+  .triage-card.is-filtered-out { display: none; }
+  @media (max-width: 720px) {
+    .triage-cols { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* Bar chart (vanilla, no JS) */
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; padding: 8px 0; }
+  .bars .bar { flex: 1; background: color-mix(in srgb, var(--accent) 60%, transparent);
+               border-radius: 3px 3px 0 0; min-height: 2px; position: relative; }
+  .bars .bar .b-val { position: absolute; top: -16px; left: 0; right: 0; text-align: center;
+                      font-size: 10px; color: var(--muted); }
+  .bars .bar .b-label { position: absolute; bottom: -18px; left: 0; right: 0; text-align: center;
+                        font-size: 10px; color: var(--muted); }
+</style>
+<script defer src=".assets/devdash-components.js"></script>
+<script defer src=".assets/alpine.min.js"></script>
+</head>
+<body x-data="{}">
+  <div class="wrap">
+    <h1>dev-dash</h1>
+    <div class="crumbs">Methodology: <strong>Personal Tool</strong> · Stage: <strong>Identify the itch</strong></div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="notes">Notes</button>
+      <button class="tab" data-tab="blocks">Blocks</button>
+      <button class="tab" data-tab="roadmap">Roadmap</button>
+      <button class="tab" data-tab="initiatives">Initiatives</button>
+      <button class="tab" data-tab="decisions">Decisions</button>
+      <button class="tab" data-tab="goals">Goals &amp; KPIs</button>
+      <button class="tab" data-tab="ideas">Ideas</button>
+      <button class="tab" data-tab="artifacts">Artifacts</button>
+    </nav>
+  <section id="tab-overview" class="tab-pane active">
+    <div class="status-card">
+  <div class="status-head">
+    <span class="status-title">Snapshot</span>
+    <span class="status-tag">swift</span>
+  </div>
+  <div class="status-row"><span class="status-k">Last session</span><span class="status-v">Jun 18 Perf sweep, sidebar process grouping, and the project one-pager</span></div>
+  <div class="status-row"><span class="status-k">Tasks</span><span class="status-v">2 active</span></div>
+  <div class="status-row"><span class="status-k">Recent decision</span><span class="status-v">—</span></div>
+  <div class="status-row"><span class="status-k">Commits / 7d</span><span class="status-v">28</span></div>
+  <div class="status-row"><span class="status-k">Running</span><span class="status-v">none</span></div>
+  <div class="status-row"><span class="status-k">Health</span><span class="status-v">Active</span></div>
+</div><div data-section-file="sections/overview.html"><div class="doc-head">
+  <h2>dev-dash</h2>
+  <span class="doc-status">One-pager · <code>sections/overview.html</code></span>
+</div>
+
+<div class="callout tldr">
+  <h4 style="margin-top:0">TL;DR</h4>
+  <p><em>One sentence the rest of the page is justifying.</em></p>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>What is it?</h3>
+    <p><em>One sentence — what does this do?</em></p>
+  </div>
+  <div class="card">
+    <h3>Who's it for?</h3>
+    <p><em>Specific. Role + situation, not a persona poster.</em></p>
+  </div>
+  <div class="card">
+    <h3>Why now?</h3>
+    <p><em>What changed that makes this the right time?</em></p>
+  </div>
+  <div class="card">
+    <h3>What it is <em>not</em></h3>
+    <p><em>Out-of-scope. The features you're consciously skipping.</em></p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>How will we know it's working?</h3>
+  <p><em>Pick 1–3 signals. Activation, retention, revenue, qualitative.</em></p>
+  <ul>
+    <li><span class="tag">activation</span> <em>e.g. % of new users completing core flow</em></li>
+    <li><span class="tag">retention</span> <em>e.g. WAU/MAU or day-7 return</em></li>
+    <li><span class="tag">qualitative</span> <em>e.g. 3 unprompted "thank you"s in a week</em></li>
+  </ul>
+</div>
+
+<h3>Risks &amp; assumptions</h3>
+<table>
+  <thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td><em>e.g. nobody wants this</em></td><td><span class="pill warn">Med</span></td><td><span class="pill risk">High</span></td><td><em>5 customer interviews before MVP</em></td></tr>
+  </tbody>
+</table></div>
+  </section>
+  <section id="tab-notes" class="tab-pane">
+    <div data-section-file="sections/notes.html"><div class="doc-head">
+  <h2>dev-dash — Notes</h2>
+  <span class="doc-status">Outliner · <code>sections/notes.html</code> · Tab to indent · ⇧Tab to outdent · [[ to link</span>
+</div>
+
+<div data-outliner="true">
+  <ul class="outliner">
+    <li>Start typing. Press <strong>Enter</strong> for a new bullet, <strong>Tab</strong> to nest.</li>
+    <li>Type <code>[[</code> anywhere to link to a task or doc.</li>
+    <li>Use this as a thinking surface — sketch, then promote to tasks later.</li>
+  </ul>
+</div></div>
+  </section>
+  <section id="tab-blocks" class="tab-pane">
+    <div class="doc-head">
+  <h2>Blocks</h2>
+  <span class="doc-status">Live query · types pulled from <code>sections/notes.html</code></span>
+</div>
+<p class="meta">Tag any bullet in Notes with <code>#task</code>, <code>#kpi</code>, <code>#goal</code>, <code>#decision</code>, <code>#risk</code>, <code>#question</code>, or <code>#idea</code> and it shows up here. Click a bullet to jump to its line in Notes.</p>
+<div id="devdash-blocks-view"></div>
+  </section>
+  <section id="tab-roadmap" class="tab-pane">
+    <h2>Personal Tool</h2>
+<blockquote>You are the user. Build for yourself, use it daily, fix what actually annoys you (not what you imagine will annoy other people). Resist polishing for an audience that doesn't exist. If it ends up useful to others, that's a bonus — not the goal.</blockquote>
+<h3>Progress</h3>
+<ul class="progress">
+<li><span class="pill current">Current</span> <strong>Identify the itch</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Sketch the smallest version</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Live with it</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Refine the parts that hurt</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Maybe share it</strong> <span class="meta">0/3 exit criteria</span></li>
+</ul>
+<div class="card">
+<h3>Identify the itch <span class="pill current">Current</span></h3>
+<p>Pin down the recurring annoyance. Personal tools work when they fix something real for you, not something speculative.</p>
+<blockquote>If you can't name the moment of annoyance, you don't have an itch yet — you have a curiosity. Wait for the itch.</blockquote>
+<h4>Questions <span class="meta">(4/5 answered)</span></h4>
+<p><strong>What's the specific moment that annoys you?</strong></p>
+<blockquote>Switching between many local dev projects and not knowing which is running, on what port, what AI sessions exist, what tasks are pending — context-loss when bouncing between projects daily.</blockquote>
+<p><strong>How often does it happen — daily, weekly, monthly?</strong></p>
+<blockquote>Daily, multiple times per day.</blockquote>
+<p><strong>What's your current workaround — and why is it bad enough to replace?</strong></p>
+<blockquote>Manually checking lsof, opening terminals per project, hunting for resume commands in ~/.claude. Slow and breaks flow.</blockquote>
+<p><strong>Is this actually a tool problem, or a habit problem?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's the rough shape of the fix in your head?</strong></p>
+<blockquote>Native macOS dashboard that auto-discovers running dev servers, shows them with previews, integrates Claude session resume, and tracks per-project tasks/state.</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ The annoyance written in one sentence</li>
+<li>☐ Frequency known (you've actually counted, not guessed)</li>
+<li>☐ Rough shape of the fix sketched</li>
+</ul>
+</div>
+<div class="card">
+<h3>Sketch the smallest version <span class="pill pending">Pending</span></h3>
+<p>Build the crappiest possible version that solves the itch. No polish. No edge cases. No options. Make it work for you, today, in your one workflow.</p>
+<blockquote>Hardcode everything. Skip auth. Skip config. Skip UI niceties. The goal is to use it, not to ship it.</blockquote>
+<h4>Questions <span class="meta">(2/5 answered)</span></h4>
+<p><strong>What's the dumbest possible version that works?</strong></p>
+<blockquote>Sidebar of running services + heatmap home + click to preview localhost URL in WKWebView.</blockquote>
+<p><strong>What can be hardcoded for now (paths, names, choices)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's the one workflow it must support?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's NOT in v0 (write it down so you don't sneak it in)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Where will it live — local script, menu bar app, web page on localhost?</strong></p>
+<blockquote>Native macOS app (SPM executable) with menu bar extra + main window.</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ It runs on your machine</li>
+<li>☐ It solves the itch in your one workflow</li>
+<li>☐ You haven't added a single feature beyond the itch</li>
+</ul>
+</div>
+<div class="card">
+<h3>Live with it <span class="pill pending">Pending</span></h3>
+<p>Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.</p>
+<blockquote>Don't open the editor for 1-2 weeks. Just use it. Take notes when something annoys you. The notes become the refine list.</blockquote>
+<h4>Questions <span class="meta">(0/4 answered)</span></h4>
+<p><strong>Have you actually used it for the original itch this week?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What new annoyances have you noticed (be specific)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What feature did you almost add — and is the urge real or imagined?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's missing that genuinely blocks you, vs. nice-to-have?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ Used daily/weekly for at least 1-2 weeks</li>
+<li>☐ Friction list written (real annoyances, not imagined ones)</li>
+<li>☐ Nothing added during this stage</li>
+</ul>
+</div>
+<div class="card">
+<h3>Refine the parts that hurt <span class="pill pending">Pending</span></h3>
+<p>Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.</p>
+<blockquote>Sort the friction list by frequency × pain. Fix the top 3. Stop. Use it again.</blockquote>
+<h4>Questions <span class="meta">(0/4 answered)</span></h4>
+<p><strong>What's the #1 friction point — and is it about correctness, speed, or ergonomics?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Are you fixing real friction, or rebuilding because you're bored?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What would make this 50% better in daily use?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What can you delete — features you added that you don't use?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ Top 3 friction points fixed</li>
+<li>☐ Unused features deleted (yes, deleted)</li>
+<li>☐ Tool still solves the original itch</li>
+</ul>
+</div>
+<div class="card">
+<h3>Maybe share it <span class="pill pending">Pending</span></h3>
+<p>Optional. If it's useful to others without contorting your life, share it. If sharing means meetings, support, and feature debates — don't.</p>
+<blockquote>Share at the level you can sustain. A README and a tweet is fine. Anything more is a commitment, treat it as one.</blockquote>
+<h4>Questions <span class="meta">(0/5 answered)</span></h4>
+<p><strong>Is sharing this going to obligate you (PRs, issues, support)?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>What's the smallest possible share — gist, tweet, README, package?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Who would actually find this useful — not theoretical, real people?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Are you ready to say no to feature requests that aren't your itch?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<p><strong>Or — should you just keep it private and free?</strong></p>
+<blockquote class="unanswered">unanswered</blockquote>
+<h4>Exit criteria</h4>
+<ul class="checklist">
+<li>☐ Decision made: keep private, or share at level X</li>
+<li>☐ If sharing: README written, repo public, audience told</li>
+<li>☐ If keeping private: that's also a valid endpoint — close the project</li>
+</ul>
+</div>
+  </section>
+  <section id="tab-initiatives" class="tab-pane">
+    <p class="empty">No initiatives yet. Top-level tasks with children become initiatives — group related tasks under a parent in the Tasks tab.</p>
+  </section>
+  <section id="tab-decisions" class="tab-pane">
+    <p class="doc-status">No lore decisions at <code>docs/decisions/</code> yet. Run <code>lore add decision</code>.</p>
+  </section>
+  <section id="tab-goals" class="tab-pane">
+    <div data-section-file="sections/goals.html"><div class="doc-head">
+  <h2>dev-dash — Goals &amp; KPIs</h2>
+  <span class="doc-status"><code>sections/goals.html</code></span>
+</div>
+
+<h3>North-star metric</h3>
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="k-label">North-star</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">vs. last week: —</div>
+  </div>
+</div>
+
+<h3>Quarter goals</h3>
+<ul class="checklist">
+  <li>☐ <em>Goal 1</em></li>
+  <li>☐ <em>Goal 2</em></li>
+  <li>☐ <em>Goal 3</em></li>
+</ul>
+<button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '<li>☐ <em>New goal</em></li>'); window.devdashMarkDirty($el)">+ Add goal</button>
+
+<h3>Tracked KPIs</h3>
+<div class="kpi-grid kpi-tracked">
+  <div class="kpi">
+    <div class="k-label">Activation</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">—</div>
+  </div>
+  <div class="kpi">
+    <div class="k-label">D7 retention</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">—</div>
+  </div>
+  <div class="kpi">
+    <div class="k-label">Weekly active</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">—</div>
+  </div>
+</div>
+<button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '<div class=&quot;kpi&quot;><div class=&quot;k-label&quot;>New KPI</div><div class=&quot;k-value&quot;>—</div><div class=&quot;k-target&quot;>target: —</div><div class=&quot;k-delta&quot;>—</div></div>'); window.devdashMarkDirty($el)">+ Add KPI tile</button>
+
+<h3>Detailed metrics</h3>
+<table>
+  <thead><tr><th>Metric</th><th>Current</th><th>Target</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><em>weekly active users</em></td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td><em>activation rate</em></td><td>—</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table>
+<button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '<tr><td><em>new metric</em></td><td>—</td><td>—</td><td>—</td></tr>'); window.devdashMarkDirty($el)">+ Add metric</button></div>
+  </section>
+  <section id="tab-ideas" class="tab-pane">
+    <div data-section-file="sections/ideas.html"><div class="doc-head">
+  <h2>Ideas</h2>
+  <span class="doc-status">Parking lot · <code>sections/ideas.html</code></span>
+</div>
+
+<p class="meta">Click <strong>→ task</strong> on any idea to promote it to the backlog. Or promote to a PRD (Product → New PRD) when ripe.</p>
+
+<div class="board">
+  <div class="col" data-col="quick-wins">
+    <h4>Quick wins <span class="meta">low effort, real value</span></h4>
+    <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">eng</span> <em>Idea 1</em></span><button data-action="promote-idea" data-title="Idea 1" contenteditable="false" onclick="this.textContent='\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(90,200,250,0.4);background:rgba(90,200,250,0.08);color:#5ac8fa;cursor:pointer;white-space:nowrap;flex-shrink:0;">\u2192 task</button></div>
+    <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">design</span> <em>Idea 2</em></span><button data-action="promote-idea" data-title="Idea 2" contenteditable="false" onclick="this.textContent='\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(90,200,250,0.4);background:rgba(90,200,250,0.08);color:#5ac8fa;cursor:pointer;white-space:nowrap;flex-shrink:0;">\u2192 task</button></div>
+    <button class="add-btn" contenteditable="false" @click="$el.insertAdjacentHTML('beforebegin', '<div class=&quot;item&quot;><span class=&quot;tag&quot;>new</span> <em>New idea — describe it</em></div>'); window.devdashMarkDirty($el)">+ Idea</button>
+  </div>
+  <div class="col" data-col="big-bets">
+    <h4>Big bets <span class="meta">larger investment</span></h4>
+    <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">research</span> <em>Idea 3</em></span><button data-action="promote-idea" data-title="Idea 3" contenteditable="false" onclick="this.textContent='\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(90,200,250,0.4);background:rgba(90,200,250,0.08);color:#5ac8fa;cursor:pointer;white-space:nowrap;flex-shrink:0;">\u2192 task</button></div>
+    <button class="add-btn" contenteditable="false" @click="$el.insertAdjacentHTML('beforebegin', '<div class=&quot;item&quot;><span class=&quot;tag&quot;>new</span> <em>New idea — describe it</em></div>'); window.devdashMarkDirty($el)">+ Idea</button>
+  </div>
+  <div class="col" data-col="maybe-later">
+    <h4>Maybe later <span class="meta">parked</span></h4>
+    <div class="item" style="display:flex;align-items:center;gap:6px"><span style="flex:1"><span class="tag">marketing</span> <em>Idea 4</em></span><button data-action="promote-idea" data-title="Idea 4" contenteditable="false" onclick="this.textContent='\u2713';this.style.opacity='0.45';this.disabled=true;this.closest('.item').style.opacity='0.5';" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(90,200,250,0.4);background:rgba(90,200,250,0.08);color:#5ac8fa;cursor:pointer;white-space:nowrap;flex-shrink:0;">\u2192 task</button></div>
+    <button class="add-btn" contenteditable="false" @click="$el.insertAdjacentHTML('beforebegin', '<div class=&quot;item&quot;><span class=&quot;tag&quot;>new</span> <em>New idea — describe it</em></div>'); window.devdashMarkDirty($el)">+ Idea</button>
+  </div>
+</div></div>
+  </section>
+  <section id="tab-artifacts" class="tab-pane">
+    <details class="card">
+  <summary><strong>PRDs</strong> <span class="meta">prd/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">Product requirements docs.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New PRD…</p>
+</details>
+<details class="card">
+  <summary><strong>Implementation Plans</strong> <span class="meta">plans/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">Milestones, timelines, risks.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Implementation Plan…</p>
+</details>
+<details class="card">
+  <summary><strong>Status Reports</strong> <span class="meta">status/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">Weekly snapshots.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Status Report…</p>
+</details>
+<details class="card">
+  <summary><strong>Decisions</strong> <span class="meta">decisions/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">Append-only decision log.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Decision…</p>
+</details>
+<details class="card">
+  <summary><strong>Concept Explainers</strong> <span class="meta">concepts/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">How something works, for the team.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Concept Explainer…</p>
+</details>
+<details class="card">
+  <summary><strong>Retrospectives</strong> <span class="meta">retros/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">What went well, what didn't, what's next.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Retrospective…</p>
+</details>
+<details class="card">
+  <summary><strong>Documents</strong> <span class="meta">docs/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">Catch-all narrative docs.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Document…</p>
+</details>
+  </section>
+  </div>
+  <script>
+  (function() {
+    // No URL fragment manipulation — file:// origin treats each fragment
+    // as a unique origin and WKWebView blocks the navigation, which
+    // looks like the page reverting to Overview.
+    var btns = document.querySelectorAll('nav.tabs .tab');
+    var panes = document.querySelectorAll('.tab-pane');
+    btns.forEach(function(b) {
+      b.addEventListener('click', function(e) {
+        e.preventDefault();
+        btns.forEach(function(x) { x.classList.remove('active'); });
+        panes.forEach(function(p) { p.classList.remove('active'); });
+        b.classList.add('active');
+        var t = document.getElementById('tab-' + b.dataset.tab);
+        if (t) t.classList.add('active');
+      });
+    });
+  })();
+</script>
+</body>
+</html>

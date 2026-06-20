@@ -21,7 +21,7 @@ enum TerminalSelfTest {
             if !cond { failures.append(msg) }
         }
 
-        let store = TerminalSessionStore()
+        let store = TerminalSessionStore(appearance: .current())
         let dirA = NSTemporaryDirectory() + "devdash-selftest-A"
         let dirB = NSTemporaryDirectory() + "devdash-selftest-B"
         for d in [dirA, dirB] {

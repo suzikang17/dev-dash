@@ -122,6 +122,7 @@ struct FilesTabView: View {
 
 struct FileContentView: View {
     let path: String
+    @EnvironmentObject var store: DashboardStore
     @State private var content: FileTreeScanner.FileContent?
     @State private var loadedPath: String?
     @State private var renderMode: RenderMode = .nvim
@@ -268,9 +269,10 @@ struct FileContentView: View {
                 )
                 .background(Color(NSColor.textBackgroundColor))
             } else if renderMode == .nvim {
-                if let term = EmbeddedTerminal.neovim(filePath: path, readOnly: true) {
+                if let term = EmbeddedTerminal.neovim(filePath: path, readOnly: true,
+                                                      appearance: store.terminals.currentAppearance) {
                     term
-                        .background(Color.black)
+                        .background(Color(NSColor.windowBackgroundColor))
                         .id(path)
                 } else {
                     placeholder("nvim not found", subtitle: "Install via brew install neovim")

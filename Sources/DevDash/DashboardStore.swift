@@ -12,6 +12,30 @@ enum AppTheme: String, CaseIterable {
     var toggled: AppTheme { self == .light ? .dark : .light }
 }
 
+/// Where the embedded terminal renders. Persisted under `devdash.terminal.placement`.
+enum TerminalPlacement: String, CaseIterable {
+    case bottom, side, floating
+
+    var label: String {
+        switch self {
+        case .bottom: return "Bottom"
+        case .side: return "Side"
+        case .floating: return "Floating"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .bottom: return "rectangle.bottomthird.inset.filled"
+        case .side: return "rectangle.rightthird.inset.filled"
+        case .floating: return "macwindow"
+        }
+    }
+    var next: TerminalPlacement {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+}
+
 @MainActor
 final class DashboardStore: ObservableObject {
     @Published var services: [Service] = [] {
@@ -98,9 +122,67 @@ final class DashboardStore: ObservableObject {
     @Published var isSettingsVisible: Bool = false
     @Published var appTheme: AppTheme =
         AppTheme(rawValue: UserDefaults.standard.string(forKey: "devdash.theme") ?? "") ?? .dark {
-        didSet { UserDefaults.standard.set(appTheme.rawValue, forKey: "devdash.theme") }
+        didSet {
+            UserDefaults.standard.set(appTheme.rawValue, forKey: "devdash.theme")
+            terminals.applyTheme(appTheme)
+        }
     }
     @Published var activeDocPath: String? = nil
+
+    // MARK: - Living-doc appearance (Settings → Document)
+
+    /// Accent hue for the generated living doc. Drives the whole OKLCH palette;
+    /// persisted and regenerates open docs on change.
+    @Published var docAccent: DocAccent =
+        DocAccent(rawValue: UserDefaults.standard.string(forKey: "devdash.docAccent") ?? "") ?? .amber {
+        didSet {
+            UserDefaults.standard.set(docAccent.rawValue, forKey: "devdash.docAccent")
+            regenerateAllDocs()
+        }
+    }
+    /// Named font pairing for the living doc. `.custom` uses the override families below.
+    @Published var docFontPreset: DocFontPreset =
+        DocFontPreset(rawValue: UserDefaults.standard.string(forKey: "devdash.docFontPreset") ?? "") ?? .system {
+        didSet {
+            UserDefaults.standard.set(docFontPreset.rawValue, forKey: "devdash.docFontPreset")
+            regenerateAllDocs()
+        }
+    }
+    @Published var docFontDisplay: String =
+        UserDefaults.standard.string(forKey: "devdash.docFont.display") ?? "" {
+        didSet { UserDefaults.standard.set(docFontDisplay, forKey: "devdash.docFont.display"); regenerateAllDocs() }
+    }
+    @Published var docFontBody: String =
+        UserDefaults.standard.string(forKey: "devdash.docFont.body") ?? "" {
+        didSet { UserDefaults.standard.set(docFontBody, forKey: "devdash.docFont.body"); regenerateAllDocs() }
+    }
+    @Published var docFontMono: String =
+        UserDefaults.standard.string(forKey: "devdash.docFont.mono") ?? "" {
+        didSet { UserDefaults.standard.set(docFontMono, forKey: "devdash.docFont.mono"); regenerateAllDocs() }
+    }
+    /// Bumped on every doc regen so ProductWebView knows to reload the file.
+    @Published var docRegenToken: Int = 0
+
+    /// Resolved font stacks for the generator. For `.custom`, each user-picked
+    /// family is wrapped with a graceful fallback chain; empty fields inherit it.
+    var resolvedDocFonts: DocFontSet {
+        guard docFontPreset == .custom else { return docFontPreset.fontSet }
+        func stack(_ family: String, fallback: String) -> String {
+            let f = family.trimmingCharacters(in: .whitespaces)
+            return f.isEmpty ? fallback : "\"\(f)\", \(fallback)"
+        }
+        return DocFontSet(
+            display: stack(docFontDisplay, fallback: DocFontPreset.systemStack),
+            body: stack(docFontBody, fallback: DocFontPreset.systemStack),
+            mono: stack(docFontMono, fallback: DocFontPreset.monoStack))
+    }
+
+    /// Regenerate every known project's living doc so a global appearance change
+    /// (accent/font) takes effect immediately across open Product tabs.
+    func regenerateAllDocs() {
+        for project in projects { regenerateRoadmap(for: project.path) }
+        docRegenToken &+= 1
+    }
 
     func toggleTheme() { appTheme = appTheme.toggled }
     private var digestTask: Task<Void, Never>?
@@ -113,9 +195,75 @@ final class DashboardStore: ObservableObject {
     @Published var gitStatuses: [String: GitStatus] = [:]
     @Published var gitOpInProgress: Set<String> = []
 
-    // Embedded terminal drawer (VS Code–style, one live shell per project).
-    @Published var terminalOpen: Bool = false
-    let terminals = TerminalSessionStore()
+    // Embedded terminal (VS Code–style, one live shell per project).
+    @Published var terminalOpen: Bool = UserDefaults.standard.bool(forKey: "devdash.terminal.open") {
+        didSet { UserDefaults.standard.set(terminalOpen, forKey: "devdash.terminal.open") }
+    }
+    @Published var terminalPlacement: TerminalPlacement =
+        TerminalPlacement(rawValue: UserDefaults.standard.string(forKey: "devdash.terminal.placement") ?? "") ?? .bottom {
+        didSet { UserDefaults.standard.set(terminalPlacement.rawValue, forKey: "devdash.terminal.placement") }
+    }
+    @Published var terminalFontSize: Double =
+        UserDefaults.standard.object(forKey: "devdash.terminal.fontSize") as? Double ?? 13 {
+        didSet {
+            UserDefaults.standard.set(terminalFontSize, forKey: "devdash.terminal.fontSize")
+            terminals.setFontSize(terminalFontSize)
+        }
+    }
+    @Published var terminalFontFamily: TerminalFontFamily =
+        TerminalFontFamily(rawValue: UserDefaults.standard.string(forKey: "devdash.terminal.fontFamily") ?? "") ?? .system {
+        didSet {
+            UserDefaults.standard.set(terminalFontFamily.rawValue, forKey: "devdash.terminal.fontFamily")
+            terminals.setFontFamily(terminalFontFamily)
+        }
+    }
+    @Published var terminalCursorStyle: TerminalCursorStyle =
+        TerminalCursorStyle(rawValue: UserDefaults.standard.string(forKey: "devdash.terminal.cursorStyle") ?? "") ?? .block {
+        didSet {
+            UserDefaults.standard.set(terminalCursorStyle.rawValue, forKey: "devdash.terminal.cursorStyle")
+            terminals.setCursorStyle(terminalCursorStyle)
+        }
+    }
+    @Published var terminalScrollback: Int =
+        UserDefaults.standard.object(forKey: "devdash.terminal.scrollback") as? Int ?? 10000 {
+        didSet {
+            UserDefaults.standard.set(terminalScrollback, forKey: "devdash.terminal.scrollback")
+            terminals.setScrollback(terminalScrollback)
+        }
+    }
+    let terminals = TerminalSessionStore(appearance: .current())
+
+    // Resize geometry (persisted; plain vars — containers own @State and write back).
+    var terminalHeight: CGFloat {
+        get { CGFloat(UserDefaults.standard.object(forKey: "devdash.terminal.height") as? Double ?? 280) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "devdash.terminal.height") }
+    }
+    var terminalWidth: CGFloat {
+        get { CGFloat(UserDefaults.standard.object(forKey: "devdash.terminal.width") as? Double ?? 420) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "devdash.terminal.width") }
+    }
+    var terminalFloatingFrame: CGRect {
+        get {
+            let d = UserDefaults.standard
+            let w = d.object(forKey: "devdash.terminal.float.w") as? Double ?? 560
+            let h = d.object(forKey: "devdash.terminal.float.h") as? Double ?? 360
+            let x = d.object(forKey: "devdash.terminal.float.x") as? Double ?? 80
+            let y = d.object(forKey: "devdash.terminal.float.y") as? Double ?? 80
+            return CGRect(x: x, y: y, width: w, height: h)
+        }
+        set {
+            let d = UserDefaults.standard
+            d.set(Double(newValue.origin.x), forKey: "devdash.terminal.float.x")
+            d.set(Double(newValue.origin.y), forKey: "devdash.terminal.float.y")
+            d.set(Double(newValue.width), forKey: "devdash.terminal.float.w")
+            d.set(Double(newValue.height), forKey: "devdash.terminal.float.h")
+        }
+    }
+
+    func zoomTerminal(_ delta: Double) {
+        terminalFontSize = min(28, max(8, terminalFontSize + delta))
+    }
+    func resetTerminalZoom() { terminalFontSize = 13 }
 
     func isPinned(_ projectPath: String) -> Bool {
         pinnedProjects.contains(projectPath)
@@ -653,7 +801,8 @@ final class DashboardStore: ObservableObject {
         _ = ProductDocGenerator.generate(
             projectName: name, projectPath: projectPath,
             meta: meta, template: template, tasks: tasks,
-            status: projectStatus(for: projectPath)
+            status: projectStatus(for: projectPath),
+            accent: docAccent, fonts: resolvedDocFonts
         )
     }
 

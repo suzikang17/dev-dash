@@ -1,0 +1,55 @@
+<div class="doc-head">
+  <h2>dev-dash — Goals &amp; KPIs</h2>
+  <span class="doc-status"><code>sections/goals.html</code></span>
+</div>
+
+<h3>North-star metric</h3>
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="k-label">North-star</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">vs. last week: —</div>
+  </div>
+</div>
+
+<h3>Quarter goals</h3>
+<ul class="checklist">
+  <li>☐ <em>Goal 1</em></li>
+  <li>☐ <em>Goal 2</em></li>
+  <li>☐ <em>Goal 3</em></li>
+</ul>
+<button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '<li>☐ <em>New goal</em></li>'); window.devdashMarkDirty($el)">+ Add goal</button>
+
+<h3>Tracked KPIs</h3>
+<div class="kpi-grid kpi-tracked">
+  <div class="kpi">
+    <div class="k-label">Activation</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">—</div>
+  </div>
+  <div class="kpi">
+    <div class="k-label">D7 retention</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">—</div>
+  </div>
+  <div class="kpi">
+    <div class="k-label">Weekly active</div>
+    <div class="k-value">—</div>
+    <div class="k-target">target: —</div>
+    <div class="k-delta">—</div>
+  </div>
+</div>
+<button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '<div class=&quot;kpi&quot;><div class=&quot;k-label&quot;>New KPI</div><div class=&quot;k-value&quot;>—</div><div class=&quot;k-target&quot;>target: —</div><div class=&quot;k-delta&quot;>—</div></div>'); window.devdashMarkDirty($el)">+ Add KPI tile</button>
+
+<h3>Detailed metrics</h3>
+<table>
+  <thead><tr><th>Metric</th><th>Current</th><th>Target</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><em>weekly active users</em></td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td><em>activation rate</em></td><td>—</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table>
+<button class="add-btn" contenteditable="false" @click="$el.previousElementSibling.insertAdjacentHTML('beforeend', '<tr><td><em>new metric</em></td><td>—</td><td>—</td><td>—</td></tr>'); window.devdashMarkDirty($el)">+ Add metric</button>
