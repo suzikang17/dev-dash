@@ -21,6 +21,10 @@ struct LoreSection: Hashable {
                     bodyIsFree: true,
                     requiredSections: [],
                     newDocFields: ["status=raw"]),
+        LoreSection(dir: "notes", loreType: "note", label: "Notes",
+                    bodyIsFree: true,
+                    requiredSections: [],
+                    newDocFields: []),   // local `note` type (docs/.lore/types/note.schema.yaml)
     ]
 
     /// Lookup by the plural folder name (e.g. derived from a doc's path).

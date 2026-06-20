@@ -277,9 +277,6 @@ enum ProductDocGenerator {
         let path = indexPath(for: projectPath)
         do {
             try html.write(toFile: path, atomically: true, encoding: .utf8)
-            // Refresh the queryable manifest each time the index page is
-            // rebuilt — keeps .index.json in sync with what's on disk.
-            DocIndexGenerator.generate(projectPath: projectPath)
             return path
         } catch {
             return nil

@@ -1,0 +1,17 @@
+name: note
+dir: notes
+heading: Notes
+id: { strategy: sequential, pad: 4 }
+body: free
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: tags, type: string }
+  - { name: created, type: date }
+index:
+  - { header: "#", source: id }
+  - { header: Note, source: title, link: true }
+  - { header: Tags, source: tags }
+prompt: |
+  You are writing a freeform knowledge note for a software project's PKM. Given a
+  title, produce the markdown body only (no frontmatter). Use clear prose with
+  headings where it helps; no rigid required structure.

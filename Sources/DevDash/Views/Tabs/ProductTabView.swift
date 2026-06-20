@@ -199,7 +199,6 @@ struct ProductTabView: View {
         let dir = (target as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try? html.write(toFile: target, atomically: true, encoding: .utf8)
-        DocIndexGenerator.generate(projectPath: projectPath)
     }
 
     /// Reject page-supplied paths that escape `root`. The living-doc WKWebView is
@@ -296,7 +295,6 @@ struct ProductTabView: View {
         if !existing.isEmpty,
            let updated = replaceTriageStateBlock(in: existing, with: state) {
             try? updated.write(toFile: target, atomically: true, encoding: .utf8)
-            DocIndexGenerator.generate(projectPath: projectPath)
             return
         }
 
@@ -306,7 +304,6 @@ struct ProductTabView: View {
         let scaffold = ProductDocGenerator.template(.triageBoard, projectName: projectName)
         if let withState = replaceTriageStateBlock(in: scaffold, with: state) {
             try? withState.write(toFile: target, atomically: true, encoding: .utf8)
-            DocIndexGenerator.generate(projectPath: projectPath)
         }
     }
 
