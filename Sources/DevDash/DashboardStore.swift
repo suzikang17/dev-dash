@@ -60,7 +60,7 @@ final class DashboardStore: ObservableObject {
     @Published var healthFilter: HealthFilter = .all
     @Published var selection: Selection? {
         didSet {
-            restoreTabForCurrentSelection()
+            tabStore.selectionChanged(toKey: projectKey(for: selection))
             recordNavigation()
             if let sel = selection {
                 UserDefaults.standard.set(sel.key, forKey: "devdash.lastSelection")
@@ -105,9 +105,10 @@ final class DashboardStore: ObservableObject {
         selection = navHistory[navIndex]
         isNavigating = false
     }
-    @Published var detailTab: DetailTab = .info {
-        didSet { persistTabForCurrentSelection() }
-    }
+    /// Active detail tab + per-project tab memory, split into its own small
+    /// store so switching tabs doesn't republish this (large) store and
+    /// re-render the sidebar. See `TabStore`.
+    let tabStore = TabStore()
     @Published var pinnedProjects: Set<String> = Set(
         UserDefaults.standard.stringArray(forKey: "devdash.pinnedProjects") ?? []
     )
@@ -288,12 +289,6 @@ final class DashboardStore: ObservableObject {
         UserDefaults.standard.set(Array(pinnedProjects), forKey: "devdash.pinnedProjects")
     }
 
-    private let tabMemoryKey = "devdash.lastTabPerProject"
-    private var tabMemory: [String: String] {
-        get { UserDefaults.standard.dictionary(forKey: tabMemoryKey) as? [String: String] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: tabMemoryKey) }
-    }
-
     private func projectKey(for selection: Selection?) -> String? {
         guard let sel = selection else { return nil }
         switch sel {
@@ -304,21 +299,6 @@ final class DashboardStore: ObservableObject {
             guard let svc = services.first(where: { $0.id == id }) else { return nil }
             return projects.first { svc.cwd == $0.path || svc.cwd.hasPrefix("\($0.path)/") }?.path
         }
-    }
-
-    private func restoreTabForCurrentSelection() {
-        guard let key = projectKey(for: selection),
-              let raw = tabMemory[key],
-              let tab = DetailTab(rawValue: raw) else { return }
-        // Avoid re-triggering persist
-        if detailTab != tab { detailTab = tab }
-    }
-
-    private func persistTabForCurrentSelection() {
-        guard let key = projectKey(for: selection) else { return }
-        var memory = tabMemory
-        memory[key] = detailTab.rawValue
-        tabMemory = memory
     }
 
     func restoreLastSelection() {

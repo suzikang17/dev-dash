@@ -280,7 +280,7 @@ struct TasksTabView: View {
                 Button {
                     Task {
                         await store.suggestTasksForStage(projectPath: project.path, template: template, stage: stage)
-                        store.detailTab = .claude
+                        store.tabStore.detailTab = .claude
                     }
                 } label: {
                     Label("Suggest tasks", systemImage: "lightbulb")
@@ -338,7 +338,7 @@ struct TasksTabView: View {
                     }
                     Spacer()
                     Button {
-                        store.detailTab = .claude
+                        store.tabStore.detailTab = .claude
                     } label: {
                         Label("Open in Claude tab", systemImage: "arrow.up.forward.app")
                             .font(DSFont.micro)
@@ -418,7 +418,7 @@ struct TasksTabView: View {
                 Spacer()
                 Button {
                     store.pendingFilePath = path
-                    store.detailTab = .files
+                    store.tabStore.detailTab = .files
                 } label: {
                     Label("Open", systemImage: "doc.text")
                         .font(DSFont.micro)
@@ -429,7 +429,7 @@ struct TasksTabView: View {
                 Button {
                     Task {
                         await store.suggestRoadmapUpdate(projectPath: project.path)
-                        store.detailTab = .claude
+                        store.tabStore.detailTab = .claude
                     }
                 } label: {
                     Label("Suggest update", systemImage: "sparkles")
@@ -1106,13 +1106,13 @@ private struct TaskLine: View {
                         Button {
                             Task {
                                 await store.runForTask(task, projectPath: projectPath, allowEdits: false)
-                                store.detailTab = .claude
+                                store.tabStore.detailTab = .claude
                             }
                         } label: { Label("Investigate (read-only)", systemImage: "magnifyingglass") }
                         Button {
                             Task {
                                 await store.runForTask(task, projectPath: projectPath, allowEdits: true)
-                                store.detailTab = .claude
+                                store.tabStore.detailTab = .claude
                             }
                         } label: { Label("Run + edit files", systemImage: "wand.and.stars") }
                     }

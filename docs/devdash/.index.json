@@ -1,17 +1,27 @@
 {
   "artifacts" : [
     {
-      "modified" : "2026-06-20T05:09:43Z",
-      "path" : "sections\/decisions.html",
+      "modified" : "2026-06-20T19:52:32Z",
+      "path" : "sections\/lore-ideas.html",
       "tags" : [
 
       ],
-      "title" : "decisions",
+      "title" : "lore-ideas",
       "type" : "sections",
       "wordCount" : 11
     },
     {
-      "modified" : "2026-06-20T05:09:43Z",
+      "modified" : "2026-06-20T19:52:32Z",
+      "path" : "sections\/lore-decisions.html",
+      "tags" : [
+
+      ],
+      "title" : "lore-decisions",
+      "type" : "sections",
+      "wordCount" : 11
+    },
+    {
+      "modified" : "2026-06-20T19:52:32Z",
       "path" : "sections\/initiatives.html",
       "tags" : [
 
@@ -21,7 +31,7 @@
       "wordCount" : 20
     },
     {
-      "modified" : "2026-06-20T05:09:43Z",
+      "modified" : "2026-06-20T19:52:32Z",
       "path" : "sections\/roadmap.html",
       "tags" : [
 
@@ -71,5 +81,5 @@
       "wordCount" : 124
     }
   ],
-  "generatedAt" : "2026-06-20T05:09:43Z"
+  "generatedAt" : "2026-06-20T19:52:32Z"
 }

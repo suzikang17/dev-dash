@@ -340,7 +340,7 @@ struct ProductTabView: View {
                 openFile(path)
             }
         case "open-task":
-            store.detailTab = .tasks
+            store.tabStore.detailTab = .tasks
         case "regenerate":
             store.regenerateRoadmap(for: project.path)
             lastRegenAt = Date()
@@ -421,7 +421,7 @@ struct ProductTabView: View {
 
     private func openFile(_ path: String) {
         store.pendingFilePath = path
-        store.detailTab = .files
+        store.tabStore.detailTab = .files
     }
 
     /// Scaffold a rich HTML artifact from a template type, then open it.

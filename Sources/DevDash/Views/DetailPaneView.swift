@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DetailPaneView: View {
     @EnvironmentObject var store: DashboardStore
+    @EnvironmentObject var tabStore: TabStore
 
     var body: some View {
         let project = store.terminalOpen ? store.project(for: store.selection) : nil
@@ -39,7 +40,7 @@ struct DetailPaneView: View {
             case .none, .some(.home):
                 HomeView()
             case .some:
-                switch store.detailTab {
+                switch tabStore.detailTab {
                 case .preview: PreviewTabView()
                 case .logs: LogsTabView()
                 case .claude: ClaudeTabView()

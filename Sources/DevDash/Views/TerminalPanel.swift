@@ -20,10 +20,35 @@ struct TerminalPanel: View {
     @State private var searchTerm = ""
     @FocusState private var searchFieldFocused: Bool
 
-    private let quickCommands: [(label: String, text: String, run: Bool)] = [
-        ("Claude", "claude", true),
-        ("Lore", "lore ", false),
-        ("Build", "bash run.sh", true),
+    /// One command in a header dropdown. `run` auto-presses Enter; when false the
+    /// command is pre-filled in the shell so the user can finish typing an argument.
+    private struct QuickCommand {
+        let label: String
+        let text: String
+        var run: Bool = true
+    }
+    private struct QuickGroup {
+        let category: String
+        let items: [QuickCommand]
+    }
+    /// Grouped header menus. Authoring (devlogs/tasks) happens in Claude Code, so the
+    /// Lore menu is mechanical CLI ops only; git is intentionally omitted.
+    private let quickGroups: [QuickGroup] = [
+        QuickGroup(category: "Build", items: [
+            QuickCommand(label: "Build & Run", text: "bash run.sh"),
+            QuickCommand(label: "Build only", text: "swift build"),
+            QuickCommand(label: "Release package", text: "bash dist.sh"),
+            QuickCommand(label: "Clean", text: "swift package clean"),
+        ]),
+        QuickGroup(category: "Lore", items: [
+            QuickCommand(label: "Reindex devlog", text: "lore reindex devlog"),
+            QuickCommand(label: "Reindex all", text: "lore reindex"),
+            QuickCommand(label: "Validate", text: "lore validate devlog"),
+        ]),
+        QuickGroup(category: "Claude", items: [
+            QuickCommand(label: "Start", text: "claude --dangerously-skip-permissions"),
+            QuickCommand(label: "Resume last", text: "claude --continue --dangerously-skip-permissions"),
+        ]),
     ]
 
     var body: some View {
@@ -47,12 +72,18 @@ struct TerminalPanel: View {
         let row = HStack(spacing: DSSpace.sm) {
             titleRegion
             Spacer(minLength: DSSpace.sm)
-            ForEach(quickCommands, id: \.label) { cmd in
-                Button(cmd.label) {
-                    store.terminals.send(cmd.text + (cmd.run ? "\n" : ""), to: project.path)
+            ForEach(quickGroups, id: \.category) { group in
+                Menu(group.category) {
+                    ForEach(group.items, id: \.label) { cmd in
+                        Button(cmd.label) {
+                            store.terminals.send(cmd.text + (cmd.run ? "\n" : ""), to: project.path)
+                        }
+                    }
                 }
-                .buttonStyle(.bordered)
+                .menuStyle(.borderlessButton)
                 .controlSize(.small)
+                .fixedSize()
+                .help("\(group.category) commands")
             }
             placementMenu
             Button { restart() } label: { Image(systemName: "arrow.clockwise") }

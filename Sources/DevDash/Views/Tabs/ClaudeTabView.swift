@@ -523,7 +523,7 @@ private struct SpecialistRow: View {
                 running = true
                 Task {
                     await store.runPersona(persona, projectPath: project.path)
-                    store.detailTab = .claude
+                    store.tabStore.detailTab = .claude
                     running = false
                 }
             } label: {

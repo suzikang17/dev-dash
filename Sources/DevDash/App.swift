@@ -15,27 +15,18 @@ struct DevDashApp: App {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(store.serverStore)
+                .environmentObject(store.tabStore)
                 .frame(minWidth: 900, minHeight: 600)
                 .preferredColorScheme(store.appTheme.colorScheme)
-                .overlay {
-                    if store.isCommandBarVisible {
-                        CommandBarView()
-                            .environmentObject(store)
-                    }
-                }
-                .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.isCommandBarVisible)
                 .overlay {
                     if store.isSettingsVisible {
                         SettingsView()
                             .environmentObject(store)
                     }
                 }
-                // Invisible buttons hold the ⌘K / ⌘, shortcut bindings
+                // Invisible button holds the ⌘, shortcut binding (⌘K lives in
+                // ContentView, where it focuses the toolbar command field).
                 .background {
-                    Button("") { store.isCommandBarVisible.toggle() }
-                        .keyboardShortcut("k", modifiers: .command)
-                        .frame(width: 0, height: 0)
-                        .opacity(0)
                     Button("") { store.isSettingsVisible = true }
                         .keyboardShortcut(",", modifiers: .command)
                         .frame(width: 0, height: 0)

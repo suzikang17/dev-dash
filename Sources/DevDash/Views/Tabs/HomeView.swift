@@ -160,7 +160,7 @@ private struct RunningServiceCard: View {
     var body: some View {
         Button {
             store.selection = .service(serviceID: service.id)
-            store.detailTab = .preview
+            store.tabStore.detailTab = .preview
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.sm) {
                 HStack(spacing: DSSpace.xs) {
@@ -205,7 +205,7 @@ private struct RecentProjectCard: View {
     var body: some View {
         Button {
             store.selection = .project(path: project.path)
-            store.detailTab = runningPort != nil ? .preview : .info
+            store.tabStore.detailTab = runningPort != nil ? .preview : .info
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.xs) {
                 HStack(spacing: DSSpace.xs) {
@@ -254,7 +254,7 @@ private struct HeatmapCard: View {
 
         Button {
             store.selection = .project(path: project.path)
-            store.detailTab = runningPort != nil ? .preview : .info
+            store.tabStore.detailTab = runningPort != nil ? .preview : .info
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.xs) {
                 HStack(spacing: DSSpace.xs) {
@@ -310,7 +310,7 @@ private struct CommitRow: View {
     var body: some View {
         Button {
             store.selection = .project(path: commit.projectPath)
-            store.detailTab = .info
+            store.tabStore.detailTab = .info
         } label: {
             HStack(spacing: DSSpace.sm) {
                 Image(systemName: "circle.fill")

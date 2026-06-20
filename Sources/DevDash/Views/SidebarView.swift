@@ -217,6 +217,45 @@ struct SidebarView: View {
                     .padding(.horizontal, DSSpace.sm)
                     .padding(.vertical, DSSpace.sm)
                     .background(.bar)
+
+                    Divider()
+                    HStack(spacing: DSSpace.sm) {
+                        if store.isLoading {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            TimeAgoLabel()
+                        }
+                        Spacer()
+                        Button {
+                            store.terminalOpen.toggle()
+                        } label: {
+                            Image(systemName: "terminal")
+                                .foregroundColor(.secondary)
+                                .font(DSFont.body)
+                        }
+                        .buttonStyle(.plain)
+                        .dsHitTarget()
+                        .keyboardShortcut("`", modifiers: .command)
+                        .disabled(store.project(for: store.selection) == nil)
+                        .help("Toggle terminal (⌘`)")
+                        .accessibilityLabel("Toggle terminal")
+
+                        Button {
+                            Task { await store.refreshAll(); await store.refreshTodos() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.secondary)
+                                .font(DSFont.body)
+                        }
+                        .buttonStyle(.plain)
+                        .dsHitTarget()
+                        .keyboardShortcut("r", modifiers: .command)
+                        .help("Refresh (⌘R)")
+                        .accessibilityLabel("Refresh")
+                    }
+                    .padding(.horizontal, DSSpace.sm)
+                    .padding(.vertical, DSSpace.xs)
+                    .background(.bar)
                 }
             }
         }

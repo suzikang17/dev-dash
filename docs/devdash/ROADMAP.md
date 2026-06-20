@@ -77,11 +77,6 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 - [ ] It solves the itch in your one workflow
 - [ ] You haven't added a single feature beyond the itch
 
-### Tasks
-
-- [x] Build native macOS app _(Engineering)_
-- [x] Wire up project tracker _(Engineering)_
-
 ---
 
 ## Live with it — _pending_
@@ -110,21 +105,6 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 - [ ] Friction list written (real annoyances, not imagined ones)
 - [ ] Nothing added during this stage
 
-### Tasks
-
-- [/] Apply personal-tool template to dev-dash and use it daily _(Ops)_
-- [ ] Verify chat sheet auto-fills question + persists across restarts _(QA)_
-- [ ] Test session detail view from both Home and Claude tab _(QA)_
-- [ ] Verify ROADMAP.md generation matches stage state across all mutations _(QA)_
-- [ ] Test legacy root-level ROADMAP.md cleanup on first regeneration _(QA)_
-- [ ] Run provider detection against 5+ real projects, verify accuracy _(QA)_
-- [ ] Test validation runner on a real project _(QA)_
-- [ ] Verify legacy todos.json migration to tasks.json _(QA)_
-- [ ] Test back/forward navigation across all selection types _(QA)_
-- [ ] Verify Suggest-tasks parser robustness across TASK: line variations _(QA)_
-- [ ] Verify Swift / Apple platform project detection _(QA)_
-- [ ] Use dev-dash for a week and file friction items _(Research)_
-
 ---
 
 ## Refine the parts that hurt — _pending_
@@ -152,19 +132,6 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 - [ ] Top 3 friction points fixed
 - [ ] Unused features deleted (yes, deleted)
 - [ ] Tool still solves the original itch
-
-### Tasks
-
-- [ ] Suggest-tasks prompt should reference user's saved guiding-question answers _(Engineering)_
-- [ ] Per-task Run-with-Claude needs a visible button (not hover-only) _(Design)_
-- [ ] Health check defaults handle pnpm/yarn/bun/python _(Engineering)_
-- [ ] Stage advance should warn when validation checks failing _(Engineering)_
-- [ ] Streaming chat replies should render markdown _(Engineering)_
-- [ ] Roadmap freshness should detect newly-answered questions, not just file mtime _(Engineering)_
-- [ ] GitHub issues read-mirror in unified task list _(Engineering)_
-- [ ] Drag-to-reorder tasks within a stage _(Engineering)_
-- [ ] Per-task notes UI _(Design)_
-- [ ] Run-all-suggestions button after a suggest run _(Engineering)_
 
 ---
 
@@ -197,13 +164,13 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 - [ ] If sharing: README written, repo public, audience told
 - [ ] If keeping private: that's also a valid endpoint — close the project
 
-### Tasks
+---
 
-- [ ] Custom user templates (.devdash/templates/<id>.yaml) _(Engineering)_
-- [ ] Provider spending APIs (Stripe usage / Vercel billing) _(Research)_
-- [ ] Spawn agentic Claude session for task (vs current claude -p one-shot) _(Engineering)_
-- [ ] Cost guardrails — token / dollar caps per project _(Engineering)_
+## Unstaged tasks
+
+- [ ] Build native macOS app _(Other)_
+- [ ] Wire up project tracker _(Other)_
 
 ---
 
-_Last updated: 2026-05-10T17:59:42Z_
+_Last updated: 2026-06-20T19:52:32Z_

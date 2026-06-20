@@ -219,7 +219,7 @@ struct TaskDetailSheet: View {
             SectionHeader("Referenced in")
             Button {
                 store.pendingFilePath = docPath
-                store.detailTab = .files
+                store.tabStore.detailTab = .files
             } label: {
                 HStack(spacing: DSSpace.xs) {
                     Image(systemName: "doc.text")
@@ -410,7 +410,7 @@ struct TaskDetailSheet: View {
                 SectionHeader("Manual tests")
                 Button {
                     store.pendingFilePath = testsPath
-                    store.detailTab = .files
+                    store.tabStore.detailTab = .files
                     dismiss()
                 } label: {
                     Label("Open test checklist", systemImage: "checklist")
@@ -430,7 +430,7 @@ struct TaskDetailSheet: View {
                     Button {
                         Task {
                             await store.runForTask(t, projectPath: projectPath, allowEdits: false)
-                            store.detailTab = .claude
+                            store.tabStore.detailTab = .claude
                             dismiss()
                         }
                     } label: { Label("Investigate (read-only)", systemImage: "magnifyingglass") }
@@ -438,7 +438,7 @@ struct TaskDetailSheet: View {
                     Button {
                         Task {
                             await store.runForTask(t, projectPath: projectPath, allowEdits: true)
-                            store.detailTab = .claude
+                            store.tabStore.detailTab = .claude
                             dismiss()
                         }
                     } label: { Label("Run + edit files", systemImage: "wand.and.stars") }
