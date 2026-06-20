@@ -14,6 +14,22 @@ final class TerminalSessionStore {
     }
 
     private var sessions: [String: Session] = [:]
+    private var terminationToken: NSObjectProtocol?
+
+    init() {
+        // Deterministically tear down every shell on app quit. Without this,
+        // forkpty()'d login shells (and their children — a running claude/build)
+        // get reparented to launchd and leak past app exit.
+        terminationToken = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.terminateAll() }
+        }
+    }
+
+    deinit {
+        if let terminationToken { NotificationCenter.default.removeObserver(terminationToken) }
+    }
 
     /// The terminal for a project, spawning a login shell on first request.
     func session(for projectPath: String) -> LocalProcessTerminalView {
@@ -26,9 +42,42 @@ final class TerminalSessionStore {
     /// Kill and respawn a project's shell (for a dead or cluttered session).
     @discardableResult
     func restart(projectPath: String) -> LocalProcessTerminalView {
-        sessions[projectPath]?.view.process.terminate()
+        if let session = sessions[projectPath] { terminate(session) }
         sessions[projectPath] = nil
         return session(for: projectPath)
+    }
+
+    /// Evict sessions whose project no longer exists (deleted/renamed/moved).
+    /// Their drawer is unreachable, so they'd otherwise leak fds for the app's life.
+    func reconcile(activePaths: Set<String>) {
+        for (path, session) in sessions where !activePaths.contains(path) {
+            terminate(session)
+            sessions[path] = nil
+        }
+    }
+
+    /// Terminate every cached shell (app quit).
+    func terminateAll() {
+        for session in sessions.values { terminate(session) }
+        sessions.removeAll()
+    }
+
+    /// Best-effort teardown of a shell and its job tree. SwiftTerm's terminate()
+    /// closes the PTY master (SIGHUP to the foreground job) and SIGTERMs the shell;
+    /// we then SIGKILL the shell's process group to catch anything that ignored it.
+    private func terminate(_ session: Session) {
+        let pid = session.view.process.shellPid
+        session.view.process.terminate()
+        guard pid > 0 else { return }
+        let pgid = getpgid(pid)
+        if pgid > 0 { killpg(pgid, SIGKILL) }
+        // SwiftTerm cancels its own child-exit monitor in terminate(), so the
+        // killed shell would linger as a zombie until app exit. Reap it off the
+        // main thread (it's our forkpty child, so waitpid succeeds).
+        DispatchQueue.global().async {
+            var status: Int32 = 0
+            _ = waitpid(pid, &status, 0)
+        }
     }
 
     private func makeShell(cwd: String) -> Session {

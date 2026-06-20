@@ -14,7 +14,9 @@ final class DashboardStore: ObservableObject {
     /// bodies and sort comparators, so re-filtering on each call was costly.
     private var _devServices: [Service] = []
     private var _infraServices: [Service] = []
-    @Published var projects: [Project] = []
+    @Published var projects: [Project] = [] {
+        didSet { terminals.reconcile(activePaths: Set(projects.map { $0.path })) }
+    }
     @Published var sessions: [ClaudeSession] = []
     @Published var tasksByProject: [ProjectTasks] = []
     @Published var lastUpdated: Date = .distantPast

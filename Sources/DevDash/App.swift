@@ -6,6 +6,10 @@ struct DevDashApp: App {
     @StateObject private var store = DashboardStore()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
+    init() {
+        TerminalSelfTest.runIfRequested()   // exits early when launched with --selftest-terminal
+    }
+
     var body: some Scene {
         WindowGroup("Dev Dashboard", id: "main") {
             ContentView()
