@@ -145,14 +145,15 @@ enum VisualSnapshotStore {
         <title>Visual Review</title>
         <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:-apple-system,sans-serif;background:#111;color:#e0e0e0;padding:24px}
-        h1{font-size:15px;font-weight:500;color:#aaa;margin-bottom:4px}
-        p{font-size:12px;color:#666;margin-bottom:20px}
+        :root{color-scheme:light dark}
+        body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;background:Canvas;color:CanvasText;padding:24px}
+        h1{font-size:15px;font-weight:600;margin-bottom:4px}
+        p{font-size:12px;color:color-mix(in srgb,CanvasText 55%,transparent);margin-bottom:20px}
         .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-        .cell{background:#1c1c1e;border-radius:10px;padding:12px}
-        .cell h2{font-size:11px;font-weight:500;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+        .cell{background:color-mix(in srgb,CanvasText 6%,transparent);border-radius:10px;padding:12px}
+        .cell h2{font-size:11px;font-weight:600;color:color-mix(in srgb,CanvasText 55%,transparent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
         .cell a{display:block}
-        .cell img{width:100%;border-radius:6px;display:block;border:1px solid #333}
+        .cell img{width:100%;border-radius:6px;display:block;border:1px solid color-mix(in srgb,CanvasText 18%,transparent)}
         </style>
         </head>
         <body>
