@@ -16,6 +16,7 @@ struct ProductWebView: NSViewRepresentable {
     let onSave: (String, String) -> Void                   // (relPath, html)
     let onSaveAlpine: (String, String) -> Void             // (relPath, jsonState)
     var onSaveLore: (String, String) -> (html: String, warning: String?) = { _, _ in ("", nil) } // (absLorePath, markdownBody) → rendered body HTML + optional validation warning
+    var onSaveKPI: (String, [String: String]) -> Void = { _, _ in } // (absLorePath, frontmatter fields) — writes current/target/unit to frontmatter
     let onAction: ([String: Any]) -> Void                  // generic dispatch
     var onSearchItems: ((String) -> [[String: Any]])? = nil  // (query) → [{id,title,type,status}]
     var onCreateTask: ((String, String?) -> [String: Any])? = nil  // (title, linkedDocPath) → {id,title,status}
@@ -59,6 +60,11 @@ struct ProductWebView: NSViewRepresentable {
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         ))
+        controller.addUserScript(WKUserScript(
+            source: Self.kpiEditJS,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         config.userContentController = controller
         let wv = WKWebView(frame: .zero, configuration: config)
         // Enable Web Inspector so right-click → Inspect Element works.
@@ -82,6 +88,7 @@ struct ProductWebView: NSViewRepresentable {
         context.coordinator.onSave = onSave
         context.coordinator.onSaveAlpine = onSaveAlpine
         context.coordinator.onSaveLore = onSaveLore
+        context.coordinator.onSaveKPI = onSaveKPI
         context.coordinator.onAction = onAction
         context.coordinator.onSearchItems = onSearchItems
         context.coordinator.onCreateTask = onCreateTask
@@ -90,6 +97,7 @@ struct ProductWebView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator {
         let c = Coordinator(onSave: onSave, onSaveAlpine: onSaveAlpine, onAction: onAction)
         c.onSaveLore = onSaveLore
+        c.onSaveKPI = onSaveKPI
         c.onSearchItems = onSearchItems
         c.onCreateTask = onCreateTask
         return c
@@ -99,6 +107,7 @@ struct ProductWebView: NSViewRepresentable {
         var onSave: (String, String) -> Void
         var onSaveAlpine: (String, String) -> Void
         var onSaveLore: (String, String) -> (html: String, warning: String?) = { _, _ in ("", nil) }
+        var onSaveKPI: (String, [String: String]) -> Void = { _, _ in }
         var onAction: ([String: Any]) -> Void
         var onSearchItems: ((String) -> [[String: Any]])?
         var onCreateTask: ((String, String?) -> [String: Any])?
@@ -133,6 +142,12 @@ struct ProductWebView: NSViewRepresentable {
                     if let cb = body["callbackId"] as? String {
                         resolve(callbackId: cb, value: ["html": result.html, "warning": result.warning ?? ""])
                     }
+                }
+            case "save-kpi":
+                if let path = body["path"] as? String {
+                    var fields: [String: String] = [:]
+                    for k in ["current", "target", "unit"] { fields[k] = body[k] as? String ?? "" }
+                    onSaveKPI(path, fields)
                 }
             case "search-items":
                 guard let query = body["query"] as? String,
@@ -1078,6 +1093,54 @@ struct ProductWebView: NSViewRepresentable {
         b.addEventListener('click', function() { setTimeout(reportActiveSection, 40); });
       });
       setTimeout(reportActiveSection, 60);
+    })();
+    """
+
+    /// Structured KPI editing: computes the progress bar + delta from the inline
+    /// number inputs (live) and, on change, posts current/target/unit back to be
+    /// written to the doc's FRONTMATTER (not body).
+    private static let kpiEditJS = """
+    (function() {
+      function post(p) {
+        try { window.webkit.messageHandlers.devdash.postMessage(p); }
+        catch (e) { console.error('kpi bridge failed', e); }
+      }
+      function num(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
+      function render(card) {
+        var c = num(card.querySelector('.kpi-current').value);
+        var t = num(card.querySelector('.kpi-target').value);
+        var dir = card.dataset.direction || 'up';
+        var bar = card.querySelector('.kpi-bar');
+        var delta = card.querySelector('.kpi-delta');
+        if (c === null || t === null || t === 0) {
+          bar.style.width = '0'; delta.textContent = ''; delta.className = 'kpi-delta'; return;
+        }
+        bar.style.width = Math.max(0, Math.min(100, (c / t) * 100)) + '%';
+        var onTarget = dir === 'down' ? (c <= t) : (c >= t);
+        var diff = Math.round((c - t) * 100) / 100;
+        delta.textContent = onTarget ? 'on target' : ((diff > 0 ? '+' : '') + diff + ' vs target');
+        delta.className = 'kpi-delta ' + (onTarget ? 'good' : 'bad');
+      }
+      function save(card) {
+        post({ action: 'save-kpi', path: card.dataset.loreFile,
+               current: card.querySelector('.kpi-current').value,
+               target: card.querySelector('.kpi-target').value,
+               unit: card.querySelector('.kpi-unit').value });
+      }
+      function wire(card) {
+        if (card.dataset.kpiWired) return;
+        card.dataset.kpiWired = '1';
+        card.querySelectorAll('.kpi-field').forEach(function(inp) {
+          inp.addEventListener('input', function() { render(card); });
+          inp.addEventListener('change', function() { save(card); });
+        });
+        render(card);
+      }
+      function wireAll() { document.querySelectorAll('.kpi-card').forEach(wire); }
+      document.querySelectorAll('nav.tabs .tab').forEach(function(b) {
+        b.addEventListener('click', function() { setTimeout(wireAll, 40); });
+      });
+      setTimeout(wireAll, 60);
     })();
     """
 }

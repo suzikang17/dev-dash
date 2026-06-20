@@ -203,8 +203,11 @@ enum ProductDocGenerator {
         try? initiativesHtml.write(toFile: "\(sectionsFolder)/initiatives.html", atomically: true, encoding: .utf8)
 
         // Lore-backed sections — rendered straight from docs/<dir>/*.md.
+        // KPIs get a structured grid; everything else gets markdown cards.
         for section in LoreSection.all {
-            let html = renderLoreSection(section, projectPath: projectPath)
+            let html = section.isKPI
+                ? renderKPISection(section, projectPath: projectPath)
+                : renderLoreSection(section, projectPath: projectPath)
             try? html.write(toFile: "\(sectionsFolder)/lore-\(section.dir).html", atomically: true, encoding: .utf8)
         }
         // Remove the spike's stale single-file output if present.
@@ -382,6 +385,50 @@ enum ProductDocGenerator {
         return """
         <p class="doc-status">\(newButton) &nbsp; ⚙ Engine: <code>lore</code> · \(mdFiles.count) \(escapeHTML(lower)) read live from <code>docs/\(escapeHTML(section.dir))/*.md</code></p>
         \(cards.joined(separator: "\n"))
+        """
+    }
+
+    /// Render the KPIs section: each `docs/kpis/*.md` becomes a card with inline
+    /// number inputs for current/target. Progress bar + delta are computed in JS
+    /// (kpiEditJS) from the inputs + data-direction. Edits save to FRONTMATTER.
+    static func renderKPISection(_ section: LoreSection, projectPath: String) -> String {
+        let dir = "\(projectPath)/docs/\(section.dir)"
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+        let mdFiles = files.filter { $0.hasSuffix(".md") && $0.lowercased() != "index.md" }.sorted()
+        let newButton = "<button class=\"lore-new\" data-action=\"lore-new\" data-lore-type=\"kpi\" type=\"button\">+ new KPI</button>"
+        guard !mdFiles.isEmpty else {
+            return "<p class=\"doc-status\">\(newButton) &nbsp; No KPIs yet — click + new.</p>"
+        }
+        var cards: [String] = []
+        for file in mdFiles {
+            let absPath = "\(dir)/\(file)"
+            guard let raw = try? String(contentsOfFile: absPath, encoding: .utf8) else { continue }
+            let front = LoreReader.parseFrontmatter(raw)
+            let title = front["title"] ?? file.replacingOccurrences(of: ".md", with: "")
+            let current = front["current"] ?? ""
+            let target = front["target"] ?? ""
+            let unit = front["unit"] ?? ""
+            let direction = front["direction"] ?? "up"
+            cards.append("""
+            <div class="kpi-card" data-lore-file="\(escapeHTML(absPath))" data-lore-type="kpi" data-direction="\(escapeHTML(direction))">
+              <div class="kpi-head">
+                <span class="kpi-title">\(escapeHTML(title))</span>
+                <button class="lore-del" data-action="lore-delete" data-lore-file="\(escapeHTML(absPath))" title="Delete" type="button">✕</button>
+              </div>
+              <div class="kpi-values">
+                <input class="kpi-field kpi-current" type="number" step="any" value="\(escapeHTML(current))" placeholder="—" aria-label="current">
+                <span class="kpi-arrow">→</span>
+                <input class="kpi-field kpi-target" type="number" step="any" value="\(escapeHTML(target))" placeholder="—" aria-label="target">
+                <input class="kpi-field kpi-unit" type="text" value="\(escapeHTML(unit))" placeholder="unit" aria-label="unit">
+              </div>
+              <div class="kpi-progress"><div class="kpi-bar"></div></div>
+              <div class="kpi-delta"></div>
+            </div>
+            """)
+        }
+        return """
+        <p class="doc-status">\(newButton) &nbsp; ⚙ Engine: <code>lore</code> · \(mdFiles.count) KPIs from <code>docs/\(escapeHTML(section.dir))/*.md</code></p>
+        <div class="kpi-grid">\(cards.joined(separator: "\n"))</div>
         """
     }
 
@@ -1339,6 +1386,21 @@ enum ProductDocGenerator {
       .lore-new:hover { border-color: var(--accent); }
       .lore-del { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 2px 4px; }
       .lore-del:hover { color: var(--red); }
+      .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+      .kpi-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--card); }
+      .kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      .kpi-title { font-weight: 600; font-size: 13px; }
+      .kpi-values { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; }
+      .kpi-field { font: 13px var(--font-mono); color: var(--fg); background: var(--code); border: 1px solid var(--border);
+                   border-radius: 6px; padding: 4px 6px; width: 64px; text-align: right; }
+      .kpi-field.kpi-unit { width: 48px; text-align: left; }
+      .kpi-field:focus { outline: none; border-color: var(--accent); }
+      .kpi-arrow { color: var(--muted); }
+      .kpi-progress { height: 6px; background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 3px; overflow: hidden; }
+      .kpi-bar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+      .kpi-delta { font-size: 11px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+      .kpi-delta.good { color: var(--green); }
+      .kpi-delta.bad { color: var(--orange); }
       nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
                  margin-bottom: 22px; position: sticky; top: 0; background: var(--bg);
                  z-index: 5; padding-top: 4px; }

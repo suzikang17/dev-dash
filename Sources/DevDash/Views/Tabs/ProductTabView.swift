@@ -139,6 +139,9 @@ struct ProductTabView: View {
                         onSaveLore: { absPath, markdown in
                             saveLoreDoc(projectPath: project.path, absPath: absPath, markdownBody: markdown)
                         },
+                        onSaveKPI: { absPath, fields in
+                            saveKPIFields(projectPath: project.path, absPath: absPath, fields: fields)
+                        },
                         onAction: { payload in
                             handleAction(project: project, payload: payload)
                         },
@@ -278,6 +281,56 @@ struct ProductTabView: View {
             .appendingPathComponent(".local/bin/lore").path
         return FileManager.default.isExecutableFile(atPath: local) ? local : "lore"
     }()
+
+    /// Write KPI frontmatter fields (current/target/unit) back to the doc, keeping
+    /// the rest of the frontmatter + body intact, then reindex. Numbers written
+    /// bare, unit quoted; an empty/invalid value removes the key. Same path-
+    /// containment + CRLF/BOM safety as saveLoreDoc.
+    private func saveKPIFields(projectPath: String, absPath rawPath: String, fields: [String: String]) {
+        guard let absPath = containedPath(rawPath, within: "\(projectPath)/docs"),
+              let existing = try? String(contentsOfFile: absPath, encoding: .utf8) else { return }
+        let normalized = existing
+            .replacingOccurrences(of: "\u{FEFF}", with: "")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
+        guard let open = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }),
+              lines[..<open].allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }),
+              let close = lines[(open + 1)...].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" })
+        else { return }   // KPI docs always have frontmatter — bail rather than corrupt
+
+        var fm = Array(lines[(open + 1)..<close])
+        func encode(_ key: String, _ value: String) -> String? {
+            let v = value.trimmingCharacters(in: .whitespaces)
+            if v.isEmpty { return nil }
+            if key == "current" || key == "target" {
+                return Double(v) != nil ? "\(key): \(v)" : nil   // only persist valid numbers
+            }
+            return "\(key): \"\(v.replacingOccurrences(of: "\"", with: "'"))\""
+        }
+        for key in ["current", "target", "unit"] {
+            guard let raw = fields[key] else { continue }
+            let encoded = encode(key, raw)
+            if let idx = fm.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(key):") }) {
+                if let e = encoded { fm[idx] = e } else { fm.remove(at: idx) }
+            } else if let e = encoded {
+                fm.append(e)
+            }
+        }
+        let pre = lines[0..<open].joined(separator: "\n")
+        let body = (close + 1) < lines.count ? lines[(close + 1)...].joined(separator: "\n") : ""
+        var out = pre.isEmpty ? "" : pre + "\n"
+        out += "---\n" + fm.joined(separator: "\n") + "\n---\n" + body
+        if !out.hasSuffix("\n") { out += "\n" }
+        try? out.write(toFile: absPath, atomically: true, encoding: .utf8)
+
+        if let projectRoot = absPath.range(of: "/docs/").map({ String(absPath[..<$0.lowerBound]) }) {
+            let bin = Self.loreBinary
+            Task.detached(priority: .utility) {
+                _ = await ShellRunner.run(bin, args: ["reindex", "kpi"], cwd: projectRoot)
+            }
+        }
+    }
 
     /// Bridge handler for Alpine-managed sections (currently triage). The browser
     /// sends just the JSON state — we regex-replace the contents of the

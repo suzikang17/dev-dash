@@ -11,6 +11,7 @@ struct LoreSection: Hashable {
     let bodyIsFree: Bool            // true = `free` schema, false = `sections`
     let requiredSections: [String]  // required H2s (sections schema) — Swift section check
     let newDocFields: [String]      // `--field k=v` args so an authored doc validates
+    var isKPI: Bool = false         // structured KPI grid instead of markdown cards
 
     static let all: [LoreSection] = [
         LoreSection(dir: "decisions", loreType: "decision", label: "Decisions",
@@ -27,6 +28,11 @@ struct LoreSection: Hashable {
                     bodyIsFree: true,
                     requiredSections: [],
                     newDocFields: []),   // local `note` type (docs/.lore/types/note.schema.yaml)
+        LoreSection(dir: "kpis", loreType: "kpi", label: "KPIs",
+                    bodyIsFree: true,
+                    requiredSections: [],
+                    newDocFields: [],    // local `kpi` type; current/target optional, edited inline
+                    isKPI: true),
     ]
 
     /// Lookup by the plural folder name (e.g. derived from a doc's path).

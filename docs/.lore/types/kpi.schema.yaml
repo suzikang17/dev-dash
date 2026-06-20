@@ -1,0 +1,22 @@
+name: kpi
+dir: kpis
+heading: KPIs
+id: { strategy: sequential, pad: 4 }
+body: free
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: current, type: number }
+  - { name: target, type: number }
+  - { name: unit, type: string }
+  - { name: direction, type: enum, values: [up, down] }
+  - { name: created, type: date }
+index:
+  - { header: "#", source: id }
+  - { header: KPI, source: title, link: true }
+  - { header: Current, source: current }
+  - { header: Target, source: target }
+  - { header: Unit, source: unit }
+prompt: |
+  You are describing a product/business KPI. Given the metric name, produce the
+  markdown body only (no frontmatter): a sentence or two on what it measures and
+  why it matters. Keep it tight.
