@@ -64,9 +64,27 @@ struct CommandBarView: View {
                 icon: "lightbulb.fill", color: .yellow,
                 label: "Capture idea: \(query)"
             ) { captureIdea() }
+            if matches("theme", "light", "dark", "appearance", "mode") {
+                actionRow(
+                    icon: store.appTheme.toggled.icon, color: .purple,
+                    label: "Switch to \(store.appTheme.toggled.label) theme"
+                ) { store.toggleTheme(); dismiss() }
+            }
+            if matches("settings", "preferences", "config") {
+                actionRow(
+                    icon: "gearshape.fill", color: .gray,
+                    label: "Open settings"
+                ) { dismiss(); store.isSettingsVisible = true }
+            }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
+    }
+
+    /// True if the query contains any of the given keywords (case-insensitive).
+    private func matches(_ keywords: String...) -> Bool {
+        let q = query.lowercased()
+        return keywords.contains { q.contains($0) }
     }
 
     private func actionRow(icon: String, color: Color, label: String, action: @escaping () -> Void) -> some View {

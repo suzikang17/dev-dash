@@ -1,6 +1,17 @@
 import Foundation
 import SwiftUI
 
+/// App-wide appearance. Persisted across launches under `devdash.theme`.
+enum AppTheme: String, CaseIterable {
+    case dark, light
+
+    var colorScheme: ColorScheme { self == .light ? .light : .dark }
+    var label: String { self == .light ? "Light" : "Dark" }
+    var icon: String { self == .light ? "sun.max.fill" : "moon.fill" }
+    /// The theme to switch to when toggling.
+    var toggled: AppTheme { self == .light ? .dark : .light }
+}
+
 @MainActor
 final class DashboardStore: ObservableObject {
     @Published var services: [Service] = [] {
@@ -84,7 +95,14 @@ final class DashboardStore: ObservableObject {
     @Published var openTaskId: String? = nil
     @Published var openTaskProjectPath: String? = nil
     @Published var isCommandBarVisible: Bool = false
+    @Published var isSettingsVisible: Bool = false
+    @Published var appTheme: AppTheme =
+        AppTheme(rawValue: UserDefaults.standard.string(forKey: "devdash.theme") ?? "") ?? .dark {
+        didSet { UserDefaults.standard.set(appTheme.rawValue, forKey: "devdash.theme") }
+    }
     @Published var activeDocPath: String? = nil
+
+    func toggleTheme() { appTheme = appTheme.toggled }
     private var digestTask: Task<Void, Never>?
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta

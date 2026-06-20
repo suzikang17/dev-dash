@@ -16,19 +16,27 @@ struct DevDashApp: App {
                 .environmentObject(store)
                 .environmentObject(store.serverStore)
                 .frame(minWidth: 900, minHeight: 600)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(store.appTheme.colorScheme)
                 .overlay {
                     if store.isCommandBarVisible {
                         CommandBarView()
                             .environmentObject(store)
                     }
                 }
-                // Invisible button holds the ⌘K shortcut binding
+                // Invisible buttons hold the ⌘K / ⌘, shortcut bindings
                 .background {
                     Button("") { store.isCommandBarVisible.toggle() }
                         .keyboardShortcut("k", modifiers: .command)
                         .frame(width: 0, height: 0)
                         .opacity(0)
+                    Button("") { store.isSettingsVisible = true }
+                        .keyboardShortcut(",", modifiers: .command)
+                        .frame(width: 0, height: 0)
+                        .opacity(0)
+                }
+                .sheet(isPresented: $store.isSettingsVisible) {
+                    SettingsView()
+                        .environmentObject(store)
                 }
                 .sheet(isPresented: Binding(
                     get: { store.openSessionId != nil },
