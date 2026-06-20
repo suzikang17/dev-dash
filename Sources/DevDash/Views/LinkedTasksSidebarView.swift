@@ -28,20 +28,20 @@ struct LinkedTasksSidebarView: View {
     private var header: some View {
         HStack {
             Text("Linked tasks")
-                .font(.system(size: 11, weight: .semibold))
+                .font(DSFont.micro.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
             Text("\(linkedTasks.count)")
-                .font(.system(size: 11).monospacedDigit())
+                .font(DSFont.monoDigits(.caption2))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DSSpace.sm)
+        .padding(.vertical, DSSpace.sm)
     }
 
     private var emptyState: some View {
         Text("No linked tasks")
-            .font(.system(size: 11))
+            .font(DSFont.micro)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding()
@@ -54,7 +54,7 @@ struct LinkedTasksSidebarView: View {
                     taskRow(task)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DSSpace.xs)
         }
     }
 
@@ -63,18 +63,18 @@ struct LinkedTasksSidebarView: View {
             store.openTaskId = task.id
             store.openTaskProjectPath = projectPath
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 statusDot(task.status)
                 Text(task.title)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .strikethrough(task.status == .done, color: .secondary)
                     .foregroundStyle(task.status == .done ? .tertiary : .primary)
                 Spacer()
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.horizontal, DSSpace.sm)
+            .padding(.vertical, DSSpace.xs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -85,16 +85,16 @@ struct LinkedTasksSidebarView: View {
         switch status {
         case .done:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.system(size: 10))
+                .foregroundStyle(DSColor.success)
+                .font(DSFont.micro)
         case .blocked:
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.orange)
-                .font(.system(size: 10))
+                .foregroundStyle(DSColor.warning)
+                .font(DSFont.micro)
         default:
             Image(systemName: "circle")
-                .foregroundStyle(.blue)
-                .font(.system(size: 10))
+                .foregroundStyle(DSColor.info)
+                .font(DSFont.micro)
         }
     }
 
@@ -107,11 +107,11 @@ struct LinkedTasksSidebarView: View {
             )
         } label: {
             Label("Add task", systemImage: "plus")
-                .font(.system(size: 11))
-                .foregroundStyle(.blue)
+                .font(DSFont.micro)
+                .foregroundStyle(DSColor.info)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.horizontal, DSSpace.sm)
+                .padding(.vertical, DSSpace.sm)
         }
         .buttonStyle(.plain)
     }

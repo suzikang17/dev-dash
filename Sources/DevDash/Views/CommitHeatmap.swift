@@ -51,11 +51,11 @@ struct CommitHeatmap: View {
 
     private func color(for count: Int) -> Color {
         if count == 0 { return Color.secondary.opacity(0.18) }
-        guard maxCount > 0 else { return Color.green.opacity(0.3) }
+        guard maxCount > 0 else { return DSColor.success.opacity(0.3) }
         let ratio = Double(count) / Double(maxCount)
-        if ratio < 0.25 { return Color.green.opacity(0.32) }
-        if ratio < 0.5  { return Color.green.opacity(0.55) }
-        if ratio < 0.75 { return Color.green.opacity(0.78) }
-        return Color.green.opacity(0.95)
+        if ratio < 0.25 { return DSColor.success.opacity(0.32) }
+        if ratio < 0.5  { return DSColor.success.opacity(0.55) }
+        if ratio < 0.75 { return DSColor.success.opacity(0.78) }
+        return DSColor.success.opacity(0.95)
     }
 }

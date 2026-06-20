@@ -37,7 +37,7 @@ struct TaskDetailSheet: View {
             header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DSSpace.lg) {
                     titleEditor
                     metadataRow
                     descriptionEditor
@@ -49,7 +49,7 @@ struct TaskDetailSheet: View {
                     timeline
                     aiActions
                 }
-                .padding(20)
+                .padding(DSSpace.xl)
             }
             Divider()
             footer
@@ -61,27 +61,27 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             statusBadge
             VStack(alignment: .leading, spacing: 1) {
                 Text("TICKET")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .tracking(1.2)
                     .foregroundColor(.secondary)
                 Text(task?.id.prefix(8).description ?? "—")
-                    .font(.system(size: 11).monospaced())
+                    .font(DSFont.mono(.caption))
                     .foregroundColor(.secondary)
             }
             if let p = parent {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9))
+                    .font(DSFont.sectionHeader)
                     .foregroundColor(.secondary)
                 Button {
                     store.openTaskId = p.id
                     store.openTaskProjectPath = projectPath
                 } label: {
                     Text(p.title)
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.accentColor)
                         .lineLimit(1)
                 }
@@ -94,7 +94,7 @@ struct TaskDetailSheet: View {
                 .controlSize(.small)
                 .keyboardShortcut(.cancelAction)
         }
-        .padding(14)
+        .padding(DSSpace.md)
     }
 
     @ViewBuilder
@@ -102,21 +102,21 @@ struct TaskDetailSheet: View {
         let color: Color = {
             switch status {
             case .open: return .secondary
-            case .inProgress: return .blue
-            case .blocked: return .orange
-            case .done: return .green
+            case .inProgress: return DSColor.info
+            case .blocked: return DSColor.warning
+            case .done: return DSColor.success
             case .skipped: return .secondary.opacity(0.6)
             }
         }()
         Image(systemName: statusIcon)
             .foregroundColor(color)
-            .font(.system(size: 18))
+            .font(DSFont.sectionTitle)
     }
 
     @ViewBuilder
     private var titleEditor: some View {
         TextField("Title", text: $title, axis: .vertical)
-            .font(.system(size: 18, weight: .semibold))
+            .font(DSFont.sectionTitle)
             .textFieldStyle(.plain)
             .focused($titleFocused)
             .lineLimit(1...3)
@@ -124,7 +124,7 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var metadataRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSSpace.md) {
             Picker("Status", selection: $status) {
                 ForEach([TaskStatus.open, .inProgress, .blocked, .done, .skipped], id: \.self) { s in
                     Text(s.label).tag(s)
@@ -160,21 +160,18 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var descriptionEditor: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("DESCRIPTION")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
-                .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            SectionHeader("Description")
             TextEditor(text: $notes)
-                .font(.system(size: 13))
-                .padding(8)
+                .font(DSFont.body)
+                .padding(DSSpace.sm)
                 .frame(minHeight: 160)
                 .background(Color(NSColor.textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
+                .dsHairline(DSRadius.medium)
             if notes.isEmpty {
                 Text("Add context — what's the goal, why does it matter, what does done look like?")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
         }
@@ -182,37 +179,33 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var childrenSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("SUBTASKS")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
-                .foregroundColor(.secondary)
-            VStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            SectionHeader("Subtasks")
+            VStack(spacing: DSSpace.xs) {
                 ForEach(children) { c in
                     Button {
                         store.openTaskId = c.id
                         store.openTaskProjectPath = projectPath
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: DSSpace.sm) {
                             Image(systemName: childIcon(c.status))
                                 .foregroundColor(childColor(c.status))
                                 .frame(width: 14)
                             Text(c.title)
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .strikethrough(c.status == .done)
                                 .foregroundColor(c.status == .done ? .secondary : .primary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .lineLimit(1)
                             Text(c.category.label)
-                                .font(.system(size: 10))
+                                .font(DSFont.micro)
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Color.secondary.opacity(0.12))
                                 .foregroundColor(.secondary)
                                 .clipShape(Capsule())
                         }
-                        .padding(.vertical, 4).padding(.horizontal, 8)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(.vertical, DSSpace.xs).padding(.horizontal, DSSpace.sm)
+                        .cardSurface(DSRadius.small)
                     }
                     .buttonStyle(.plain)
                 }
@@ -222,22 +215,19 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private func backlinksSection(docPath: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("REFERENCED IN")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .tracking(0.5)
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            SectionHeader("Referenced in")
             Button {
                 store.pendingFilePath = docPath
                 store.detailTab = .files
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpace.xs) {
                     Image(systemName: "doc.text")
-                        .foregroundStyle(.purple)
-                        .font(.system(size: 12))
+                        .foregroundStyle(DSColor.assistant)
+                        .font(DSFont.label)
                     Text(URL(fileURLWithPath: docPath).lastPathComponent)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.purple)
+                        .font(DSFont.label)
+                        .foregroundStyle(DSColor.assistant)
                         .lineLimit(1)
                 }
             }
@@ -248,12 +238,9 @@ struct TaskDetailSheet: View {
     @ViewBuilder
     private var timeline: some View {
         if let t = task {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ACTIVITY")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundColor(.secondary)
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                SectionHeader("Activity")
+                VStack(alignment: .leading, spacing: DSSpace.xs) {
                     timelineRow(label: "Created", date: t.createdAt)
                     if let s = t.startedAt { timelineRow(label: "Started", date: s) }
                     if let c = t.completedAt { timelineRow(label: "Completed", date: c) }
@@ -263,16 +250,16 @@ struct TaskDetailSheet: View {
     }
 
     private func timelineRow(label: String, date: Date) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             Text(label)
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary)
                 .frame(width: 80, alignment: .leading)
             Text(timeAgo(date))
-                .font(.system(size: 11).monospacedDigit())
+                .font(DSFont.monoDigits(.caption2))
                 .foregroundColor(.secondary)
             Text(absoluteDate(date))
-                .font(.system(size: 11).monospaced())
+                .font(DSFont.mono(.caption2))
                 .foregroundColor(.secondary.opacity(0.7))
         }
     }
@@ -285,15 +272,12 @@ struct TaskDetailSheet: View {
         let active = override.flatMap { id in GStackSkillLoader.all.first { $0.id == id } } ?? autoP
         let installed = GStackSkillLoader.all.filter { $0.isInstalled }
 
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
             HStack {
-                Text("PERSONA")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundColor(.secondary)
+                SectionHeader("Persona")
                 if override == nil {
                     Text("auto")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(DSFont.sectionHeader)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Color.secondary.opacity(0.12))
                         .foregroundColor(.secondary)
@@ -313,34 +297,34 @@ struct TaskDetailSheet: View {
             }
 
             if let p = active {
-                HStack(spacing: 10) {
+                HStack(spacing: DSSpace.sm) {
                     Image(systemName: p.systemImage)
-                        .font(.system(size: 16))
+                        .font(DSFont.title)
                         .foregroundColor(.accentColor)
                         .frame(width: 22)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.role)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(DSFont.label.weight(.semibold))
                         Text(p.tagline)
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                     }
                 }
-                .padding(10)
+                .padding(DSSpace.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.accentColor.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.2), lineWidth: 0.5))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
+                .overlay(RoundedRectangle(cornerRadius: DSRadius.medium).stroke(Color.accentColor.opacity(0.2), lineWidth: 0.5))
             } else if installed.isEmpty {
                 Text("Install gstack to enable AI personas")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
 
             if !installed.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         ForEach(installed) { p in
                             let isSelected = override == p.id
                             Button {
@@ -349,13 +333,13 @@ struct TaskDetailSheet: View {
                                     store.updateTask(projectPath: projectPath, updated)
                                 }
                             } label: {
-                                HStack(spacing: 4) {
+                                HStack(spacing: DSSpace.xs) {
                                     Image(systemName: p.systemImage)
-                                        .font(.system(size: 10))
+                                        .font(DSFont.micro)
                                     Text(p.role)
-                                        .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                                        .font(DSFont.micro.weight(isSelected ? .semibold : .regular))
                                 }
-                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .padding(.horizontal, DSSpace.sm).padding(.vertical, DSSpace.xs)
                                 .background(isSelected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.08))
                                 .foregroundColor(isSelected ? .accentColor : .secondary)
                                 .clipShape(Capsule())
@@ -372,12 +356,9 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var phasesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
             HStack {
-                Text("PHASES")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundColor(.secondary)
+                SectionHeader("Phases")
                 Spacer()
                 Button("+ Add") {
                     if var t = task {
@@ -392,12 +373,12 @@ struct TaskDetailSheet: View {
 
             if let phases = task?.phases, !phases.isEmpty {
                 ForEach(Array(phases.enumerated()), id: \.offset) { i, phase in
-                    HStack(spacing: 8) {
+                    HStack(spacing: DSSpace.sm) {
                         Image(systemName: (task?.completedPhases.contains(phase) == true) ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor((task?.completedPhases.contains(phase) == true) ? .green : .secondary)
+                            .foregroundColor((task?.completedPhases.contains(phase) == true) ? DSColor.success : .secondary)
                             .frame(width: 14)
                         Text(phase)
-                            .font(.system(size: 13))
+                            .font(DSFont.body)
                         Spacer()
                         Button {
                             if var t = task {
@@ -408,12 +389,13 @@ struct TaskDetailSheet: View {
                             }
                         } label: { Image(systemName: "xmark").foregroundColor(.secondary) }
                             .buttonStyle(.borderless).controlSize(.small)
+                            .accessibilityLabel("Remove phase")
                     }
                     .padding(.vertical, 2)
                 }
             } else {
                 Text("Let AI decide phases for this task")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             }
         }
@@ -424,11 +406,8 @@ struct TaskDetailSheet: View {
         let testsPath = "\(projectPath)/.devdash/manual-tests/\(task?.id ?? "").md"
 
         if hasTests {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("MANUAL TESTS")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                SectionHeader("Manual tests")
                 Button {
                     store.pendingFilePath = testsPath
                     store.detailTab = .files
@@ -444,12 +423,9 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var aiActions: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("CLAUDE")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
-                .foregroundColor(.secondary)
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            SectionHeader("Claude")
+            HStack(spacing: DSSpace.sm) {
                 if let t = task {
                     Button {
                         Task {
@@ -474,7 +450,7 @@ struct TaskDetailSheet: View {
 
     @ViewBuilder
     private var footer: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             if let t = task {
                 Button(role: .destructive) {
                     store.deleteTask(projectPath: projectPath, id: t.id)
@@ -489,7 +465,7 @@ struct TaskDetailSheet: View {
                     dismiss()
                 } label: { Label("Mark Done", systemImage: "checkmark.circle") }
                     .buttonStyle(.bordered)
-                    .tint(.green)
+                    .tint(DSColor.success)
             }
             Button("Cancel") { dismiss() }
                 .buttonStyle(.bordered)
@@ -498,7 +474,7 @@ struct TaskDetailSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
         }
-        .padding(14)
+        .padding(DSSpace.md)
     }
 
     // MARK: - Bindings
@@ -559,9 +535,9 @@ struct TaskDetailSheet: View {
     private func childColor(_ s: TaskStatus) -> Color {
         switch s {
         case .open: return .secondary
-        case .inProgress: return .blue
-        case .blocked: return .orange
-        case .done: return .green
+        case .inProgress: return DSColor.info
+        case .blocked: return DSColor.warning
+        case .done: return DSColor.success
         case .skipped: return .secondary.opacity(0.6)
         }
     }

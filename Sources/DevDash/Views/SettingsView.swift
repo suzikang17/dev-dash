@@ -28,20 +28,20 @@ struct SettingsView: View {
             header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: DSSpace.xl) {
                     appearanceSection
                     Divider()
                     documentSection
                     Divider()
                     terminalSection
                 }
-                .padding(20)
+                .padding(DSSpace.xl)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(width: 480, height: 640)
         .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous))
     }
 
     private func dismiss() { store.isSettingsVisible = false }
@@ -49,7 +49,7 @@ struct SettingsView: View {
     private var header: some View {
         HStack {
             Text("Settings")
-                .font(.system(size: 15, weight: .semibold))
+                .font(DSFont.title)
             Spacer()
             Button { dismiss() } label: {
                 Image(systemName: "xmark.circle.fill")
@@ -58,8 +58,9 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Close settings")
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, DSSpace.xl)
         .padding(.vertical, 14)
     }
 
@@ -67,7 +68,7 @@ struct SettingsView: View {
 
     private var appearanceSection: some View {
         section(title: "Appearance") {
-            HStack(spacing: 12) {
+            HStack(spacing: DSSpace.md) {
                 ForEach(AppTheme.allCases, id: \.self) { theme in
                     themeOption(theme)
                 }
@@ -80,22 +81,22 @@ struct SettingsView: View {
         return Button {
             store.appTheme = theme
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: DSSpace.sm) {
                 Image(systemName: theme.icon)
-                    .font(.system(size: 22))
+                    .font(DSFont.sectionTitle)
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                     .frame(height: 28)
                 Text(theme.label)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .font(.system(.caption).weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
             }
             .frame(width: 96, height: 76)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous)
                     .fill(Color.primary.opacity(0.05))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous)
                     .stroke(isSelected ? Color.accentColor : Color.primary.opacity(0.1),
                             lineWidth: isSelected ? 2 : 1)
             )
@@ -109,9 +110,9 @@ struct SettingsView: View {
     private var terminalSection: some View {
         section(title: "Terminal") {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
+                HStack(spacing: DSSpace.sm) {
                     Text("Placement")
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .frame(width: 76, alignment: .leading)
                     Picker("", selection: $store.terminalPlacement) {
                         ForEach(TerminalPlacement.allCases, id: \.self) { p in
@@ -121,23 +122,25 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: DSSpace.sm) {
                     Text("Font size")
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .frame(width: 76, alignment: .leading)
                     Button { store.zoomTerminal(-1) } label: { Image(systemName: "minus") }
                         .buttonStyle(.bordered).controlSize(.small)
+                        .accessibilityLabel("Decrease terminal font size")
                     Text("\(Int(store.terminalFontSize)) pt")
-                        .font(.system(size: 12).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption))
                         .frame(width: 40)
                     Button { store.zoomTerminal(1) } label: { Image(systemName: "plus") }
                         .buttonStyle(.bordered).controlSize(.small)
+                        .accessibilityLabel("Increase terminal font size")
                     Button("Reset") { store.resetTerminalZoom() }
                         .buttonStyle(.borderless).controlSize(.small)
                 }
-                HStack(spacing: 10) {
+                HStack(spacing: DSSpace.sm) {
                     Text("Font")
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .frame(width: 76, alignment: .leading)
                     Picker("", selection: $store.terminalFontFamily) {
                         ForEach(TerminalFontFamily.allCases, id: \.self) { f in
@@ -147,9 +150,9 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                 }
-                HStack(spacing: 10) {
+                HStack(spacing: DSSpace.sm) {
                     Text("Cursor")
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .frame(width: 76, alignment: .leading)
                     Picker("", selection: $store.terminalCursorStyle) {
                         ForEach(TerminalCursorStyle.allCases, id: \.self) { s in
@@ -159,17 +162,17 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: DSSpace.sm) {
                     Text("Scrollback")
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .frame(width: 76, alignment: .leading)
                     Stepper(value: $store.terminalScrollback, in: 1000...50000, step: 1000) {
                         Text("\(store.terminalScrollback) lines")
-                            .font(.system(size: 12).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption))
                     }
                 }
                 Text("Background and foreground follow the app theme; ANSI colors are tuned per theme.")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundStyle(.secondary)
             }
         }
@@ -183,22 +186,20 @@ struct SettingsView: View {
 
     private var documentSection: some View {
         section(title: "Document") {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: DSSpace.lg) {
                 // Accent hue — drives the whole generated palette.
-                Text("ACCENT")
-                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                HStack(spacing: 10) {
+                SectionHeader("Accent")
+                HStack(spacing: DSSpace.sm) {
                     ForEach(DocAccent.allCases, id: \.self) { accent in
                         accentSwatch(accent)
                     }
                     Spacer(minLength: 0)
                 }
                 Text("Tints the whole living-doc palette — neutrals included.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(DSFont.micro).foregroundStyle(.secondary)
 
                 // Type pairing presets.
-                Text("TYPE PAIRING")
-                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                SectionHeader("Type pairing")
                     .padding(.top, 2)
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 84), spacing: 8)],
@@ -210,8 +211,7 @@ struct SettingsView: View {
                 }
 
                 // Live picker over installed fonts — choosing one flips to Custom.
-                Text("FONTS — any installed on your Mac")
-                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                SectionHeader("Fonts — any installed on your Mac")
                     .padding(.top, 2)
                 fontPicker("Display", binding: customBinding(\.docFontDisplay))
                 fontPicker("Body", binding: customBinding(\.docFontBody))
@@ -232,7 +232,7 @@ struct SettingsView: View {
     private func accentSwatch(_ accent: DocAccent) -> some View {
         let isSel = store.docAccent == accent
         return Button { store.docAccent = accent } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: DSSpace.sm) {
                 Circle()
                     .fill(accentColor(accent))
                     .frame(width: 30, height: 30)
@@ -241,12 +241,12 @@ struct SettingsView: View {
                     )
                     .overlay(
                         Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(.caption).weight(.bold))
                             .foregroundStyle(.white)
                             .opacity(isSel ? 1 : 0)
                     )
                 Text(accent.label)
-                    .font(.system(size: 10, weight: isSel ? .semibold : .regular))
+                    .font(.system(.caption2).weight(isSel ? .semibold : .regular))
                     .foregroundStyle(isSel ? .primary : .secondary)
             }
             .frame(width: 58)
@@ -259,16 +259,16 @@ struct SettingsView: View {
         let isSel = store.docFontPreset == preset
         return Button { store.docFontPreset = preset } label: {
             Text(preset.label)
-                .font(.system(size: 12, weight: isSel ? .semibold : .regular))
+                .font(.system(.caption).weight(isSel ? .semibold : .regular))
                 .foregroundStyle(isSel ? .primary : .secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous)
                         .fill(Color.primary.opacity(isSel ? 0.10 : 0.04))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous)
                         .stroke(isSel ? Color.accentColor : Color.primary.opacity(0.08),
                                 lineWidth: isSel ? 1.5 : 1)
                 )
@@ -277,9 +277,9 @@ struct SettingsView: View {
     }
 
     private func fontPicker(_ label: String, binding: Binding<String>) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             Text(label)
-                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .font(DSFont.label).foregroundStyle(.secondary)
                 .frame(width: 56, alignment: .leading)
             Picker("", selection: binding) {
                 Text("— preset default —").tag("")
@@ -311,10 +311,8 @@ struct SettingsView: View {
     private func section<Content: View>(
         title: String, @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            SectionHeader(title)
             content()
         }
     }

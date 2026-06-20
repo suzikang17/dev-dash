@@ -33,7 +33,7 @@ struct AppleAppPreview: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
             header
             buttonsRow
             if !lastBuildLog.isEmpty {
@@ -42,7 +42,7 @@ struct AppleAppPreview: View {
             screenshotPane
             Spacer()
         }
-        .padding(16)
+        .padding(DSSpace.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { detectProjectKind(); refreshRunning() }
         .onChange(of: project.path) { _, _ in detectProjectKind(); refreshRunning() }
@@ -50,29 +50,29 @@ struct AppleAppPreview: View {
 
     @ViewBuilder
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.md) {
             Image(systemName: project.framework == "iOS App" ? "iphone" : "macwindow")
-                .font(.system(size: 22))
+                .font(DSFont.sectionTitle)
                 .foregroundColor(.accentColor)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(project.name).font(.system(size: 16, weight: .semibold))
+                HStack(spacing: DSSpace.xs) {
+                    Text(project.name).font(DSFont.title)
                     Text(project.framework)
-                        .font(.system(size: 10))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15))
+                        .font(DSFont.micro)
+                        .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
+                        .background(DSColor.info.opacity(0.15))
                         .foregroundColor(.accentColor)
                         .clipShape(Capsule())
                 }
                 if let app = running {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                    HStack(spacing: DSSpace.xs) {
+                        Circle().fill(DSColor.success).frame(width: 7, height: 7)
                         Text(verbatim: "Running · pid \(app.processIdentifier)")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                 } else {
-                    Text("Not running").font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("Not running").font(DSFont.micro).foregroundColor(.secondary)
                 }
             }
             Spacer()
@@ -81,7 +81,7 @@ struct AppleAppPreview: View {
 
     @ViewBuilder
     private var buttonsRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             // Open in Xcode (or default editor for Package.swift)
             if hasXcodeProj || isSPM {
                 Button {
@@ -151,6 +151,7 @@ struct AppleAppPreview: View {
             } label: { Image(systemName: "arrow.clockwise") }
                 .buttonStyle(.borderless)
                 .help("Re-detect running app")
+                .accessibilityLabel("Re-detect running app")
         }
     }
 
@@ -159,24 +160,24 @@ struct AppleAppPreview: View {
         DisclosureGroup {
             ScrollView {
                 Text(lastBuildLog)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DSFont.mono(.caption2))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
+                    .padding(DSSpace.sm)
             }
             .frame(maxHeight: 220)
             .background(Color(NSColor.textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 if let exit = buildExitCode {
                     Image(systemName: exit == 0 ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(exit == 0 ? .green : .red)
+                        .foregroundColor(exit == 0 ? DSColor.success : DSColor.danger)
                 } else {
                     ProgressView().controlSize(.small)
                 }
                 Text(buildExitCode.map { $0 == 0 ? "Build succeeded" : "Build failed (exit \($0))" } ?? "Building…")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DSFont.label.weight(.medium))
             }
         }
     }
@@ -184,45 +185,46 @@ struct AppleAppPreview: View {
     @ViewBuilder
     private var screenshotPane: some View {
         if let img = screenshot {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                HStack(spacing: DSSpace.xs) {
                     Text("Screenshot")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(DSFont.sectionHeader)
                         .tracking(0.6)
                         .foregroundColor(.secondary)
                     if let at = screenshotAt {
                         Text("· \(timeAgo(at))")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                     Spacer()
                     Button { takeScreenshot() } label: { Image(systemName: "arrow.clockwise") }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Refresh screenshot")
                 }
                 ScrollView([.horizontal, .vertical]) {
                     Image(nsImage: img)
                         .resizable()
                         .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                        .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(DSColor.hairline, lineWidth: 1))
                         .padding(2)
                 }
                 .frame(maxHeight: 480)
             }
         } else if running != nil {
             Text("Click Screenshot to capture the running app's window. (Requires Screen Recording permission the first time.)")
-                .font(.system(size: 12))
+                .font(DSFont.label)
                 .foregroundColor(.secondary)
         } else {
-            VStack(spacing: 8) {
+            VStack(spacing: DSSpace.sm) {
                 Image(systemName: project.framework == "iOS App" ? "iphone" : "macwindow")
                     .font(.system(size: 36))
                     .foregroundColor(.secondary)
                 Text("App isn't running")
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
                 Text(buildHint)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }

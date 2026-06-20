@@ -13,15 +13,15 @@ struct MenuBarView: View {
             Divider()
             footer
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DSSpace.xs)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "sparkles.rectangle.stack")
                 .foregroundColor(.accentColor)
             Text("Dev Dashboard")
-                .font(.system(size: 13, weight: .semibold))
+                .font(DSFont.title)
             Spacer()
             Button {
                 Task { await store.refreshAll() }
@@ -31,49 +31,50 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help("Refresh")
+            .accessibilityLabel("Refresh")
             .disabled(store.isLoading)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DSSpace.md)
+        .padding(.vertical, DSSpace.sm)
     }
 
     @ViewBuilder
     private var content: some View {
         if store.devServices.isEmpty {
-            VStack(spacing: 6) {
+            VStack(spacing: DSSpace.sm) {
                 Image(systemName: "moon.zzz")
-                    .font(.system(size: 22))
+                    .font(DSFont.sectionTitle)
                     .foregroundColor(.secondary)
                 Text("No dev servers running")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, DSSpace.xl)
         } else {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(store.devServices) { svc in
                         MenuBarServiceRow(service: svc, openMain: openMainWindow)
                         if svc.id != store.devServices.last?.id {
-                            Divider().padding(.horizontal, 8)
+                            Divider().padding(.horizontal, DSSpace.sm)
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, DSSpace.xs)
             }
             .frame(maxHeight: 360)
         }
     }
 
     private var footer: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DSSpace.sm) {
             Button {
                 openMainWindow()
                 store.selection = .home
             } label: {
                 Label("Open Dashboard", systemImage: "macwindow")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
             }
             .buttonStyle(.borderless)
             Spacer()
@@ -81,14 +82,14 @@ struct MenuBarView: View {
                 NSApp.terminate(nil)
             } label: {
                 Text("Quit")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
             .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DSSpace.md)
+        .padding(.vertical, DSSpace.sm)
     }
 
     private func openMainWindow() {
@@ -110,26 +111,26 @@ private struct MenuBarServiceRow: View {
     @State private var hover = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(DSColor.success)
                 .font(.system(size: 7))
             VStack(alignment: .leading, spacing: 1) {
                 Text(service.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(DSFont.bodyEmphasized)
                     .lineLimit(1)
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpace.sm) {
                     Text(service.framework)
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
-                    Text("·").foregroundColor(.secondary).font(.system(size: 11))
+                    Text("·").foregroundColor(.secondary).font(DSFont.micro)
                     Text(verbatim: ":\(service.port)")
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
             }
             Spacer()
-            HStack(spacing: 4) {
+            HStack(spacing: DSSpace.xs) {
                 Button {
                     if let url = service.url, let u = URL(string: url) { NSWorkspace.shared.open(u) }
                 } label: {
@@ -138,6 +139,7 @@ private struct MenuBarServiceRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Open in browser")
+                .accessibilityLabel("Open in browser")
 
                 Button {
                     store.selection = .service(serviceID: service.id)
@@ -149,21 +151,23 @@ private struct MenuBarServiceRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Open in Dashboard")
+                .accessibilityLabel("Open in Dashboard")
 
                 Button(role: .destructive) {
                     Task { await store.stopServer(pid: service.pid) }
                 } label: {
                     Image(systemName: "stop.fill")
                         .imageScale(.small)
-                        .foregroundColor(.red)
+                        .foregroundColor(DSColor.danger)
                 }
                 .buttonStyle(.plain)
                 .help("Stop server")
+                .accessibilityLabel("Stop server")
             }
             .opacity(hover ? 1 : 0.6)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DSSpace.md)
+        .padding(.vertical, DSSpace.sm)
         .contentShape(Rectangle())
         .background(hover ? Color.accentColor.opacity(0.12) : Color.clear)
         .onHover { hover = $0 }

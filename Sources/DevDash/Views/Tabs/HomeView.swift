@@ -6,7 +6,7 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: DSSpace.xl) {
                 // Resolve each project's running port once up front, so the sort
                 // comparator and the cards below do O(1) dict lookups instead of
                 // re-deriving services per comparison (this runs every render).
@@ -27,7 +27,7 @@ struct HomeView: View {
                 if !activeWithHeat.isEmpty {
                     Section(label: "Active Projects", systemImage: "square.grid.3x3") {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(alignment: .top, spacing: 10) {
+                            LazyHStack(alignment: .top, spacing: DSSpace.sm) {
                                 ForEach(activeWithHeat.prefix(40)) { proj in
                                     if let map = store.heatmaps[proj.path] {
                                         HeatmapCard(
@@ -57,9 +57,7 @@ struct HomeView: View {
                                 }
                             }
                         }
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                        .cardSurface()
                     }
                 }
 
@@ -73,15 +71,13 @@ struct HomeView: View {
                                 }
                             }
                         }
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                        .cardSurface()
                     }
                 }
 
                 if !store.infraServices.isEmpty {
                     Section(label: "Infrastructure", systemImage: "server.rack") {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: DSSpace.md)], spacing: DSSpace.md) {
                             ForEach(store.infraServices) { svc in
                                 InfraServiceCard(service: svc)
                             }
@@ -103,13 +99,13 @@ private struct Section<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            HStack(spacing: DSSpace.xs) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                 Text(label.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .tracking(1.2)
                     .foregroundColor(.secondary)
             }
@@ -122,11 +118,11 @@ private struct StatsRow: View {
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        HStack(spacing: 12) {
-            StatPill(label: "Running", value: store.devServices.count, hint: "live servers", color: .green)
+        HStack(spacing: DSSpace.md) {
+            StatPill(label: "Running", value: store.devServices.count, hint: "live servers", color: DSColor.success)
             StatPill(label: "Projects", value: store.projects.count, hint: nil, color: .accentColor)
-            StatPill(label: "Active", value: store.activeProjects.count, hint: "past 7 days", color: .orange)
-            StatPill(label: "Sessions", value: store.sessions.count, hint: "recent claude", color: .purple)
+            StatPill(label: "Active", value: store.activeProjects.count, hint: "past 7 days", color: DSColor.warning)
+            StatPill(label: "Sessions", value: store.sessions.count, hint: "recent claude", color: DSColor.assistant)
         }
     }
 }
@@ -138,24 +134,22 @@ private struct StatPill: View {
     let color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .font(DSFont.sectionHeader)
                 .tracking(1)
                 .foregroundColor(.secondary)
             Text(verbatim: String(value))
-                .font(.system(size: 26, weight: .bold).monospacedDigit())
+                .font(DSFont.display.monospacedDigit())
                 .foregroundColor(color)
             Text(hint ?? " ")
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface()
     }
 }
 
@@ -168,33 +162,31 @@ private struct RunningServiceCard: View {
             store.selection = .service(serviceID: service.id)
             store.detailTab = .preview
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
+                HStack(spacing: DSSpace.xs) {
                     PulsingDot()
                     Text(service.name)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(DSFont.title)
                         .foregroundColor(.primary)
                         .lineLimit(1)
                     Spacer()
                     Text(verbatim: String(service.port))
-                        .font(.system(size: 14, weight: .semibold).monospacedDigit())
-                        .foregroundColor(.green)
+                        .font(DSFont.monoDigits(.headline))
+                        .foregroundColor(DSColor.success)
                 }
                 Text(service.framework)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                 if !service.cwd.isEmpty {
                     Text(DevRoots.shortenPath(service.cwd))
-                        .font(.system(size: 10).monospaced())
+                        .font(DSFont.mono(.caption2))
                         .foregroundColor(.secondary.opacity(0.7))
                         .lineLimit(1)
                 }
             }
-            .padding(14)
+            .padding(DSSpace.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .cardSurface()
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -215,39 +207,37 @@ private struct RecentProjectCard: View {
             store.selection = .project(path: project.path)
             store.detailTab = runningPort != nil ? .preview : .info
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                HStack(spacing: DSSpace.xs) {
                     if runningPort != nil {
                         PulsingDot()
                     }
                     Text(project.name)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(DSFont.title)
                         .foregroundColor(.primary)
                         .lineLimit(1)
                     Spacer()
                     if let port = runningPort {
                         Text(verbatim: String(port))
-                            .font(.system(size: 12).monospacedDigit())
-                            .foregroundColor(.green)
+                            .font(DSFont.monoDigits(.caption))
+                            .foregroundColor(DSColor.success)
                     }
                 }
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpace.xs) {
                     Text(project.framework)
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                     if let days = project.daysSinceCommit {
-                        Text("·").foregroundColor(.secondary).font(.system(size: 11))
+                        Text("·").foregroundColor(.secondary).font(DSFont.micro)
                         Text(verbatim: "\(days)d ago")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                 }
             }
-            .padding(12)
+            .padding(DSSpace.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .cardSurface()
         }
         .buttonStyle(.plain)
     }
@@ -266,33 +256,31 @@ private struct HeatmapCard: View {
             store.selection = .project(path: project.path)
             store.detailTab = runningPort != nil ? .preview : .info
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                HStack(spacing: DSSpace.xs) {
                     if runningPort != nil { PulsingDot() }
                     Text(project.name)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(DSFont.bodyEmphasized.weight(.semibold))
                         .foregroundColor(.primary)
                         .lineLimit(1)
                     Spacer(minLength: 4)
                 }
                 HStack(spacing: 5) {
                     Text(project.framework)
-                        .font(.system(size: 10))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
-                    Text("·").foregroundColor(.secondary).font(.system(size: 10))
+                    Text("·").foregroundColor(.secondary).font(DSFont.micro)
                     Text(verbatim: "\(heatmap.totalCommits) commits")
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
                 CommitHeatmap(heatmap: heatmap)
             }
-            .padding(10)
+            .padding(DSSpace.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .cardSurface(DSRadius.small)
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -324,29 +312,29 @@ private struct CommitRow: View {
             store.selection = .project(path: commit.projectPath)
             store.detailTab = .info
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpace.sm) {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 5))
-                    .foregroundColor(.green.opacity(0.7))
+                    .foregroundColor(DSColor.success.opacity(0.7))
                 Text(commit.projectName)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DSFont.label.weight(.semibold))
                     .frame(width: 140, alignment: .leading)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(commit.subject)
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.primary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(verbatim: commit.shortHash)
-                    .font(.system(size: 11).monospaced())
+                    .font(DSFont.mono(.caption2))
                     .foregroundColor(.secondary)
                 Text(timeAgo(commit.time))
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
                     .frame(width: 70, alignment: .trailing)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DSSpace.lg)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -359,23 +347,21 @@ private struct InfraServiceCard: View {
     let service: Service
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "server.rack")
-                .foregroundColor(.purple)
+                .foregroundColor(DSColor.assistant)
             VStack(alignment: .leading, spacing: 2) {
                 Text(service.name)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(DSFont.bodyEmphasized.weight(.semibold))
                 Text(verbatim: "Port \(service.port)")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
             }
             Spacer()
         }
-        .padding(12)
+        .padding(DSSpace.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface()
     }
 }
 
@@ -388,39 +374,39 @@ private struct HomeSessionRow: View {
         Button {
             store.openSessionId = session.id
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: DSSpace.md) {
                 Image(systemName: "bubble.left.fill")
-                    .foregroundColor(.purple)
+                    .foregroundColor(DSColor.assistant)
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         Text(session.projectName)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(DSFont.bodyEmphasized)
                             .foregroundColor(.primary)
                         if let title = store.digest(for: session.id)?.title {
-                            Text("·").foregroundColor(.secondary).font(.system(size: 11))
+                            Text("·").foregroundColor(.secondary).font(DSFont.micro)
                             Text(title)
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
                     }
                     Text(timeAgo(session.lastActivity))
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
                 if let d = store.digest(for: session.id) {
                     Text(verbatim: "\(d.tokens.total.formatted()) tok")
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 } else {
                     Text(verbatim: "\(session.messageCount) msgs")
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DSSpace.lg)
+            .padding(.vertical, DSSpace.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }

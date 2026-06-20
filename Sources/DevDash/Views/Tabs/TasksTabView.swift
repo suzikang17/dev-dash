@@ -30,7 +30,7 @@ struct TasksTabView: View {
                 sourceToggle
                 Divider()
                 ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DSSpace.lg) {
                     headerRow(project: project)
 
                     if let template = store.template(for: project.path) {
@@ -44,12 +44,12 @@ struct TasksTabView: View {
 
                     if let err = store.todoError {
                         Text(err)
-                            .font(.system(size: 12))
-                            .foregroundColor(.red)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .font(DSFont.label)
+                            .foregroundColor(DSColor.danger)
+                            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(8)
+                            .background(DSColor.danger.opacity(0.1))
+                            .cornerRadius(DSRadius.small)
                     }
 
                     addBar(project: project)
@@ -74,7 +74,7 @@ struct TasksTabView: View {
                             .environmentObject(store)
                     }
                 }
-                .padding(20)
+                .padding(DSSpace.xl)
             }
             .sheet(isPresented: $showTemplatePicker) {
                 TemplatePickerSheet(projectPath: project.path)
@@ -92,7 +92,7 @@ struct TasksTabView: View {
     // MARK: - Source toggle
 
     private var sourceToggle: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             Picker("Source", selection: $taskSource) {
                 Text("Dev Dash").tag("devdash")
                 Text("Lore").tag("lore")
@@ -101,8 +101,8 @@ struct TasksTabView: View {
             .frame(width: 180)
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.sm)
     }
 
     // MARK: - Header
@@ -115,7 +115,7 @@ struct TasksTabView: View {
             if let template = store.template(for: project.path) {
                 Text("·").foregroundColor(.secondary)
                 Text(template.name)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
             }
             Spacer()
@@ -147,6 +147,7 @@ struct TasksTabView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .frame(width: 32)
+                .accessibilityLabel("Template options")
             }
         }
     }
@@ -160,17 +161,17 @@ struct TasksTabView: View {
         let stageIndex = template.stages.firstIndex { $0.id == stage.id } ?? 0
         let nextStage: TemplateStage? = stageIndex + 1 < template.stages.count ? template.stages[stageIndex + 1] : nil
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
             // Stepper across stages
-            HStack(spacing: 4) {
+            HStack(spacing: DSSpace.xs) {
                 ForEach(Array(template.stages.enumerated()), id: \.element.id) { i, s in
                     Button {
                         store.setStage(s.id, for: project.path)
                     } label: {
                         Text(s.title)
-                            .font(.system(size: 11, weight: i == stageIndex ? .semibold : .regular))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .font(DSFont.micro.weight(i == stageIndex ? .semibold : .regular))
+                            .padding(.horizontal, DSSpace.sm)
+                            .padding(.vertical, DSSpace.xs)
                             .background(i == stageIndex ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.10))
                             .foregroundColor(i == stageIndex ? .accentColor : .secondary)
                             .clipShape(Capsule())
@@ -185,38 +186,38 @@ struct TasksTabView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(stage.title)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(DSFont.sectionTitle)
                     Spacer()
                     if let started = meta.stageStartedAt {
                         Text("Started \(timeAgo(started))")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                 }
                 Text(stage.purpose)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
                 if !stage.methodology.isEmpty {
                     Text(stage.methodology)
-                        .font(.system(size: 12).italic())
+                        .font(DSFont.label.italic())
                         .foregroundColor(.secondary.opacity(0.85))
                 }
             }
 
             if !stage.guidingQuestions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DSSpace.sm) {
                     let answeredCount = stage.guidingQuestions.filter { !meta.answer(for: stage.id, question: $0).isEmpty }.count
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         Label("Guiding questions", systemImage: "questionmark.circle")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(DSFont.sectionHeader)
                             .tracking(0.6)
                             .foregroundColor(.secondary)
                         Spacer()
                         Text(verbatim: "\(answeredCount)/\(stage.guidingQuestions.count) answered")
-                            .font(.system(size: 10).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                     ForEach(stage.guidingQuestions, id: \.self) { q in
@@ -234,16 +235,16 @@ struct TasksTabView: View {
                         )
                     }
                 }
-                .padding(12)
+                .padding(DSSpace.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.accentColor.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             }
 
             if !stage.exitCriteria.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DSSpace.xs) {
                     Label("Exit criteria", systemImage: "flag.checkered")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(DSFont.sectionHeader)
                         .tracking(0.6)
                         .foregroundColor(.secondary)
                     ForEach(stage.exitCriteria, id: \.self) { c in
@@ -252,11 +253,11 @@ struct TasksTabView: View {
                         Button {
                             store.toggleExitCriterion(c, stageId: stage.id, for: project.path)
                         } label: {
-                            HStack(spacing: 8) {
+                            HStack(spacing: DSSpace.sm) {
                                 Image(systemName: checked ? "checkmark.square.fill" : "square")
-                                    .foregroundColor(checked ? .green : .secondary)
+                                    .foregroundColor(checked ? DSColor.success : .secondary)
                                 Text(c)
-                                    .font(.system(size: 13))
+                                    .font(DSFont.body)
                                     .strikethrough(checked)
                                     .foregroundColor(checked ? .secondary : .primary)
                                 Spacer()
@@ -265,18 +266,17 @@ struct TasksTabView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(12)
+                .padding(DSSpace.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                .cardSurface(DSRadius.small)
+                .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
             }
 
             if !stage.validationChecks.isEmpty {
                 ValidationSection(projectPath: project.path, checks: stage.validationChecks)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 Button {
                     Task {
                         await store.suggestTasksForStage(projectPath: project.path, template: template, stage: stage)
@@ -306,11 +306,10 @@ struct TasksTabView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(DSSpace.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.accentColor.opacity(0.4), lineWidth: 0.8))
+        .cardSurface(DSRadius.medium)
+        .overlay(RoundedRectangle(cornerRadius: DSRadius.medium).stroke(Color.accentColor.opacity(0.4), lineWidth: 0.8))
     }
 
     @ViewBuilder
@@ -322,19 +321,19 @@ struct TasksTabView: View {
         } ?? []
 
         if let latest = latest {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
+                HStack(spacing: DSSpace.xs) {
                     Label("Suggestions from Claude", systemImage: "lightbulb")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.orange)
+                        .font(DSFont.label.weight(.semibold))
+                        .foregroundColor(DSColor.warning)
                     if latest.status == .running {
                         ProgressView().controlSize(.small)
                         Text("Streaming…")
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                             .foregroundColor(.secondary)
                     } else if !parsed.isEmpty {
                         Text(verbatim: "\(parsed.count) parsed")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                     Spacer()
@@ -342,7 +341,7 @@ struct TasksTabView: View {
                         store.detailTab = .claude
                     } label: {
                         Label("Open in Claude tab", systemImage: "arrow.up.forward.app")
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                     }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
@@ -350,7 +349,7 @@ struct TasksTabView: View {
 
                 if parsed.isEmpty && latest.status == .completed {
                     Text("No `TASK:` lines parsed from the response. Open the Claude tab to read the raw output.")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                 } else {
                     ForEach(parsed, id: \.self) { suggestion in
@@ -362,26 +361,26 @@ struct TasksTabView: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(DSSpace.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 0.5))
+            .background(DSColor.warning.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
+            .overlay(RoundedRectangle(cornerRadius: DSRadius.medium).stroke(DSColor.warning.opacity(0.3), lineWidth: 0.5))
         }
     }
 
     @ViewBuilder
     private func templatePickerCard(project: Project) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            HStack(spacing: DSSpace.sm) {
                 Image(systemName: "map")
                     .font(.system(size: 22))
                     .foregroundColor(.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("No template applied")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(DSFont.title)
                     Text("Pick a launch methodology to guide stages, exit criteria, and the kind of tasks to create.")
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -393,10 +392,8 @@ struct TasksTabView: View {
                 .buttonStyle(.borderedProminent)
             }
         }
-        .padding(14)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .padding(DSSpace.lg)
+        .cardSurface(DSRadius.medium)
     }
 
     // MARK: - Roadmap
@@ -406,16 +403,16 @@ struct TasksTabView: View {
         if let path = store.roadmapPath(for: project.path),
            let days = store.roadmapAgeDays(for: project.path) {
             let stale = days >= 14
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpace.sm) {
                 Image(systemName: stale ? "exclamationmark.triangle.fill" : "doc.text")
-                    .foregroundColor(stale ? .orange : .secondary)
+                    .foregroundColor(stale ? DSColor.warning : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Roadmap: \(URL(fileURLWithPath: path).lastPathComponent)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(DSFont.label.weight(.semibold))
                     Text(stale
                          ? "Last updated \(days)d ago — likely stale"
                          : "Last updated \(days)d ago")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -424,7 +421,7 @@ struct TasksTabView: View {
                     store.detailTab = .files
                 } label: {
                     Label("Open", systemImage: "doc.text")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -436,15 +433,15 @@ struct TasksTabView: View {
                     }
                 } label: {
                     Label("Suggest update", systemImage: "sparkles")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Ask Claude for a unified diff of suggested roadmap updates")
             }
-            .padding(10)
-            .background((stale ? Color.orange : Color.secondary).opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(DSSpace.sm)
+            .background((stale ? DSColor.warning : Color.secondary).opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
         }
     }
 
@@ -452,7 +449,7 @@ struct TasksTabView: View {
 
     @ViewBuilder
     private func addBar(project: Project) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             TextField("Add a task…", text: $newTitle)
                 .textFieldStyle(.roundedBorder)
                 .focused($addFocused)
@@ -545,7 +542,7 @@ struct TasksTabView: View {
             Text("No tasks yet — answer a guiding question above, or add your own.")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 24)
+                .padding(.top, DSSpace.xl)
         } else if let template = template {
             // Group by stage in template order. Within a stage, render only
             // root-level tasks; their descendants are rendered indented by
@@ -601,12 +598,12 @@ private struct SuggestionRow: View {
     @State private var added = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "lightbulb.fill")
-                .foregroundColor(.orange)
+                .foregroundColor(DSColor.warning)
                 .frame(width: 14)
             Text(suggestion)
-                .font(.system(size: 12))
+                .font(DSFont.label)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(2)
             Picker("", selection: $category) {
@@ -629,13 +626,13 @@ private struct SuggestionRow: View {
                 added = true
             } label: {
                 Label(added ? "Added" : "Add", systemImage: added ? "checkmark" : "plus")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .disabled(added)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DSSpace.xs)
     }
 }
 
@@ -646,23 +643,23 @@ private struct ValidationSection: View {
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            HStack(spacing: DSSpace.xs) {
                 Label("Validation", systemImage: "checkmark.shield")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .tracking(0.6)
                     .foregroundColor(.secondary)
                 if let summary = store.healthSummary(for: projectPath) {
                     Text(verbatim: "\(summary.passed)/\(summary.total) passed")
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor(summary.passed == summary.total ? .green : .secondary)
+                        .font(DSFont.monoDigits(.caption2))
+                        .foregroundColor(summary.passed == summary.total ? DSColor.success : .secondary)
                 }
                 Spacer()
                 Button {
                     Task { await store.runAllHealthChecks(for: projectPath) }
                 } label: {
                     Label("Run all", systemImage: "play.fill")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -672,11 +669,10 @@ private struct ValidationSection: View {
                 ValidationRow(projectPath: projectPath, check: check)
             }
         }
-        .padding(12)
+        .padding(DSSpace.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface(DSRadius.small)
+        .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
     }
 }
 
@@ -690,14 +686,14 @@ private struct ValidationRow: View {
         let status = store.healthStatus(check.id, for: projectPath)
         let result = store.lastHealthResult(check.id, for: projectPath)
 
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            HStack(spacing: DSSpace.sm) {
                 statusBadge(status)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(check.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(DSFont.bodyEmphasized)
                     Text(check.command)
-                        .font(.system(size: 10).monospaced())
+                        .font(DSFont.mono(.caption2))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -705,7 +701,7 @@ private struct ValidationRow: View {
                 Spacer()
                 if let r = result {
                     Text(timeAgo(r.finishedAt))
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
                 Button {
@@ -715,6 +711,7 @@ private struct ValidationRow: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(status == .running)
+                .accessibilityLabel(status == .running ? "Stop check" : "Run check")
 
                 if result != nil {
                     Button {
@@ -724,21 +721,22 @@ private struct ValidationRow: View {
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(expanded ? "Collapse output" : "Expand output")
                 }
             }
             if expanded, let r = result {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: DSSpace.xs) {
+                    HStack(spacing: DSSpace.md) {
                         Text(verbatim: "exit \(r.exitCode)")
-                            .font(.system(size: 10).monospacedDigit())
-                            .foregroundColor(r.passed ? .green : .red)
+                            .font(DSFont.monoDigits(.caption2))
+                            .foregroundColor(r.passed ? DSColor.success : DSColor.danger)
                         Text(verbatim: "\(r.durationSeconds)s")
-                            .font(.system(size: 10).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                         if r.timedOut {
                             Text("timed out")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.orange)
+                                .font(DSFont.micro.weight(.semibold))
+                                .foregroundColor(DSColor.warning)
                         }
                     }
                     if !r.stdoutTail.isEmpty {
@@ -748,8 +746,8 @@ private struct ValidationRow: View {
                         outputBlock("stderr", text: r.stderrTail)
                     }
                 }
-                .padding(.leading, 24)
-                .padding(.top, 4)
+                .padding(.leading, DSSpace.xl)
+                .padding(.top, DSSpace.xs)
             }
         }
     }
@@ -760,9 +758,9 @@ private struct ValidationRow: View {
         case .running:
             ProgressView().controlSize(.small).frame(width: 14)
         case .passed:
-            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundColor(DSColor.success)
         case .failed:
-            Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+            Image(systemName: "xmark.circle.fill").foregroundColor(DSColor.danger)
         case .unknown:
             Image(systemName: "circle").foregroundColor(.secondary)
         }
@@ -771,16 +769,16 @@ private struct ValidationRow: View {
     private func outputBlock(_ label: String, text: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label.uppercased())
-                .font(.system(size: 9, weight: .semibold).monospaced())
+                .font(DSFont.mono(.caption2).weight(.semibold))
                 .foregroundColor(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(DSFont.mono(.caption2))
                     .textSelection(.enabled)
-                    .padding(6)
+                    .padding(DSSpace.xs)
             }
             .background(Color(NSColor.textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             .frame(maxHeight: 120)
         }
     }
@@ -810,8 +808,8 @@ private struct QuestionAnswerRow: View {
     private var isAnswered: Bool { !current.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            HStack(alignment: .top, spacing: DSSpace.sm) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
                     if expanded {
@@ -822,11 +820,12 @@ private struct QuestionAnswerRow: View {
                     }
                 } label: {
                     Image(systemName: isAnswered ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 11))
-                        .foregroundColor(isAnswered ? .green : .secondary)
+                        .font(DSFont.micro)
+                        .foregroundColor(isAnswered ? DSColor.success : .secondary)
                         .frame(width: 14)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Collapse answer" : "Expand answer")
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
@@ -839,13 +838,13 @@ private struct QuestionAnswerRow: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(question)
-                            .font(.system(size: 13))
+                            .font(DSFont.body)
                             .foregroundColor(.primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .multilineTextAlignment(.leading)
                         if !expanded, isAnswered {
                             Text(current)
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .foregroundColor(.secondary)
                                 .lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -859,10 +858,11 @@ private struct QuestionAnswerRow: View {
                     chatOpen = true
                 } label: {
                     Image(systemName: "sparkles")
-                        .foregroundColor(.purple)
+                        .foregroundColor(DSColor.assistant)
                 }
                 .buttonStyle(.plain)
                 .help("Chat with Claude about this question")
+                .accessibilityLabel("Chat with Claude about this question")
 
                 Button(action: onAddAsTask) {
                     Image(systemName: "plus.circle")
@@ -870,6 +870,7 @@ private struct QuestionAnswerRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Add as task")
+                .accessibilityLabel("Add as task")
             }
 
             if expanded {
@@ -879,7 +880,7 @@ private struct QuestionAnswerRow: View {
                     .focused($focused)
                     .padding(.leading, 22)
                     .onSubmit { commitAndCollapse() }
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpace.xs) {
                     Spacer()
                     if !current.isEmpty {
                         Button {
@@ -957,22 +958,21 @@ private struct TaskGroupCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Label(title, systemImage: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(DSFont.title)
                 Spacer()
                 Text(verbatim: "\(count)")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DSSpace.lg)
+            .padding(.vertical, DSSpace.sm)
             .background(.regularMaterial)
             VStack(spacing: 0) { content() }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .padding(.horizontal, DSSpace.lg)
+                .padding(.vertical, DSSpace.xs)
         }
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface(DSRadius.medium)
+        .overlay(RoundedRectangle(cornerRadius: DSRadius.medium).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
     }
 }
 
@@ -995,7 +995,7 @@ private struct TaskTreeNode: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
+            HStack(spacing: DSSpace.xs) {
                 if !children.isEmpty {
                     Button {
                         withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
@@ -1006,15 +1006,16 @@ private struct TaskTreeNode: View {
                             .frame(width: 12)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(expanded ? "Collapse subtasks" : "Expand subtasks")
                 } else {
                     Color.clear.frame(width: 12)
                 }
                 TaskLine(task: task, projectPath: projectPath, allTasks: allTasks, isParent: !children.isEmpty)
             }
-            .padding(.leading, CGFloat(visualDepth) * 16)
+            .padding(.leading, CGFloat(visualDepth) * DSSpace.lg)
             if expanded {
                 ForEach(children) { c in
-                    Divider().padding(.leading, CGFloat(visualDepth + 1) * 16)
+                    Divider().padding(.leading, CGFloat(visualDepth + 1) * DSSpace.lg)
                     TaskTreeNode(task: c, projectPath: projectPath, depth: depth + 1, allTasks: allTasks)
                 }
             }
@@ -1031,7 +1032,7 @@ private struct TaskLine: View {
     @State private var hover = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Button {
                 let next: TaskStatus = task.status == .done ? .open : .done
                 store.setTaskStatus(projectPath: projectPath, id: task.id, status: next)
@@ -1040,6 +1041,7 @@ private struct TaskLine: View {
                     .foregroundColor(statusColor)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(task.status == .done ? "Mark task open" : "Mark task done")
 
             Button {
                 store.openTaskId = task.id
@@ -1047,13 +1049,13 @@ private struct TaskLine: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.title)
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .strikethrough(task.status == .done)
                         .foregroundColor(task.status == .done ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let notes = task.notes, !notes.isEmpty {
                         Text(notes)
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1123,9 +1125,10 @@ private struct TaskLine: View {
                 }
                 .menuStyle(.borderlessButton)
                 .frame(width: 28)
+                .accessibilityLabel("Task options")
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, DSSpace.xs)
         .onHover { hover = $0 }
     }
 
@@ -1157,9 +1160,9 @@ private struct TaskLine: View {
     private var statusColor: Color {
         switch task.status {
         case .open: return .secondary
-        case .inProgress: return .blue
-        case .blocked: return .orange
-        case .done: return .green
+        case .inProgress: return DSColor.info
+        case .blocked: return DSColor.warning
+        case .done: return DSColor.success
         case .skipped: return .secondary.opacity(0.6)
         }
     }
@@ -1169,9 +1172,9 @@ private struct CategoryChip: View {
     let category: TaskCategory
     var body: some View {
         Label(category.label, systemImage: category.systemImage)
-            .font(.system(size: 10))
+            .font(DSFont.micro)
             .labelStyle(.titleAndIcon)
-            .padding(.horizontal, 6).padding(.vertical, 2)
+            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
             .background(Color.secondary.opacity(0.12))
             .foregroundColor(.secondary)
             .clipShape(Capsule())
@@ -1182,9 +1185,9 @@ private struct SourceBadge: View {
     let source: TaskSource
     var body: some View {
         Text(source.label)
-            .font(.system(size: 9, weight: .semibold))
+            .font(DSFont.sectionHeader)
             .tracking(0.6)
-            .padding(.horizontal, 5).padding(.vertical, 2)
+            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
             .background(badgeColor.opacity(0.18))
             .foregroundColor(badgeColor)
             .clipShape(Capsule())
@@ -1193,8 +1196,8 @@ private struct SourceBadge: View {
         switch source {
         case .local: return .secondary
         case .template: return .accentColor
-        case .suggested: return .purple
-        case .github: return .orange
+        case .suggested: return DSColor.assistant
+        case .github: return DSColor.warning
         }
     }
 }
@@ -1205,30 +1208,30 @@ private struct IssueRow: View {
         Button {
             NSWorkspace.shared.open(issue.url)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpace.sm) {
                 Text("#\(issue.number)")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
                     .frame(width: 36, alignment: .leading)
                 Text(issue.title)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .lineLimit(1)
                 Spacer()
                 if !issue.labels.isEmpty {
                     ForEach(issue.labels.prefix(2), id: \.self) { label in
                         Text(label)
-                            .font(.system(size: 10))
-                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .font(DSFont.micro)
+                            .padding(.horizontal, DSSpace.xs).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.15))
                             .clipShape(Capsule())
                     }
                 }
                 Text(timeAgo(issue.updatedAt))
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
             }
             .contentShape(Rectangle())
-            .padding(.vertical, 6)
+            .padding(.vertical, DSSpace.xs)
         }
         .buttonStyle(.plain)
     }
@@ -1258,7 +1261,7 @@ private struct MyQueueView: View {
             .sorted { urgencyScore($0) > urgencyScore($1) }
         let aiTasks = all.filter { $0.kanbanColumn == .aiWorking }
         return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: DSSpace.lg) {
                 if humanTasks.isEmpty && aiTasks.isEmpty {
                     Text("Nothing needs your attention right now.")
                         .foregroundColor(.secondary)
@@ -1267,9 +1270,9 @@ private struct MyQueueView: View {
                 }
 
                 if !humanTasks.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
                         Label("Needs you (\(humanTasks.count))", systemImage: "person.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(DSFont.sectionHeader)
                             .tracking(0.5)
                             .foregroundColor(.secondary)
                         ForEach(humanTasks) { task in
@@ -1280,9 +1283,9 @@ private struct MyQueueView: View {
                 }
 
                 if !aiTasks.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
                         Label("AI handling (\(aiTasks.count))", systemImage: "sparkles")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(DSFont.sectionHeader)
                             .tracking(0.5)
                             .foregroundColor(.secondary)
                         ForEach(aiTasks) { task in
@@ -1292,7 +1295,7 @@ private struct MyQueueView: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(DSSpace.md)
         }
     }
 }
@@ -1314,24 +1317,24 @@ private struct QueueRow: View {
             store.openTaskId = task.id
             store.openTaskProjectPath = projectPath
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpace.sm) {
                 Rectangle()
                     .fill(columnColor)
                     .frame(width: 3)
                     .clipShape(Capsule())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(DSFont.bodyEmphasized)
                         .foregroundColor(dimmed ? .secondary : .primary)
                         .lineLimit(1)
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         Text(task.kanbanColumn.label)
-                            .font(.system(size: 10))
+                            .font(DSFont.micro)
                             .foregroundColor(.secondary)
                         if let phase = runningPhase {
                             Text("· ⚡ \(phase)")
-                                .font(.system(size: 10))
-                                .foregroundColor(.blue)
+                                .font(DSFont.micro)
+                                .foregroundColor(DSColor.info)
                         }
                     }
                 }
@@ -1339,10 +1342,9 @@ private struct QueueRow: View {
                 CategoryChip(category: task.category)
             }
             .contentShape(Rectangle())
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+            .cardSurface(DSRadius.small)
+            .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
             .opacity(dimmed ? 0.5 : 1)
         }
         .buttonStyle(.plain)
@@ -1350,10 +1352,10 @@ private struct QueueRow: View {
 
     private var columnColor: Color {
         switch task.kanbanColumn {
-        case .blocked:   return .orange
-        case .reviewQA:  return .purple
-        case .speccing:  return .green
-        case .aiWorking: return .blue
+        case .blocked:   return DSColor.warning
+        case .reviewQA:  return DSColor.assistant
+        case .speccing:  return DSColor.success
+        case .aiWorking: return DSColor.info
         default:         return .secondary
         }
     }
@@ -1375,7 +1377,7 @@ private struct KanbanBoardView: View {
         let allTasks = store.tasksV2(for: project.path)
         let byColumn = Dictionary(grouping: allTasks, by: { $0.kanbanColumn })
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: DSSpace.md) {
                 ForEach(KanbanColumn.allCases, id: \.self) { col in
                     KanbanColumnView(
                         column: col,
@@ -1386,7 +1388,7 @@ private struct KanbanBoardView: View {
                     .environmentObject(store)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, DSSpace.xs)
         }
         .task(id: project.path) {
             testIds = await Self.loadTestIds(projectPath: project.path)
@@ -1410,24 +1412,24 @@ private struct KanbanColumnView: View {
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
             HStack {
                 Circle()
                     .fill(columnColor)
                     .frame(width: 8, height: 8)
                 Text(column.label)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .tracking(0.4)
                 Spacer()
                 Text(verbatim: "\(tasks.count)")
-                    .font(.system(size: 10).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.horizontal, DSSpace.sm).padding(.vertical, DSSpace.sm)
             .background(columnColor.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
 
-            VStack(spacing: 6) {
+            VStack(spacing: DSSpace.xs) {
                 ForEach(tasks.filter { $0.parentId == nil }) { task in
                     KanbanCard(task: task, projectPath: projectPath, columnColor: columnColor,
                                hasTests: testIds.contains(task.id))
@@ -1437,26 +1439,26 @@ private struct KanbanColumnView: View {
 
             if tasks.isEmpty {
                 Text("Empty")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, DSSpace.lg)
             }
         }
         .frame(width: 200)
-        .padding(6)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(DSSpace.xs)
+        .background(DSColor.cardBg.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
     }
 
     private var columnColor: Color {
         switch column {
         case .backlog:   return .secondary
-        case .speccing:  return .green
-        case .aiWorking: return .blue
-        case .blocked:   return .orange
-        case .reviewQA:  return .purple
-        case .done:      return .green.opacity(0.6)
+        case .speccing:  return DSColor.success
+        case .aiWorking: return DSColor.info
+        case .blocked:   return DSColor.warning
+        case .reviewQA:  return DSColor.assistant
+        case .done:      return DSColor.success.opacity(0.6)
         }
     }
 }
@@ -1480,44 +1482,43 @@ private struct KanbanCard: View {
             store.openTaskId = task.id
             store.openTaskProjectPath = projectPath
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
                 Text(task.title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DSFont.bodyEmphasized)
                     .foregroundColor(.primary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .lineLimit(3)
 
                 if let ct = runningClaudeTask, let phase = ct.currentPhase {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DSSpace.xs) {
                         ProgressView().controlSize(.mini)
                         Text("⚡ \(phase)")
-                            .font(.system(size: 10))
-                            .foregroundColor(.blue)
+                            .font(DSFont.micro)
+                            .foregroundColor(DSColor.info)
                     }
                 }
 
                 if hasTests {
                     Label("Tests ready", systemImage: "checklist")
-                        .font(.system(size: 9))
-                        .foregroundColor(.purple)
+                        .font(DSFont.micro)
+                        .foregroundColor(DSColor.assistant)
                 }
 
-                HStack(spacing: 4) {
+                HStack(spacing: DSSpace.xs) {
                     CategoryChip(category: task.category)
                     Spacer()
                     if task.status == .done {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .font(.system(size: 11))
+                            .foregroundColor(DSColor.success)
+                            .font(DSFont.micro)
                     }
                 }
             }
-            .padding(10)
+            .padding(DSSpace.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+            .cardSurface(DSRadius.small)
+            .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(
                 hover ? columnColor.opacity(0.6) : Color(NSColor.separatorColor),
                 lineWidth: hover ? 1 : 0.5
             ))
@@ -1561,51 +1562,50 @@ private struct TemplatePickerSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Choose a launch template")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(DSFont.title)
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .keyboardShortcut(.cancelAction)
             }
-            .padding(14)
+            .padding(DSSpace.lg)
             Divider()
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: DSSpace.sm) {
                     ForEach(Templates.all) { t in
                         Button {
                             selected = t.id
                         } label: {
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: DSSpace.xs) {
                                 HStack {
                                     Image(systemName: selected == t.id ? "largecircle.fill.circle" : "circle")
                                         .foregroundColor(selected == t.id ? .accentColor : .secondary)
                                     Text(t.name)
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(DSFont.title)
                                     Spacer()
                                     Text(verbatim: "\(t.stages.count) stages")
-                                        .font(.system(size: 11).monospacedDigit())
+                                        .font(DSFont.monoDigits(.caption2))
                                         .foregroundColor(.secondary)
                                 }
                                 Text(t.summary)
-                                    .font(.system(size: 12))
+                                    .font(DSFont.label)
                                     .foregroundColor(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                HStack(spacing: 4) {
+                                HStack(spacing: DSSpace.xs) {
                                     ForEach(t.stages) { s in
                                         Text(s.title)
-                                            .font(.system(size: 10))
-                                            .padding(.horizontal, 6).padding(.vertical, 2)
+                                            .font(DSFont.micro)
+                                            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
                                             .background(Color.secondary.opacity(0.10))
                                             .clipShape(Capsule())
                                     }
                                 }
                             }
-                            .padding(12)
+                            .padding(DSSpace.md)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(NSColor.controlBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                            .cardSurface(DSRadius.small)
+                            .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(
                                 selected == t.id ? Color.accentColor : Color(NSColor.separatorColor),
                                 lineWidth: selected == t.id ? 1 : 0.5
                             ))
@@ -1613,7 +1613,7 @@ private struct TemplatePickerSheet: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(14)
+                .padding(DSSpace.lg)
             }
             Divider()
             HStack {
@@ -1630,7 +1630,7 @@ private struct TemplatePickerSheet: View {
                 .disabled(selected == nil)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding(14)
+            .padding(DSSpace.lg)
         }
         .frame(width: 600, height: 480)
     }

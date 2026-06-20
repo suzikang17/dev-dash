@@ -16,7 +16,7 @@ struct FilesTabView: View {
                 HSplitView {
                     treePane(project: project)
                         .frame(minWidth: 200, idealWidth: 280, maxWidth: 480)
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(DSColor.cardBg)
                     contentPane
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color(NSColor.textBackgroundColor))
@@ -59,11 +59,11 @@ struct FilesTabView: View {
     @ViewBuilder
     private func treePane(project: Project) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 Image(systemName: "folder.fill")
                     .foregroundColor(.secondary)
                 Text(project.name)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DSFont.label.weight(.semibold))
                 Spacer()
                 Button {
                     NSWorkspace.shared.open(URL(fileURLWithPath: project.path))
@@ -72,9 +72,10 @@ struct FilesTabView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Reveal in Finder")
+                .accessibilityLabel("Reveal in Finder")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DSSpace.md)
+            .padding(.vertical, DSSpace.sm)
             .background(.bar)
             Divider()
 
@@ -84,13 +85,13 @@ struct FilesTabView: View {
                     set: { selectedPath = $0 }
                 )) {
                     OutlineGroup(kids, children: \.children) { node in
-                        HStack(spacing: 6) {
+                        HStack(spacing: DSSpace.xs) {
                             Image(systemName: FileTreeScanner.icon(for: node.name, isDirectory: node.isDirectory))
                                 .foregroundColor(node.isDirectory ? .accentColor : .secondary)
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .frame(width: 14)
                             Text(node.name)
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .lineLimit(1)
                         }
                         .tag(node.path)
@@ -108,7 +109,7 @@ struct FilesTabView: View {
         if let path = selectedPath {
             FileContentView(path: path)
         } else {
-            VStack(spacing: 8) {
+            VStack(spacing: DSSpace.sm) {
                 Image(systemName: "doc")
                     .font(.system(size: 36))
                     .foregroundColor(.secondary)
@@ -161,22 +162,22 @@ struct FileContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 Image(systemName: FileTreeScanner.icon(for: URL(fileURLWithPath: path).lastPathComponent, isDirectory: false))
                     .foregroundColor(.secondary)
                 Text(URL(fileURLWithPath: path).lastPathComponent)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DSFont.label.weight(.medium))
                 Text(DevRoots.shortenPath(path))
-                    .font(.system(size: 11).monospaced())
+                    .font(DSFont.mono(.caption))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
                 if isDirty {
                     Text("Modified")
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.18))
-                        .foregroundColor(.orange)
+                        .font(DSFont.sectionHeader)
+                        .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
+                        .background(DSColor.warning.opacity(0.18))
+                        .foregroundColor(DSColor.warning)
                         .clipShape(Capsule())
                 }
                 Spacer()
@@ -227,6 +228,7 @@ struct FileContentView: View {
                     }
                     .buttonStyle(.borderless)
                     .help("Edit (⌘E)")
+                    .accessibilityLabel("Edit (⌘E)")
                     .keyboardShortcut("e", modifiers: .command)
                 }
 
@@ -245,19 +247,20 @@ struct FileContentView: View {
                 .menuStyle(.borderlessButton)
                 .frame(width: 32)
                 .help("Open externally")
+                .accessibilityLabel("Open externally")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DSSpace.md)
+            .padding(.vertical, DSSpace.sm)
             .background(.bar)
 
             if let err = saveError {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
-                    Text(err).font(.system(size: 12)).foregroundColor(.red)
+                HStack(spacing: DSSpace.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(DSColor.danger)
+                    Text(err).font(DSFont.label).foregroundColor(DSColor.danger)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Color.red.opacity(0.08))
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                .background(DSColor.danger.opacity(0.08))
             }
 
             Divider()
@@ -311,7 +314,7 @@ struct FileContentView: View {
                     Image(nsImage: img)
                         .resizable()
                         .scaledToFit()
-                        .padding(12)
+                        .padding(DSSpace.md)
                 }
                 .background(Color(NSColor.windowBackgroundColor))
             } else {
@@ -329,10 +332,10 @@ struct FileContentView: View {
             case .text(let text):
                 ScrollView([.vertical, .horizontal]) {
                     Text(text)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(DSFont.mono(.caption))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+                        .padding(DSSpace.md)
                 }
             case .binary(let size):
                 placeholder("Binary file", subtitle: byteCountFormatted(size))
@@ -360,12 +363,12 @@ struct FileContentView: View {
 
     @ViewBuilder
     private func placeholder(_ title: String, subtitle: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DSSpace.sm) {
             Image(systemName: "doc.questionmark")
                 .font(.system(size: 32))
                 .foregroundColor(.secondary)
-            Text(title).font(.headline)
-            Text(subtitle).foregroundColor(.secondary).font(.system(size: 12))
+            Text(title).font(DSFont.title)
+            Text(subtitle).foregroundColor(.secondary).font(DSFont.label)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -380,40 +383,39 @@ private struct LiveFilesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 ProgressView().controlSize(.mini)
                 Label("Live · \(task.currentPhase ?? "Running")", systemImage: "bolt.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .font(DSFont.sectionHeader)
+                    .foregroundColor(DSColor.info)
                 Spacer()
                 Text(verbatim: "\(task.liveFiles.count) files")
-                    .font(.system(size: 10).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(Color.blue.opacity(0.08))
+            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+            .background(DSColor.info.opacity(0.08))
 
             ForEach(Array(task.liveFiles.suffix(20))) { event in
-                HStack(spacing: 8) {
+                HStack(spacing: DSSpace.sm) {
                     Image(systemName: event.operation.systemImage)
-                        .font(.system(size: 10))
-                        .foregroundColor(event.operation == .read ? .secondary : .orange)
+                        .font(DSFont.micro)
+                        .foregroundColor(event.operation == .read ? .secondary : DSColor.warning)
                         .frame(width: 14)
                     Text(URL(fileURLWithPath: event.path).lastPathComponent)
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .lineLimit(1)
                     Text(event.operation.label)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(.secondary)
                     Spacer()
                 }
-                .padding(.horizontal, 12).padding(.vertical, 3)
+                .padding(.horizontal, DSSpace.md).padding(.vertical, 3)
                 Divider()
             }
         }
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.3), lineWidth: 0.5))
-        .padding(10)
+        .cardSurface(DSRadius.small)
+        .overlay(RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous).stroke(DSColor.info.opacity(0.3), lineWidth: 0.5))
+        .padding(DSSpace.sm)
     }
 }

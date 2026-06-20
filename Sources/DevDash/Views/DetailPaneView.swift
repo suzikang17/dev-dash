@@ -58,9 +58,9 @@ struct DetailPaneView: View {
 
 private struct EmptySelectionView: View {
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DSSpace.md) {
             Image(systemName: "sparkles.rectangle.stack")
-                .font(.system(size: 48))
+                .font(DSFont.display)
                 .foregroundColor(.secondary)
             Text("Select a server or project")
                 .font(.title2)

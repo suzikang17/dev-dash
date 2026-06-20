@@ -59,12 +59,12 @@ struct QuestionChatSheet: View {
 
     @ViewBuilder
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            HStack(spacing: DSSpace.sm) {
                 Image(systemName: "sparkles")
-                    .foregroundColor(.purple)
+                    .foregroundColor(DSColor.assistant)
                 Text("Help me think through this")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(DSFont.title)
                 Spacer()
                 if !messages.isEmpty {
                     Button {
@@ -80,17 +80,17 @@ struct QuestionChatSheet: View {
                     .keyboardShortcut(.cancelAction)
             }
             Text(question)
-                .font(.system(size: 15, weight: .medium))
-            HStack(spacing: 6) {
-                Text(projectName).font(.system(size: 11)).foregroundColor(.secondary)
-                Text("·").foregroundColor(.secondary).font(.system(size: 11))
+                .font(DSFont.title)
+            HStack(spacing: DSSpace.sm) {
+                Text(projectName).font(DSFont.micro).foregroundColor(.secondary)
+                Text("·").foregroundColor(.secondary).font(DSFont.micro)
                 Text("\(template.name) · \(stage.title)")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
             if !currentAnswer.isEmpty {
                 Text("Current answer: \(currentAnswer)")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                     .padding(.top, 2)
@@ -102,22 +102,22 @@ struct QuestionChatSheet: View {
     @ViewBuilder
     private var transcript: some View {
         if messages.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: DSSpace.sm) {
                 Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 30))
+                    .font(DSFont.display)
                     .foregroundColor(.secondary)
                 Text("Start a conversation about this question")
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
                 Text("Type below — Claude has the project, stage, and methodology as context.")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
+                    LazyVStack(alignment: .leading, spacing: DSSpace.sm) {
                         ForEach(messages) { msg in
                             MessageBubble(message: msg).id(msg.id)
                         }
@@ -137,9 +137,9 @@ struct QuestionChatSheet: View {
 
     @ViewBuilder
     private var inputBar: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: DSSpace.sm) {
             if let last = lastAssistant, !last.isEmpty, !streaming {
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpace.sm) {
                     Spacer()
                     Button {
                         store.setAnswer(last, stageId: stage.id, question: question, for: projectPath)
@@ -152,7 +152,7 @@ struct QuestionChatSheet: View {
                 }
                 .padding(.horizontal, 14)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 TextField("Ask Claude…", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .focused($inputFocused)
@@ -298,23 +298,23 @@ private struct MessageBubble: View {
     let message: QuestionChatMessage
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: DSSpace.sm) {
             Image(systemName: message.role == .user ? "person.circle.fill" : "sparkles")
-                .foregroundColor(message.role == .user ? .blue : .purple)
-                .font(.system(size: 14))
+                .foregroundColor(message.role == .user ? DSColor.user : DSColor.assistant)
+                .font(DSFont.title)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 Text(message.role == .user ? "You" : "Claude")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .foregroundColor(.secondary)
                 if message.content.isEmpty {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DSSpace.xs) {
                         ProgressView().controlSize(.small)
-                        Text("Thinking…").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text("Thinking…").font(DSFont.micro).foregroundColor(.secondary)
                     }
                 } else {
                     Text(message.content)
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -322,7 +322,7 @@ private struct MessageBubble: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background((message.role == .user ? Color.blue : Color.purple).opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background((message.role == .user ? DSColor.user : DSColor.assistant).opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
     }
 }

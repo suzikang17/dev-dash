@@ -13,6 +13,21 @@ struct ContentView: View {
         }
         .navigationTitle(store.selection.map(titleFor) ?? "Dev Dashboard")
         .toolbar { toolbarContent }
+        .background { tabShortcuts }
+    }
+
+    /// Hidden buttons binding ⌘1–9 to the nine detail tabs (only while a
+    /// project/service is selected — home ignores detailTab). ⌘0 is Home.
+    @ViewBuilder
+    private var tabShortcuts: some View {
+        if let sel = store.selection, sel != .home {
+            ForEach(Array(DetailTab.allCases.prefix(9).enumerated()), id: \.offset) { idx, tab in
+                Button("") { store.detailTab = tab }
+                    .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+            }
+        }
     }
 
     @ToolbarContentBuilder
@@ -26,6 +41,7 @@ struct ContentView: View {
             .disabled(!store.canGoBack)
             .keyboardShortcut("[", modifiers: .command)
             .help("Back (⌘[)")
+            .accessibilityLabel("Back")
 
             Button {
                 store.goForward()
@@ -35,6 +51,7 @@ struct ContentView: View {
             .disabled(!store.canGoForward)
             .keyboardShortcut("]", modifiers: .command)
             .help("Forward (⌘])")
+            .accessibilityLabel("Forward")
         }
         ToolbarItem(placement: .principal) {
             if let sel = store.selection, sel != .home {
@@ -48,7 +65,7 @@ struct ContentView: View {
             }
         }
         ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 if store.isLoading {
                     ProgressView().controlSize(.small)
                 } else {
@@ -62,6 +79,7 @@ struct ContentView: View {
                 .keyboardShortcut("`", modifiers: .command)
                 .disabled(store.project(for: store.selection) == nil)
                 .help("Toggle terminal (⌘`)")
+                .accessibilityLabel("Toggle terminal")
                 Button {
                     Task { await store.refreshAll(); await store.refreshTodos() }
                 } label: {
@@ -69,6 +87,7 @@ struct ContentView: View {
                 }
                 .keyboardShortcut("r", modifiers: .command)
                 .help("Refresh (⌘R)")
+                .accessibilityLabel("Refresh")
             }
         }
     }
@@ -92,7 +111,7 @@ private struct TimeAgoLabel: View {
 
     var body: some View {
         Text(secondsAgo == 0 ? "just now" : "\(secondsAgo)s ago")
-            .font(.system(size: 11).monospacedDigit())
+            .font(DSFont.monoDigits(.caption2))
             .foregroundColor(.secondary)
             .onAppear { start() }
             .onChange(of: store.lastUpdated) { _ in secondsAgo = 0 }

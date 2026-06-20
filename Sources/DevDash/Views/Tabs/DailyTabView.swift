@@ -76,7 +76,7 @@ struct DailyTabView: View {
     @ViewBuilder
     private func timeline(project: Project) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 Picker("", selection: $mode) {
                     Text("Daily").tag(ViewMode.daily)
                     Text("Browse").tag(ViewMode.browse)
@@ -90,16 +90,17 @@ struct DailyTabView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("New task")
+                .accessibilityLabel("New task")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DSSpace.md)
+            .padding(.vertical, DSSpace.sm)
             Divider()
             if days.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if mode == .daily {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24, pinnedViews: .sectionHeaders) {
+                    LazyVStack(alignment: .leading, spacing: DSSpace.xl, pinnedViews: .sectionHeaders) {
                         ForEach(days) { day in
                             Section {
                                 dayContent(day)
@@ -129,26 +130,26 @@ struct DailyTabView: View {
                     } label: {
                         HStack {
                             Text(type.capitalized)
-                                .font(.system(size: 13))
+                                .font(DSFont.body)
                                 .foregroundColor(browseType == type ? .accentColor : .primary)
                             Spacer()
                             Text("\(grouped[type]?.count ?? 0)")
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .foregroundColor(.secondary)
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.vertical, 7)
-                        .padding(.horizontal, 12)
+                        .padding(.vertical, DSSpace.sm)
+                        .padding(.horizontal, DSSpace.md)
                         .background(browseType == type ? Color.accentColor.opacity(0.08) : .clear)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    Divider().padding(.leading, 12)
+                    Divider().padding(.leading, DSSpace.md)
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, DSSpace.xs)
         }
     }
 
@@ -156,7 +157,7 @@ struct DailyTabView: View {
     private func dayHeader(_ day: DayGroup) -> some View {
         HStack {
             Text(day.isToday ? "Today · \(day.formatted)" : day.formatted)
-                .font(.headline)
+                .font(DSFont.title)
                 .foregroundColor(day.isToday ? .primary : .secondary)
             Spacer()
             Button {
@@ -171,23 +172,24 @@ struct DailyTabView: View {
                     ProgressView().scaleEffect(0.6).frame(width: 16, height: 16)
                 } else {
                     Image(systemName: "wand.and.stars")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                 }
             }
             .buttonStyle(.plain)
             .help("Generate devlog for this day")
+            .accessibilityLabel("Generate devlog for this day")
             .disabled(summarizingDate != nil)
         }
-        .padding(.vertical, 4)
-        .padding(.trailing, 8)
+        .padding(.vertical, DSSpace.xs)
+        .padding(.trailing, DSSpace.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial)
     }
 
     @ViewBuilder
     private func dayContent(_ day: DayGroup) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
             if !day.sessions.isEmpty {
                 DailySectionView(title: "Claude") {
                     ForEach(day.sessions) { session in
@@ -398,17 +400,17 @@ private struct TypeDetailPanel: View {
     private var bottomPane: some View {
         if let doc = selectedDoc {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
+                HStack(spacing: DSSpace.sm) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(doc.title).font(.headline).lineLimit(1)
+                        Text(doc.title).font(DSFont.title).lineLimit(1)
                         if !doc.dateStr.isEmpty {
                             Text(doc.dateStr).font(.caption).foregroundColor(.secondary)
                         }
                     }
                     Spacer()
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, DSSpace.lg)
+                .padding(.vertical, DSSpace.sm)
                 Divider()
                 MarkdownWebView(markdown: bodyContent(doc))
             }
@@ -433,9 +435,9 @@ private struct TypeDetailPanel: View {
 
     private func statusColor(_ status: String?) -> Color {
         switch status {
-        case "done": return .green.opacity(0.8)
+        case "done": return DSColor.success.opacity(0.8)
         case "open": return .primary
-        case "blocked": return .red.opacity(0.8)
+        case "blocked": return DSColor.danger.opacity(0.8)
         case "in_progress": return .yellow.opacity(0.8)
         default: return .primary
         }
@@ -453,12 +455,12 @@ private struct SessionPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(digest.title ?? digest.firstUserMessage ?? "Claude session")
-                        .font(.headline)
+                        .font(DSFont.title)
                         .lineLimit(1)
-                    HStack(spacing: 8) {
+                    HStack(spacing: DSSpace.sm) {
                         if let start = digest.startedAt {
                             Text(start.formatted(date: .omitted, time: .shortened))
                                 .font(.caption)
@@ -480,9 +482,10 @@ private struct SessionPanel: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Close")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DSSpace.lg)
+            .padding(.vertical, DSSpace.sm)
             Divider()
             if loading {
                 ProgressView()
@@ -537,16 +540,16 @@ private struct TurnRow: View {
             Label(turn.role == .user ? "You" : "Claude",
                   systemImage: turn.role == .user ? "person.fill" : "sparkles")
                 .font(.caption.weight(.semibold))
-                .foregroundColor(turn.role == .user ? .primary : .purple)
+                .foregroundColor(turn.role == .user ? .primary : DSColor.assistant)
             ForEach(Array(turn.blocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
             }
         }
-        .padding(10)
+        .padding(DSSpace.sm)
         .background(turn.role == .user
             ? Color.primary.opacity(0.04)
-            : Color.purple.opacity(0.04))
-        .cornerRadius(8)
+            : DSColor.assistant.opacity(0.04))
+        .cornerRadius(DSRadius.small)
     }
 
     @ViewBuilder
@@ -556,29 +559,29 @@ private struct TurnRow: View {
             if let attributed = try? AttributedString(markdown: s,
                 options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
                 Text(attributed)
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .textSelection(.enabled)
             } else {
                 Text(s)
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .textSelection(.enabled)
             }
         case .thinking(let s):
             Text(s)
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .italic()
                 .foregroundColor(.secondary)
                 .lineLimit(3)
         case .toolUse(let name, let summary, _):
             Label(summary.isEmpty ? name : "\(name): \(summary)", systemImage: "wrench.and.screwdriver")
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary)
                 .lineLimit(2)
         case .toolResult(let text, let isError):
             if isError {
                 Label(text, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 11))
-                    .foregroundColor(.red.opacity(0.8))
+                    .font(DSFont.micro)
+                    .foregroundColor(DSColor.danger.opacity(0.8))
                     .lineLimit(2)
             }
         case .attachment:
@@ -596,10 +599,10 @@ private struct NotePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.title)
-                        .font(.headline)
+                        .font(DSFont.title)
                         .lineLimit(1)
                     Text(entry.loreType)
                         .font(.caption)
@@ -611,9 +614,10 @@ private struct NotePanel: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Close")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DSSpace.lg)
+            .padding(.vertical, DSSpace.sm)
             Divider()
             MarkdownWebView(markdown: bodyContent)
         }
@@ -685,13 +689,13 @@ private struct DailyRow: View {
     let isSelected: Bool
     let action: (() -> Void)?
 
-    var body: some View {
-        HStack(spacing: 6) {
+    private var rowContent: some View {
+        HStack(spacing: DSSpace.xs) {
             Circle()
                 .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.35))
                 .frame(width: 5, height: 5)
             Text(label)
-                .font(.system(size: 13))
+                .font(DSFont.body)
                 .foregroundColor(isSelected ? .accentColor : .primary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -708,11 +712,17 @@ private struct DailyRow: View {
             }
         }
         .padding(.vertical, 2)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, DSSpace.xs)
         .background(isSelected ? Color.accentColor.opacity(0.08) : .clear)
-        .cornerRadius(4)
+        .cornerRadius(DSRadius.small)
         .contentShape(Rectangle())
-        .onTapGesture { action?() }
+    }
+
+    var body: some View {
+        Button { action?() } label: {
+            rowContent
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -738,45 +748,45 @@ struct NewLoreTaskSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("New Task")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(DSFont.title)
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .keyboardShortcut(.cancelAction)
             }
-            .padding(16)
+            .padding(DSSpace.lg)
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Title").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: DSSpace.lg) {
+                VStack(alignment: .leading, spacing: DSSpace.xs) {
+                    Text("Title").font(DSFont.label.weight(.medium)).foregroundColor(.secondary)
                     TextField("Task title…", text: $title)
                         .textFieldStyle(.roundedBorder)
                         .focused($titleFocused)
                         .onSubmit { submit() }
                 }
 
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Status").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                HStack(spacing: DSSpace.lg) {
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
+                        Text("Status").font(DSFont.label.weight(.medium)).foregroundColor(.secondary)
                         Picker("Status", selection: $status) {
                             ForEach(statuses, id: \.self) { Text($0).tag($0) }
                         }
                         .labelsHidden()
                         .frame(width: 140)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Owner").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
+                        Text("Owner").font(DSFont.label.weight(.medium)).foregroundColor(.secondary)
                         Picker("Owner", selection: $owner) {
                             ForEach(owners, id: \.self) { Text($0).tag($0) }
                         }
                         .labelsHidden()
                         .frame(width: 120)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Category").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
+                        Text("Category").font(DSFont.label.weight(.medium)).foregroundColor(.secondary)
                         Picker("Category", selection: $category) {
                             ForEach(categories, id: \.self) { Text($0).tag($0) }
                         }
@@ -786,10 +796,10 @@ struct NewLoreTaskSheet: View {
                 }
 
                 if let err = errorMsg {
-                    Text(err).font(.system(size: 12)).foregroundColor(.red)
+                    Text(err).font(DSFont.label).foregroundColor(DSColor.danger)
                 }
             }
-            .padding(16)
+            .padding(DSSpace.lg)
 
             Divider()
 
@@ -800,7 +810,7 @@ struct NewLoreTaskSheet: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(16)
+            .padding(DSSpace.lg)
         }
         .frame(width: 520)
         .onAppear { titleFocused = true }

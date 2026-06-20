@@ -32,18 +32,18 @@ struct ProductTabView: View {
 
     @ViewBuilder
     private func toolbar(project: Project) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "doc.richtext")
                 .foregroundColor(.accentColor)
             Text("Living document")
-                .font(.system(size: 13, weight: .semibold))
+                .font(DSFont.body.weight(.semibold))
             Text("docs/devdash/index.html")
-                .font(.system(size: 11).monospaced())
+                .font(DSFont.mono(.caption2))
                 .foregroundColor(.secondary)
             Spacer()
             if let at = lastRegenAt {
                 Text("Regenerated \(timeAgo(at))")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
             }
             Button {
@@ -53,6 +53,7 @@ struct ProductTabView: View {
             }
             .buttonStyle(.borderless)
             .help("Regenerate the living doc")
+            .accessibilityLabel("Regenerate the living doc")
             Button {
                 let path = ProductDocGenerator.indexPath(for: project.path)
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -61,6 +62,7 @@ struct ProductTabView: View {
             }
             .buttonStyle(.borderless)
             .help("Open in default browser")
+            .accessibilityLabel("Open in default browser")
             Menu {
                 Section("Edit shell sections") {
                     Button("Edit overview") { openFile("\(project.path)/docs/devdash/sections/overview.html") }
@@ -83,6 +85,7 @@ struct ProductTabView: View {
             .menuStyle(.borderlessButton)
             .frame(width: 32)
             .help("Edit sections / scaffold a new HTML artifact")
+            .accessibilityLabel("Edit sections / scaffold a new HTML artifact")
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { showLinkedSidebar.toggle() }
             } label: {
@@ -91,9 +94,10 @@ struct ProductTabView: View {
             }
             .buttonStyle(.borderless)
             .help(showLinkedSidebar ? "Hide linked tasks" : "Show linked tasks")
+            .accessibilityLabel(showLinkedSidebar ? "Hide linked tasks" : "Show linked tasks")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.sm)
         .background(.bar)
     }
 
@@ -148,7 +152,7 @@ struct ProductTabView: View {
                     .onAppear { store.activeDocPath = path }
                     .onChange(of: path) { _, p in store.activeDocPath = p }
                 } else {
-                    VStack(spacing: 8) {
+                    VStack(spacing: DSSpace.sm) {
                         ProgressView()
                         Text("Generating…").foregroundColor(.secondary)
                     }
@@ -184,9 +188,9 @@ struct ProductTabView: View {
     /// the edited markdown, then best-effort re-indexes via the lore CLI. This is
     /// the write path of "lore as the living doc's engine".
     @discardableResult
-    private func saveLoreDoc(absPath: String, markdownBody: String) -> String {
+    private func saveLoreDoc(absPath: String, markdownBody: String) -> (html: String, warning: String?) {
         guard let existing = try? String(contentsOfFile: absPath, encoding: .utf8) else {
-            return Markdown.bodyHTML(markdownBody)
+            return (Markdown.bodyHTML(markdownBody), nil)
         }
         // Preserve the leading `--- … ---` frontmatter verbatim; swap only the body.
         // Detect fences by EXACT trimmed "---" (tolerate a leading blank/BOM line),
@@ -199,7 +203,7 @@ struct ProductTabView: View {
             guard let close = lines[(open + 1)...].firstIndex(where: {
                 $0.trimmingCharacters(in: .whitespaces) == "---"
             }) else {
-                return Markdown.bodyHTML(markdownBody)   // unterminated frontmatter — abort
+                return (Markdown.bodyHTML(markdownBody), nil)   // unterminated frontmatter — abort
             }
             frontmatter = lines[0...close].joined(separator: "\n")
         }
@@ -218,9 +222,18 @@ struct ProductTabView: View {
                 _ = await ShellRunner.run(bin, args: ["reindex", loreType], cwd: projectRoot)
             }
         }
-        // Hand the freshly-rendered body HTML back so the card's formatted view
-        // updates the moment we save (no full regen needed).
-        return Markdown.bodyHTML(markdownBody)
+
+        // Validation feedback. An inline edit only touches the BODY (frontmatter is
+        // preserved above), so the only thing it can break is a `sections`-schema
+        // doc missing a required H2 — and `lore validate` checks frontmatter only,
+        // not sections. So we check required H2s in Swift. Never blocks the save.
+        var warning: String?
+        if let section = LoreSection.byDir(dir), !section.bodyIsFree {
+            let missing = section.requiredSections.filter { !markdownBody.contains("## \($0)") }
+            if !missing.isEmpty { warning = "missing section: " + missing.joined(separator: ", ") }
+        }
+        // Hand back the freshly-rendered body HTML (live re-render) + any warning.
+        return (Markdown.bodyHTML(markdownBody), warning)
     }
 
     /// Resolve the lore binary — PATH inside the app host process isn't reliable.
@@ -296,8 +309,49 @@ struct ProductTabView: View {
             if let title = payload["title"] as? String {
                 store.addTask(projectPath: project.path, title: title)
             }
+        case "lore-new":
+            if let loreType = payload["loreType"] as? String {
+                createLoreDoc(project: project, loreType: loreType)
+            }
+        case "lore-delete":
+            if let file = payload["loreFile"] as? String {
+                deleteLoreDoc(project: project, absPath: file)
+            }
         default:
             break
+        }
+    }
+
+    /// Author a new lore doc from the living document. `lore add` alone omits
+    /// required fields (the doc would fail validation), so we pass them via
+    /// `--field`: per-type `newDocFields` plus `date` for `sections` schemas.
+    private func createLoreDoc(project: Project, loreType: String) {
+        guard let section = LoreSection.all.first(where: { $0.loreType == loreType }) else { return }
+        let dir = "\(project.path)/docs/\(section.dir)"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        var args = ["add", loreType, "--title", "Untitled"]
+        for f in section.newDocFields { args += ["--field", f] }
+        if !section.bodyIsFree {
+            let fmt = DateFormatter(); fmt.dateFormat = "yyyy-MM-dd"
+            args += ["--field", "date=\(fmt.string(from: Date()))"]
+        }
+        let bin = Self.loreBinary
+        Task {
+            _ = await ShellRunner.run(bin, args: args, cwd: project.path)
+            _ = await ShellRunner.run(bin, args: ["reindex", loreType], cwd: project.path)
+            await MainActor.run { regen(project: project) }
+        }
+    }
+
+    /// Delete a lore doc from the living document, then reindex + regen.
+    private func deleteLoreDoc(project: Project, absPath: String) {
+        try? FileManager.default.removeItem(atPath: absPath)
+        let dir = ((absPath as NSString).deletingLastPathComponent as NSString).lastPathComponent
+        let loreType = LoreSection.byDir(dir)?.loreType ?? dir
+        let bin = Self.loreBinary
+        Task {
+            _ = await ShellRunner.run(bin, args: ["reindex", loreType], cwd: project.path)
+            await MainActor.run { regen(project: project) }
         }
     }
 

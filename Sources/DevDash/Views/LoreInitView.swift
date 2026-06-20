@@ -13,16 +13,16 @@ struct LoreInitView: View {
     @State private var cliMissing = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DSSpace.lg) {
             Image(systemName: "books.vertical")
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
 
-            VStack(spacing: 6) {
+            VStack(spacing: DSSpace.xs) {
                 Text("Lore isn't set up for this project")
-                    .font(.headline)
+                    .font(DSFont.title)
                 Text("Lore tracks tasks, devlogs, decisions, and ideas as plain Markdown in docs/. Initialize it to start using this tab.")
-                    .font(.callout)
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 380)
@@ -34,7 +34,7 @@ struct LoreInitView: View {
                 Button {
                     Task { await initialize() }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         if running { ProgressView().controlSize(.small) }
                         Text(running ? "Initializing…" : "Initialize lore")
                     }
@@ -46,8 +46,8 @@ struct LoreInitView: View {
 
                 if let failure {
                     Text(failure)
-                        .font(.caption)
-                        .foregroundColor(.red)
+                        .font(DSFont.label)
+                        .foregroundColor(DSColor.danger)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 380)
                     fallback
@@ -60,13 +60,13 @@ struct LoreInitView: View {
 
     /// Copy-pasteable command shown when one-click init is unavailable or failed.
     private var fallback: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DSSpace.xs) {
             Text("Or run this from the project root:")
-                .font(.caption)
+                .font(DSFont.label)
                 .foregroundColor(.secondary)
-            HStack(spacing: 8) {
+            HStack(spacing: DSSpace.sm) {
                 Text("lore init docs")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(DSFont.mono(.caption))
                     .textSelection(.enabled)
                 Button {
                     NSPasteboard.general.clearContents()
@@ -76,10 +76,10 @@ struct LoreInitView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Copy command")
+                .accessibilityLabel("Copy command")
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(6)
+            .padding(.horizontal, DSSpace.sm).padding(.vertical, DSSpace.xs)
+            .cardSurface(DSRadius.small)
         }
     }
 

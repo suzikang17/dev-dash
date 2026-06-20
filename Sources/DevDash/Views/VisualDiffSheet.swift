@@ -34,22 +34,23 @@ struct VisualDiffSheet: View {
             header
             Divider()
             imageGrid
-                .padding(20)
+                .padding(DSSpace.xl)
             Divider()
             footer
         }
         .frame(minWidth: 800, minHeight: 520)
         .background(Color(NSColor.windowBackgroundColor))
         .onChange(of: diffThreshold) { _, _ in recomputeDiff() }
+        .onKeyPress(.escape) { dismiss(); return .handled }
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSSpace.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Visual Review")
-                    .font(.headline)
+                    .font(DSFont.title)
                 Text("\(pageURL.absoluteString) — \(percentChanged)% changed")
-                    .font(.caption)
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             }
             Spacer()
@@ -68,14 +69,14 @@ struct VisualDiffSheet: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, DSSpace.xl)
+        .padding(.vertical, DSSpace.md)
     }
 
     private var imageGrid: some View {
         GeometryReader { geo in
             let w = (geo.size.width - 12) / 2
-            HStack(spacing: 12) {
+            HStack(spacing: DSSpace.md) {
                 imageCell(label: "Baseline", cgImage: baselineCGImage, width: w)
                 imageCell(label: showDiff ? "Diff (red = changed)" : "New snapshot",
                           cgImage: showDiff ? (liveDiffImage ?? result.diffImage) : result.newImage, width: w)
@@ -89,9 +90,9 @@ struct VisualDiffSheet: View {
 
     @ViewBuilder
     private func imageCell(label: String, cgImage: CGImage?, width: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .font(DSFont.sectionHeader)
                 .foregroundColor(.secondary)
                 .textCase(.uppercase)
             if let cg = cgImage {
@@ -100,10 +101,10 @@ struct VisualDiffSheet: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: width)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                    .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
             } else {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DSRadius.small)
                     .fill(Color.secondary.opacity(0.1))
                     .frame(width: width)
                     .overlay(Text("No baseline").foregroundColor(.secondary))
@@ -125,7 +126,7 @@ struct VisualDiffSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Button("Export report") {
                 if let url = VisualSnapshotStore.exportReport(
                     projectPath: projectPath, urlSlug: urlSlug, viewport: viewportLabel,
@@ -164,7 +165,7 @@ struct VisualDiffSheet: View {
             }
             .buttonStyle(.borderedProminent)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, DSSpace.xl)
+        .padding(.vertical, DSSpace.md)
     }
 }

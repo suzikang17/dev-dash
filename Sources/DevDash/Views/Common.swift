@@ -6,13 +6,13 @@ struct PulsingDot: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color.green.opacity(0.6))
+                .fill(DSColor.success.opacity(0.6))
                 .frame(width: 10, height: 10)
                 .scaleEffect(pulse ? 1.6 : 1)
                 .opacity(pulse ? 0 : 0.7)
                 .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false), value: pulse)
             Circle()
-                .fill(Color.green)
+                .fill(DSColor.success)
                 .frame(width: 8, height: 8)
         }
         .onAppear { pulse = true }

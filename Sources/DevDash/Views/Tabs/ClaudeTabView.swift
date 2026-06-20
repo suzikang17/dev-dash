@@ -29,7 +29,7 @@ struct ClaudeTabView: View {
         let tasks = store.tasks(forClaudeProject: project.path)
 
         ScrollView {
-            LazyVStack(spacing: 14, pinnedViews: []) {
+            LazyVStack(spacing: DSSpace.lg, pinnedViews: []) {
                 GStackSpecialistsSection(project: project)
                     .environmentObject(store)
 
@@ -47,26 +47,24 @@ struct ClaudeTabView: View {
                             }
                         }
                     }
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                    .cardSurface()
                 }
                 if tasks.isEmpty && projectSessions.isEmpty {
                     EmptyStateClaude()
                 }
             }
-            .padding(14)
+            .padding(DSSpace.lg)
         }
     }
 
     @ViewBuilder
     private func composer(project: Project) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundColor(.purple)
+                    .foregroundColor(DSColor.assistant)
                 Text(project.name)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(DSFont.bodyEmphasized.weight(.semibold))
                 Spacer()
                 Toggle(isOn: $allowEdits) {
                     Label("Allow edits", systemImage: "pencil")
@@ -77,9 +75,9 @@ struct ClaudeTabView: View {
                 .help(allowEdits ? "Claude can read AND modify files" : "Read-only: Claude can read & run commands but won't modify files")
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 Text("Quick:")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                 Button {
                     Task { await store.generateRecap(for: project) }
@@ -98,24 +96,24 @@ struct ClaudeTabView: View {
                 .controlSize(.small)
             }
 
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: DSSpace.sm) {
                 ZStack(alignment: .topLeading) {
                     if prompt.isEmpty {
                         Text("Ask Claude to do something in \(project.name)…")
                             .foregroundColor(.secondary)
-                            .padding(.horizontal, 8).padding(.vertical, 7)
+                            .padding(.horizontal, DSSpace.sm).padding(.vertical, 7)
                             .allowsHitTesting(false)
                     }
                     TextEditor(text: $prompt)
                         .focused($promptFocused)
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 64, maxHeight: 110)
-                        .padding(.horizontal, 4).padding(.vertical, 3)
+                        .padding(.horizontal, DSSpace.xs).padding(.vertical, 3)
                 }
                 .background(Color(NSColor.textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
 
                 Button {
                     submit(project: project)
@@ -129,7 +127,7 @@ struct ClaudeTabView: View {
                 .help("Send (⌘↵)")
             }
         }
-        .padding(14)
+        .padding(DSSpace.lg)
         .background(.regularMaterial)
     }
 
@@ -137,9 +135,9 @@ struct ClaudeTabView: View {
     private func history(project: Project) -> some View {
         let tasks = store.tasks(forClaudeProject: project.path)
         if tasks.isEmpty {
-            VStack(spacing: 12) {
+            VStack(spacing: DSSpace.md) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 36))
+                    .font(DSFont.display)
                     .foregroundColor(.secondary)
                 Text("No tasks yet")
                     .font(.headline)
@@ -151,12 +149,12 @@ struct ClaudeTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: DSSpace.md) {
                     ForEach(tasks) { task in
                         ClaudeTaskCard(task: task)
                     }
                 }
-                .padding(14)
+                .padding(DSSpace.lg)
             }
         }
     }
@@ -180,44 +178,44 @@ private struct ClaudeTaskCard: View {
     @State private var expanded = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            HStack(alignment: .top, spacing: DSSpace.sm) {
                 statusIcon
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         if task.kind != .general {
                             Label(task.kind.label, systemImage: task.kind.systemImage)
-                                .font(.system(size: 10, weight: .semibold))
-                                .padding(.horizontal, 6)
+                                .font(DSFont.sectionHeader)
+                                .padding(.horizontal, DSSpace.xs)
                                 .padding(.vertical, 2)
                                 .background(tintColor(task.kind).opacity(0.15))
                                 .foregroundColor(tintColor(task.kind))
                                 .clipShape(Capsule())
                         }
                         Text(task.kind == .general ? task.prompt : task.kind.label)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(DSFont.bodyEmphasized)
                             .lineLimit(expanded ? nil : 2)
                             .textSelection(.enabled)
                     }
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         Text(timeAgo(task.startedAt))
-                            .font(.system(size: 11)).foregroundColor(.secondary)
+                            .font(DSFont.micro).foregroundColor(.secondary)
                         Text("·").foregroundColor(.secondary)
                         if task.allowEdits {
                             Label("edits", systemImage: "pencil")
                                 .labelStyle(.iconOnly)
-                                .font(.system(size: 11))
-                                .foregroundColor(.orange)
+                                .font(DSFont.micro)
+                                .foregroundColor(DSColor.warning)
                         } else {
                             Label("read-only", systemImage: "eye")
                                 .labelStyle(.iconOnly)
-                                .font(.system(size: 11))
+                                .font(DSFont.micro)
                                 .foregroundColor(.secondary)
                         }
                         if let sid = task.sessionId {
                             Text("·").foregroundColor(.secondary)
                             Text(verbatim: String(sid.prefix(8)))
-                                .font(.system(size: 11).monospaced())
+                                .font(DSFont.mono(.caption2))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -228,9 +226,10 @@ private struct ClaudeTaskCard: View {
                         store.cancelClaude(taskId: task.id, projectPath: task.projectPath)
                     } label: {
                         Image(systemName: "stop.circle.fill")
-                            .foregroundColor(.red)
+                            .foregroundColor(DSColor.danger)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Stop task")
                 }
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
@@ -239,6 +238,7 @@ private struct ClaudeTaskCard: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Collapse" : "Expand")
             }
 
             if expanded {
@@ -251,33 +251,31 @@ private struct ClaudeTaskCard: View {
                     .padding(.bottom, 4)
                 }
                 if task.output.isEmpty {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         ProgressView().controlSize(.small)
-                        Text("Working…").foregroundColor(.secondary).font(.system(size: 12))
+                        Text("Working…").foregroundColor(.secondary).font(DSFont.label)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, DSSpace.xs)
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(task.output.enumerated()), id: \.offset) { _, line in
                             Text(line)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(DSFont.mono(.caption))
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 1)
                         }
                     }
-                    .padding(10)
+                    .padding(DSSpace.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(NSColor.textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                    .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
                 }
             }
         }
-        .padding(12)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .padding(DSSpace.md)
+        .cardSurface()
     }
 
     @ViewBuilder
@@ -286,9 +284,9 @@ private struct ClaudeTaskCard: View {
         case .running:
             ProgressView().controlSize(.small)
         case .completed:
-            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundColor(DSColor.success)
         case .failed:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(DSColor.warning)
         case .cancelled:
             Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
         }
@@ -296,12 +294,12 @@ private struct ClaudeTaskCard: View {
 
     private func tintColor(_ kind: ClaudeTask.Kind) -> Color {
         switch kind {
-        case .general:        return .purple
+        case .general:        return DSColor.assistant
         case .recap:          return .indigo
-        case .releaseNotes:   return .teal
-        case .taskExecution:  return .blue
-        case .taskSuggestion: return .orange
-        case .roadmapUpdate:  return .green
+        case .releaseNotes:   return DSColor.gitMeta
+        case .taskExecution:  return DSColor.info
+        case .taskSuggestion: return DSColor.warning
+        case .roadmapUpdate:  return DSColor.success
         }
     }
 }
@@ -312,20 +310,20 @@ private struct InlineSectionHeader: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DSSpace.xs) {
             Image(systemName: systemImage)
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary)
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .font(DSFont.sectionHeader)
                 .tracking(1.2)
                 .foregroundColor(.secondary)
             Text(verbatim: "(\(count))")
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary.opacity(0.7))
             Spacer()
         }
-        .padding(.top, 4)
+        .padding(.top, DSSpace.xs)
     }
 }
 
@@ -337,30 +335,30 @@ private struct ClaudeSessionRow: View {
         Button {
             store.openSessionId = session.id
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: DSSpace.md) {
                 Image(systemName: "bubble.left.fill")
-                    .foregroundColor(.purple)
+                    .foregroundColor(DSColor.assistant)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.firstUserMessage ?? "(no prompt captured)")
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .lineLimit(2)
                         .foregroundColor(.primary)
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpace.xs) {
                         Text(session.id.prefix(8) + "…")
-                            .font(.system(size: 10).monospaced())
+                            .font(DSFont.mono(.caption2))
                             .foregroundColor(.secondary)
-                        Text("·").foregroundColor(.secondary).font(.system(size: 10))
+                        Text("·").foregroundColor(.secondary).font(DSFont.micro)
                         Text(timeAgo(session.lastActivity))
-                            .font(.system(size: 10))
+                            .font(DSFont.micro)
                             .foregroundColor(.secondary)
-                        Text("·").foregroundColor(.secondary).font(.system(size: 10))
+                        Text("·").foregroundColor(.secondary).font(DSFont.micro)
                         if let d = store.digest(for: session.id) {
                             Text(verbatim: "\(d.tokens.total.formatted()) tok")
-                                .font(.system(size: 10).monospacedDigit())
+                                .font(DSFont.monoDigits(.caption2))
                                 .foregroundColor(.secondary)
                         } else {
                             Text(verbatim: "\(session.messageCount) msgs")
-                                .font(.system(size: 10).monospacedDigit())
+                                .font(DSFont.monoDigits(.caption2))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -368,7 +366,7 @@ private struct ClaudeSessionRow: View {
                 Spacer()
                 Image(systemName: "chevron.right")
                     .foregroundColor(.secondary)
-                    .font(.system(size: 10))
+                    .font(DSFont.micro)
             }
             .contentShape(Rectangle())
         }
@@ -383,16 +381,16 @@ private struct ClaudeSessionRow: View {
                 store.openSessionId = session.id
             } label: { Label("Open detail", systemImage: "rectangle.expand.vertical") }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.sm)
     }
 }
 
 private struct EmptyStateClaude: View {
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DSSpace.md) {
             Image(systemName: "sparkles")
-                .font(.system(size: 36))
+                .font(DSFont.display)
                 .foregroundColor(.secondary)
             Text("No Claude activity yet")
                 .font(.headline)
@@ -412,31 +410,31 @@ private struct PhaseStepperView: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: DSSpace.xs) {
                 ForEach(Array(phases.enumerated()), id: \.offset) { i, phase in
                     let isDone = completedPhases.contains(phase)
                     let isCurrent = phase == currentPhase
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: DSSpace.xs) {
                         Text(isDone ? "✓ \(phase)" : phase)
-                            .font(.system(size: 10, weight: isCurrent ? .semibold : .regular))
-                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .font(DSFont.sectionHeader.weight(isCurrent ? .semibold : .regular))
+                            .padding(.horizontal, DSSpace.sm).padding(.vertical, 3)
                             .background(
-                                isDone ? Color.green.opacity(0.15) :
-                                isCurrent ? Color.blue.opacity(0.18) :
+                                isDone ? DSColor.success.opacity(0.15) :
+                                isCurrent ? DSColor.info.opacity(0.18) :
                                 Color.secondary.opacity(0.10)
                             )
                             .foregroundColor(
-                                isDone ? .green :
-                                isCurrent ? .blue :
+                                isDone ? DSColor.success :
+                                isCurrent ? DSColor.info :
                                 .secondary
                             )
                             .clipShape(Capsule())
-                            .overlay(isCurrent ? Capsule().stroke(Color.blue.opacity(0.4), lineWidth: 0.8) : nil)
+                            .overlay(isCurrent ? Capsule().stroke(DSColor.info.opacity(0.4), lineWidth: 0.8) : nil)
 
                         if i < phases.count - 1 {
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 8))
+                                .font(DSFont.micro)
                                 .foregroundColor(.secondary.opacity(0.5))
                         }
                     }
@@ -463,13 +461,13 @@ private struct GStackSpecialistsSection: View {
         if installed.isEmpty { return AnyView(EmptyView()) }
 
         return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.md) {
+                HStack(spacing: DSSpace.xs) {
                     Image(systemName: "person.3")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(DSFont.sectionHeader)
                         .foregroundColor(.secondary)
                     Text("AI SPECIALISTS")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(DSFont.sectionHeader)
                         .tracking(1.2)
                         .foregroundColor(.secondary)
                 }
@@ -477,9 +475,9 @@ private struct GStackSpecialistsSection: View {
                 ForEach(phases, id: \.0) { phase, personas in
                     let available = personas.filter { $0.isInstalled }
                     if !available.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: DSSpace.xs) {
                             Text(phase.uppercased())
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(DSFont.sectionHeader)
                                 .tracking(1.0)
                                 .foregroundColor(.secondary.opacity(0.6))
 
@@ -491,10 +489,8 @@ private struct GStackSpecialistsSection: View {
                     }
                 }
             }
-            .padding(14)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .padding(DSSpace.lg)
+            .cardSurface()
         )
     }
 }
@@ -506,17 +502,17 @@ private struct SpecialistRow: View {
     @State private var running = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: persona.systemImage)
-                .font(.system(size: 14))
+                .font(DSFont.title)
                 .foregroundColor(.accentColor)
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(persona.role)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DSFont.label.weight(.semibold))
                 Text(persona.tagline)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -535,13 +531,13 @@ private struct SpecialistRow: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Text("Run")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DSFont.micro.weight(.medium))
                 }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(running)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DSSpace.xs)
     }
 }

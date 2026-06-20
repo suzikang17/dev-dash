@@ -44,7 +44,7 @@ struct SessionDetailView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(10)
+            .padding(DSSpace.sm)
             Divider()
             content
         }
@@ -60,31 +60,31 @@ struct SessionDetailView: View {
 
     @ViewBuilder
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DSSpace.md) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 22))
-                .foregroundColor(.purple)
-            VStack(alignment: .leading, spacing: 4) {
+                .font(DSFont.sectionTitle)
+                .foregroundColor(DSColor.assistant)
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
                 Text(digest?.title ?? session?.firstUserMessage ?? "Session")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(DSFont.title)
                     .lineLimit(2)
-                HStack(spacing: 10) {
+                HStack(spacing: DSSpace.sm) {
                     if let name = session?.projectName {
                         Label(name, systemImage: "folder")
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                             .foregroundColor(.secondary)
                     }
                     if let last = session?.lastActivity {
                         Label(timeAgo(last), systemImage: "clock")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                     if let d = digest {
                         Label(formatDuration(d.durationSeconds), systemImage: "hourglass")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                         Label("\(d.tokens.total.formatted()) tok", systemImage: "circle.hexagongrid")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -104,7 +104,7 @@ struct SessionDetailView: View {
                 .controlSize(.small)
                 .keyboardShortcut(.cancelAction)
         }
-        .padding(14)
+        .padding(DSSpace.md)
     }
 
     @ViewBuilder
@@ -126,12 +126,12 @@ struct SessionDetailView: View {
     private var transcriptView: some View {
         if let t = transcript, !t.turns.isEmpty {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: DSSpace.md) {
                     ForEach(t.turns) { turn in
                         TurnView(turn: turn)
                     }
                 }
-                .padding(16)
+                .padding(DSSpace.lg)
             }
         } else {
             placeholder("No turns parsed", subtitle: "The JSONL exists but had no user/assistant messages.")
@@ -144,13 +144,13 @@ struct SessionDetailView: View {
             List(d.filesTouched, id: \.path) { file in
                 HStack {
                     Image(systemName: file.writes > 0 ? "pencil" : "eye")
-                        .foregroundColor(file.writes > 0 ? .orange : .secondary)
+                        .foregroundColor(file.writes > 0 ? DSColor.warning : .secondary)
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(URL(fileURLWithPath: file.path).lastPathComponent)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(DSFont.bodyEmphasized)
                         Text(DevRoots.shortenPath(file.path))
-                            .font(.system(size: 11).monospaced())
+                            .font(DSFont.mono(.caption))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                             .truncationMode(.head)
@@ -158,13 +158,13 @@ struct SessionDetailView: View {
                     Spacer()
                     if file.reads > 0 {
                         Text(verbatim: "\(file.reads)R")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption))
                             .foregroundColor(.secondary)
                     }
                     if file.writes > 0 {
                         Text(verbatim: "\(file.writes)W")
-                            .font(.system(size: 11).monospacedDigit())
-                            .foregroundColor(.orange)
+                            .font(DSFont.monoDigits(.caption))
+                            .foregroundColor(DSColor.warning)
                     }
                 }
                 .contextMenu {
@@ -185,25 +185,25 @@ struct SessionDetailView: View {
     private var commandsView: some View {
         if let d = digest, !d.commandsRun.isEmpty {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
+                LazyVStack(alignment: .leading, spacing: DSSpace.xs) {
                     ForEach(Array(d.commandsRun.enumerated()), id: \.offset) { _, cmd in
                         VStack(alignment: .leading, spacing: 2) {
                             if let ts = cmd.timestamp {
                                 Text(timeAgo(ts))
-                                    .font(.system(size: 10).monospacedDigit())
+                                    .font(DSFont.monoDigits(.caption2))
                                     .foregroundColor(.secondary)
                             }
                             Text(cmd.command)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(DSFont.mono(.caption))
                                 .textSelection(.enabled)
-                                .padding(8)
+                                .padding(DSSpace.sm)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(Color(NSColor.textBackgroundColor))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
                         }
                     }
                 }
-                .padding(16)
+                .padding(DSSpace.lg)
             }
         } else {
             placeholder("No commands", subtitle: "This session didn't run Bash.")
@@ -214,7 +214,7 @@ struct SessionDetailView: View {
     private var statsView: some View {
         if let d = digest {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DSSpace.lg) {
                     StatGroup(title: "Tokens") {
                         StatLine(label: "Input", value: d.tokens.input.formatted())
                         StatLine(label: "Output", value: d.tokens.output.formatted())
@@ -238,7 +238,7 @@ struct SessionDetailView: View {
                         }
                     }
                 }
-                .padding(16)
+                .padding(DSSpace.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
@@ -247,10 +247,10 @@ struct SessionDetailView: View {
     }
 
     private func placeholder(_ title: String, subtitle: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "doc.questionmark").font(.system(size: 28)).foregroundColor(.secondary)
+        VStack(spacing: DSSpace.sm) {
+            Image(systemName: "doc.questionmark").font(DSFont.display).foregroundColor(.secondary)
             Text(title).font(.headline)
-            Text(subtitle).foregroundColor(.secondary).font(.system(size: 12))
+            Text(subtitle).foregroundColor(.secondary).font(DSFont.label)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -274,23 +274,23 @@ private struct TurnView: View {
     let turn: SessionTranscript.Turn
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            HStack(spacing: DSSpace.xs) {
                 Image(systemName: roleIcon)
                     .foregroundColor(roleColor)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                 Text(roleLabel)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(DSFont.micro.weight(.semibold))
                     .foregroundColor(roleColor)
                 if let ts = turn.timestamp {
                     Text(verbatim: shortTime(ts))
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
                 if let t = turn.tokens, t.total > 0 {
                     Text(verbatim: "\(t.total.formatted()) tok")
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
             }
@@ -298,11 +298,11 @@ private struct TurnView: View {
                 BlockView(block: block, role: turn.role)
             }
         }
-        .padding(10)
+        .padding(DSSpace.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(roleColor.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(roleColor.opacity(0.18), lineWidth: 0.5))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
+        .overlay(RoundedRectangle(cornerRadius: DSRadius.medium).stroke(roleColor.opacity(0.18), lineWidth: 0.5))
     }
 
     private var roleLabel: String { turn.role.rawValue.capitalized }
@@ -319,11 +319,11 @@ private struct TurnView: View {
 
     private var roleColor: Color {
         switch turn.role {
-        case .user: return .blue
-        case .assistant: return .purple
+        case .user: return DSColor.user
+        case .assistant: return DSColor.assistant
         case .system: return .gray
-        case .tool: return .orange
-        case .attachment: return .teal
+        case .tool: return DSColor.warning
+        case .attachment: return DSColor.gitMeta
         }
     }
 
@@ -344,22 +344,22 @@ private struct BlockView: View {
         switch block {
         case .text(let t):
             Text(t)
-                .font(.system(size: 13))
+                .font(DSFont.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .thinking(let t):
             DisclosureGroup {
                 Text(t)
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
-                    .padding(8)
+                    .padding(DSSpace.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             } label: {
                 Label("Thinking", systemImage: "brain")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
 
@@ -367,22 +367,22 @@ private struct BlockView: View {
             DisclosureGroup(isExpanded: $expanded) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(fullInput)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(DSFont.mono(.caption))
                         .textSelection(.enabled)
-                        .padding(8)
+                        .padding(DSSpace.sm)
                 }
                 .background(Color(NSColor.textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpace.xs) {
                     Image(systemName: toolIcon(name))
-                        .font(.system(size: 10))
-                        .foregroundColor(.orange)
+                        .font(DSFont.micro)
+                        .foregroundColor(DSColor.warning)
                     Text(name)
-                        .font(.system(size: 11, weight: .semibold).monospaced())
-                        .foregroundColor(.orange)
+                        .font(DSFont.mono(.caption2).weight(.semibold))
+                        .foregroundColor(DSColor.warning)
                     Text(summary)
-                        .font(.system(size: 11).monospaced())
+                        .font(DSFont.mono(.caption2))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -393,31 +393,31 @@ private struct BlockView: View {
             DisclosureGroup {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(text)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(DSFont.mono(.caption))
                         .textSelection(.enabled)
-                        .padding(8)
+                        .padding(DSSpace.sm)
                 }
                 .background(Color(NSColor.textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             } label: {
                 Label(isError ? "Tool error" : "Tool result", systemImage: isError ? "exclamationmark.triangle" : "arrow.turn.down.right")
-                    .font(.system(size: 11))
-                    .foregroundColor(isError ? .red : .secondary)
+                    .font(DSFont.micro)
+                    .foregroundColor(isError ? DSColor.danger : .secondary)
             }
 
         case .attachment(let name, let content):
             DisclosureGroup {
                 Text(content)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DSFont.mono(.caption))
                     .textSelection(.enabled)
-                    .padding(8)
+                    .padding(DSSpace.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.teal.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .background(DSColor.gitMeta.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             } label: {
                 Label(name, systemImage: "paperclip")
-                    .font(.system(size: 11))
-                    .foregroundColor(.teal)
+                    .font(DSFont.micro)
+                    .foregroundColor(DSColor.gitMeta)
             }
         }
     }
@@ -440,19 +440,14 @@ private struct StatGroup<Content: View>: View {
     let title: String
     @ViewBuilder var content: () -> Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
-                .foregroundColor(.secondary)
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            SectionHeader(title)
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
                 content()
             }
-            .padding(12)
+            .padding(DSSpace.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .cardSurface()
         }
     }
 }
@@ -464,11 +459,11 @@ private struct StatLine: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 12))
+                .font(DSFont.label)
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .font(.system(size: 12, weight: bold ? .semibold : .regular).monospacedDigit())
+                .font(DSFont.monoDigits(.caption).weight(bold ? .semibold : .regular))
         }
     }
 }

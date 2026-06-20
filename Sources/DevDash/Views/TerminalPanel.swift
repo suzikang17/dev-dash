@@ -44,9 +44,9 @@ struct TerminalPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             titleRegion
-            Spacer(minLength: 8)
+            Spacer(minLength: DSSpace.sm)
             ForEach(quickCommands, id: \.label) { cmd in
                 Button(cmd.label) {
                     store.terminals.send(cmd.text + (cmd.run ? "\n" : ""), to: project.path)
@@ -56,38 +56,38 @@ struct TerminalPanel: View {
             }
             placementMenu
             Button { restart() } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.borderless).help("Restart shell")
+                .buttonStyle(.borderless).help("Restart shell").accessibilityLabel("Restart shell")
             Button { store.terminalOpen = false } label: { Image(systemName: "xmark") }
-                .buttonStyle(.borderless).help("Close terminal (⌘`)")
+                .buttonStyle(.borderless).help("Close terminal (⌘`)").accessibilityLabel("Close terminal")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Color(NSColor.controlBackgroundColor))
+        .padding(.horizontal, DSSpace.sm)
+        .padding(.vertical, DSSpace.xs)
+        .background(DSColor.cardBg)
     }
 
     /// Find-in-terminal bar (Feature E). Visible only while searching; closing
     /// returns first-responder to the shell so keys never get stolen.
     private var searchBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DSSpace.xs) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11)).foregroundColor(.secondary)
+                .font(DSFont.micro).foregroundColor(.secondary)
             TextField("Find in terminal", text: $searchTerm)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12, design: .monospaced))
+                .font(DSFont.mono(.caption))
                 .focused($searchFieldFocused)
                 .onSubmit { _ = store.terminals.findNext(searchTerm, in: project.path) }
             Button { _ = store.terminals.findPrevious(searchTerm, in: project.path) }
                 label: { Image(systemName: "chevron.up") }
-                .buttonStyle(.borderless).help("Previous (⇧↩)")
+                .buttonStyle(.borderless).help("Previous (⇧↩)").accessibilityLabel("Previous")
             Button { _ = store.terminals.findNext(searchTerm, in: project.path) }
                 label: { Image(systemName: "chevron.down") }
-                .buttonStyle(.borderless).help("Next (↩)")
+                .buttonStyle(.borderless).help("Next (↩)").accessibilityLabel("Next")
             Button { closeSearch() } label: { Image(systemName: "xmark") }
-                .buttonStyle(.borderless).help("Close (esc)")
+                .buttonStyle(.borderless).help("Close (esc)").accessibilityLabel("Close")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Color(NSColor.controlBackgroundColor))
+        .padding(.horizontal, DSSpace.sm)
+        .padding(.vertical, DSSpace.xs)
+        .background(DSColor.cardBg)
         .onExitCommand { closeSearch() }
     }
 
@@ -104,11 +104,11 @@ struct TerminalPanel: View {
     }
 
     private var titleRegion: some View {
-        let region = HStack(spacing: 6) {
-            Image(systemName: "terminal").font(.system(size: 11)).foregroundColor(.secondary)
-            Text(project.name).font(.system(size: 11, weight: .semibold))
+        let region = HStack(spacing: DSSpace.xs) {
+            Image(systemName: "terminal").font(DSFont.micro).foregroundColor(.secondary)
+            Text(project.name).font(DSFont.micro.weight(.semibold))
             Text(abbreviatedPath)
-                .font(.system(size: 10, design: .monospaced))
+                .font(DSFont.mono(.caption2))
                 .foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.middle)
         }
@@ -145,6 +145,7 @@ struct TerminalPanel: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Terminal options")
+        .accessibilityLabel("Terminal options")
     }
 
     /// Invisible buttons holding the zoom shortcuts while the terminal is visible.
@@ -200,7 +201,7 @@ private struct TerminalResizePlaceholder: View {
         Color(NSColor.windowBackgroundColor)
             .overlay(
                 Text(label)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DSFont.mono(.caption2))
                     .foregroundColor(.secondary)
             )
     }
@@ -332,16 +333,16 @@ struct FloatingTerminalPanel: View {
             }
         }
         .frame(width: frame.width, height: frame.height)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous)
+                .stroke(DSColor.hairline, lineWidth: 1)
         )
         .overlay(alignment: .bottomTrailing) { resizeCorner }
         .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
         .offset(x: frame.origin.x, y: frame.origin.y)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(8)
+        .padding(DSSpace.sm)
         .onAppear { frame = clamped(frame) }
         .onChange(of: containerSize) { _, _ in frame = clamped(frame) }
         .onDisappear { store.terminalFloatingFrame = frame }
@@ -349,9 +350,9 @@ struct FloatingTerminalPanel: View {
 
     private var resizeCorner: some View {
         Image(systemName: "arrow.down.right")
-            .font(.system(size: 9))
+            .font(DSFont.micro)
             .foregroundColor(.secondary)
-            .padding(4)
+            .padding(DSSpace.xs)
             .contentShape(Rectangle())
             .hoverCursor(.crosshair)
             .gesture(

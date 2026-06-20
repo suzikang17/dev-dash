@@ -103,19 +103,19 @@ struct PreviewTabView: View {
                                 .padding(40)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        .background(Color(NSColor.windowBackgroundColor))
+                        .background(Color(NSColor.windowBackgroundColor))   // device-frame canvas; intentionally not a card
                     } else {
                         WebPreview(webView: holder.webView)
                     }
                     if case .failed(let msg) = holder.status {
-                        VStack(spacing: 10) {
+                        VStack(spacing: DSSpace.sm) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 32))
-                                .foregroundColor(.orange)
+                                .foregroundColor(DSColor.warning)
                             Text("Couldn't load \(url.absoluteString)")
-                                .font(.headline)
+                                .font(DSFont.title)
                             Text(msg)
-                                .font(.caption)
+                                .font(DSFont.label)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: 480)
@@ -129,12 +129,12 @@ struct PreviewTabView: View {
                         VStack {
                             Spacer()
                             Text(msg)
-                                .font(.system(size: 12, weight: .medium))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
+                                .font(DSFont.label.weight(.medium))
+                                .padding(.horizontal, DSSpace.lg)
+                                .padding(.vertical, DSSpace.sm)
                                 .background(.regularMaterial)
                                 .clipShape(Capsule())
-                                .padding(.bottom, 12)
+                                .padding(.bottom, DSSpace.md)
                         }
                         .task(id: msg) {
                             try? await Task.sleep(for: .seconds(2))
@@ -194,13 +194,13 @@ private struct LocalProductionSwitcher: View {
     let productionURL: URL
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             pill(label: "Local", url: localURL, active: !showingProduction) { showingProduction = false }
             pill(label: "Production", url: productionURL, active: showingProduction) { showingProduction = true }
             Spacer()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.xs)
         .background(.bar)
     }
 
@@ -208,15 +208,15 @@ private struct LocalProductionSwitcher: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 if active {
-                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                    Circle().fill(DSColor.success).frame(width: 6, height: 6)
                 }
                 Text(label)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DSFont.micro.weight(.medium))
                 Text(url.host ?? url.absoluteString)
-                    .font(.system(size: 11).monospaced())
+                    .font(DSFont.mono(.caption2))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DSSpace.sm)
+            .padding(.vertical, DSSpace.xs)
             .background(active ? Color.accentColor.opacity(0.20) : Color.secondary.opacity(0.10))
             .foregroundColor(active ? .accentColor : .secondary)
             .clipShape(Capsule())
@@ -232,9 +232,9 @@ private struct ServiceSwitcher: View {
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "rectangle.split.2x1")
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary)
             ForEach(services, id: \.id) { svc in
                 Button {
@@ -242,16 +242,16 @@ private struct ServiceSwitcher: View {
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: svc.role.systemImage)
-                            .font(.system(size: 10))
+                            .font(DSFont.micro)
                         if !svc.role.label.isEmpty {
                             Text(svc.role.label)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(DSFont.micro.weight(.medium))
                         }
                         Text(verbatim: ":\(svc.port)")
-                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2).weight(.semibold))
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, DSSpace.sm)
+                    .padding(.vertical, DSSpace.xs)
                     .background(svc.port == currentPort ? Color.accentColor.opacity(0.20) : Color.secondary.opacity(0.10))
                     .foregroundColor(svc.port == currentPort ? .accentColor : .secondary)
                     .clipShape(Capsule())
@@ -261,8 +261,8 @@ private struct ServiceSwitcher: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.xs)
         .background(.bar)
     }
 }
@@ -280,17 +280,17 @@ private struct AddressBar: View {
     let onStop: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Group {
                 switch status {
                 case .loading: ProgressView().controlSize(.mini)
-                case .loaded:  Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                case .failed:  Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                case .loaded:  Image(systemName: "checkmark.circle.fill").foregroundColor(DSColor.success)
+                case .failed:  Image(systemName: "exclamationmark.triangle.fill").foregroundColor(DSColor.warning)
                 }
             }
             .frame(width: 14)
             Text(url.absoluteString)
-                .font(.system(size: 12).monospaced())
+                .font(DSFont.mono(.caption))
                 .foregroundColor(.secondary)
                 .textSelection(.enabled)
                 .lineLimit(1)
@@ -319,6 +319,7 @@ private struct AddressBar: View {
                 .buttonStyle(.borderless)
                 .disabled(snapshotInProgress)
                 .help("Take visual snapshot — right-click to reset baseline")
+                .accessibilityLabel("Take visual snapshot — right-click to reset baseline")
                 .frame(width: 20)
                 .contextMenu {
                     Button("Take snapshot", action: onSnapshot)
@@ -334,24 +335,27 @@ private struct AddressBar: View {
             }
             .buttonStyle(.borderless)
             .help("Reload")
+            .accessibilityLabel("Reload")
 
             Button(action: onOpenExternal) {
                 Image(systemName: "arrow.up.forward.app")
             }
             .buttonStyle(.borderless)
             .help("Open in browser")
+            .accessibilityLabel("Open in browser")
 
             if let onStop = onStop, let pid = pid {
                 Button(role: .destructive, action: onStop) {
                     Image(systemName: "stop.fill")
                 }
                 .buttonStyle(.borderless)
-                .foregroundColor(.red)
+                .foregroundColor(DSColor.danger)
                 .help("Stop server (PID \(pid))")
+                .accessibilityLabel("Stop server (PID \(pid))")
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.sm)
         .background(.regularMaterial)
     }
 }
@@ -362,15 +366,15 @@ private struct NotRunningView: View {
     @EnvironmentObject var serverStore: ServerStore
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DSSpace.lg) {
             Image(systemName: "moon.zzz")
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
             Text("\(project.name) isn't running")
-                .font(.title2)
+                .font(DSFont.sectionTitle)
             Text("Start the dev server to preview it here.")
                 .foregroundColor(.secondary)
-            HStack(spacing: 12) {
+            HStack(spacing: DSSpace.md) {
                 Button {
                     Task { await store.startServer(for: project.path) }
                 } label: {
@@ -388,9 +392,9 @@ private struct NotRunningView: View {
             }
             if let err = serverStore.startError(project.path) {
                 Text(err)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(.top, 4)
+                    .font(DSFont.label)
+                    .foregroundColor(DSColor.danger)
+                    .padding(.top, DSSpace.xs)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

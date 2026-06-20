@@ -80,11 +80,15 @@ struct CommandBarView: View {
             }
             .frame(width: 560)
             .background(.ultraThickMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
-            .padding(.top, 12)
-            .padding(.trailing, 16)
-            .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
+            // Square top edge so the panel reads as continuous with the toolbar
+            // it drops out of; only the bottom corners are rounded.
+            .clipShape(UnevenRoundedRectangle(
+                bottomLeadingRadius: DSRadius.large,
+                bottomTrailingRadius: DSRadius.large,
+                style: .continuous))
+            .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
+            .padding(.trailing, DSSpace.lg)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { isFocused = true }
@@ -125,13 +129,13 @@ struct CommandBarView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DSSpace.sm) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .imageScale(.medium)
             TextField("Jump to a repo, or create a task or idea…", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15))
+                .font(DSFont.title)
                 .focused($isFocused)
                 .onSubmit { activateSelected() }
             if !query.isEmpty {
@@ -140,6 +144,7 @@ struct CommandBarView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, 18)
@@ -153,8 +158,8 @@ struct CommandBarView: View {
                     .onHover { hovering in if hovering { selectedIndex = index } }
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
+        .padding(.vertical, DSSpace.sm)
+        .padding(.horizontal, DSSpace.sm)
     }
 
     /// True if the query contains any of the given keywords (case-insensitive).
@@ -165,18 +170,18 @@ struct CommandBarView: View {
 
     private func actionRow(_ action: PaletteAction, isSelected: Bool) -> some View {
         Button(action: action.run) {
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpace.sm) {
                 Image(systemName: action.icon)
                     .foregroundStyle(action.color)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(action.label)
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .lineLimit(1)
                         .foregroundStyle(.primary)
                     if let subtitle = action.subtitle {
                         Text(subtitle)
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .foregroundStyle(.secondary)
@@ -185,17 +190,17 @@ struct CommandBarView: View {
                 Spacer()
                 if isSelected {
                     Text("↵")
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DSSpace.sm)
+            .padding(.vertical, DSSpace.sm)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous)
                 .fill(isSelected ? Color.primary.opacity(0.1) : Color.clear)
         )
     }

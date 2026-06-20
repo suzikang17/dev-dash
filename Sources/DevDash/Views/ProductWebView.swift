@@ -15,7 +15,7 @@ struct ProductWebView: NSViewRepresentable {
     let reloadToken: Int                                   // bump to force reload
     let onSave: (String, String) -> Void                   // (relPath, html)
     let onSaveAlpine: (String, String) -> Void             // (relPath, jsonState)
-    var onSaveLore: (String, String) -> String = { _, _ in "" } // (absLorePath, markdownBody) → rendered body HTML — SPIKE
+    var onSaveLore: (String, String) -> (html: String, warning: String?) = { _, _ in ("", nil) } // (absLorePath, markdownBody) → rendered body HTML + optional validation warning
     let onAction: ([String: Any]) -> Void                  // generic dispatch
     var onSearchItems: ((String) -> [[String: Any]])? = nil  // (query) → [{id,title,type,status}]
     var onCreateTask: ((String, String?) -> [String: Any])? = nil  // (title, linkedDocPath) → {id,title,status}
@@ -98,7 +98,7 @@ struct ProductWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var onSave: (String, String) -> Void
         var onSaveAlpine: (String, String) -> Void
-        var onSaveLore: (String, String) -> String = { _, _ in "" }
+        var onSaveLore: (String, String) -> (html: String, warning: String?) = { _, _ in ("", nil) }
         var onAction: ([String: Any]) -> Void
         var onSearchItems: ((String) -> [[String: Any]])?
         var onCreateTask: ((String, String?) -> [String: Any])?
@@ -129,9 +129,9 @@ struct ProductWebView: NSViewRepresentable {
             case "save-lore":
                 if let path = body["path"] as? String,
                    let markdown = body["markdown"] as? String {
-                    let renderedHTML = onSaveLore(path, markdown)
+                    let result = onSaveLore(path, markdown)
                     if let cb = body["callbackId"] as? String {
-                        resolve(callbackId: cb, value: ["html": renderedHTML])
+                        resolve(callbackId: cb, value: ["html": result.html, "warning": result.warning ?? ""])
                     }
                 }
             case "search-items":
@@ -996,6 +996,11 @@ struct ProductWebView: NSViewRepresentable {
             var bodyEl = card.querySelector('.lore-body');
             if (bodyEl) bodyEl.innerHTML = result.html;   // live re-render
           }
+          var warn = card.querySelector('.lore-warn');
+          if (warn) {
+            if (result && result.warning) { warn.textContent = '⚠ ' + result.warning; warn.style.display = ''; }
+            else { warn.style.display = 'none'; }
+          }
         };
         post({ action: 'save-lore', path: card.dataset.loreFile, markdown: ta.value, callbackId: id });
         ta.classList.remove('is-dirty');
@@ -1042,6 +1047,27 @@ struct ProductWebView: NSViewRepresentable {
           wire(src);
           autosize(src);
           src.focus();
+        }
+      }, true);
+
+      // Keyboard shortcuts inside the living document.
+      document.addEventListener('keydown', function(e) {
+        // ⌘N → "+ new" in the currently-visible section.
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'n' || e.key === 'N')) {
+          var newBtn = document.querySelector('.tab-pane.active .lore-new');
+          if (newBtn) { e.preventDefault(); newBtn.click(); }
+          return;
+        }
+        // Esc → finish editing the open card (collapse the textarea).
+        if (e.key === 'Escape') {
+          var openCard = null;
+          document.querySelectorAll('.lore-card .lore-src').forEach(function(s) {
+            if (s.style.display !== 'none') openCard = s.closest('.lore-card');
+          });
+          if (openCard) {
+            var toggle = openCard.querySelector('.lore-edit-toggle');
+            if (toggle) { e.preventDefault(); toggle.click(); }
+          }
         }
       }, true);
     })();

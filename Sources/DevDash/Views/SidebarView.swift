@@ -76,17 +76,17 @@ struct SidebarView: View {
                                     .tag(Selection.project(path: proj.path))
                             }
                         } header: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: DSSpace.xs) {
                                 Image(systemName: "pin.fill")
-                                    .font(.system(size: 10))
+                                    .font(DSFont.micro)
                                     .foregroundColor(.secondary)
                                 Text("PINNED")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(DSFont.micro.weight(.semibold))
                                     .tracking(1.2)
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 Text(verbatim: String(pinned.count))
-                                    .font(.system(size: 10).monospacedDigit())
+                                    .font(DSFont.monoDigits(.caption2))
                                     .foregroundColor(.secondary)
                             }
                             .padding(.vertical, 3)
@@ -110,17 +110,17 @@ struct SidebarView: View {
                                 }
                             }
                         } header: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: DSSpace.xs) {
                                 Image(systemName: "play.circle.fill")
-                                    .font(.system(size: 10))
+                                    .font(DSFont.micro)
                                     .foregroundColor(.secondary)
                                 Text("RUNNING")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(DSFont.micro.weight(.semibold))
                                     .tracking(1.2)
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 Text(verbatim: String(services.count))
-                                    .font(.system(size: 10).monospacedDigit())
+                                    .font(DSFont.monoDigits(.caption2))
                                     .foregroundColor(.secondary)
                             }
                             .padding(.vertical, 3)
@@ -129,8 +129,8 @@ struct SidebarView: View {
                     if services.isEmpty && pinned.isEmpty {
                         Text("Nothing here yet — pin a project from its context menu")
                             .foregroundColor(.secondary)
-                            .font(.system(size: 12))
-                            .padding(.vertical, 12)
+                            .font(DSFont.label)
+                            .padding(.vertical, DSSpace.md)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     }
@@ -146,16 +146,16 @@ struct SidebarView: View {
                                     .tag(Selection.project(path: proj.path))
                             }
                         } header: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: DSSpace.xs) {
                                 Image(systemName: "folder")
-                                    .font(.system(size: 10))
+                                    .font(DSFont.micro)
                                     .foregroundColor(.secondary)
                                 Text(verbatim: "~/\(key)")
-                                    .font(.system(size: 10, weight: .semibold).monospaced())
+                                    .font(DSFont.mono(.caption2).weight(.semibold))
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 Text(verbatim: String(grouped[key]?.count ?? 0))
-                                    .font(.system(size: 10).monospacedDigit())
+                                    .font(DSFont.monoDigits(.caption2))
                                     .foregroundColor(.secondary)
                             }
                             .padding(.vertical, 3)
@@ -165,8 +165,8 @@ struct SidebarView: View {
                     if store.infraServices.isEmpty {
                         Text("No infra detected")
                             .foregroundColor(.secondary)
-                            .font(.system(size: 12))
-                            .padding(.vertical, 12)
+                            .font(DSFont.label)
+                            .padding(.vertical, DSSpace.md)
                             .frame(maxWidth: .infinity)
                     } else {
                         ForEach(store.infraServices) { svc in
@@ -180,39 +180,42 @@ struct SidebarView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     Divider()
-                    HStack(spacing: 8) {
+                    HStack(spacing: DSSpace.sm) {
                         Button {
                             store.selection = .home
                         } label: {
                             Image(systemName: store.selection == .home ? "house.fill" : "house")
                                 .foregroundColor(store.selection == .home ? .accentColor : .secondary)
-                                .font(.system(size: 13))
+                                .font(DSFont.body)
                         }
                         .buttonStyle(.plain)
+                        .dsHitTarget()
                         .keyboardShortcut("0", modifiers: .command)
                         .help("Home (⌘0)")
+                        .accessibilityLabel("Home")
 
                         Divider().frame(height: 14)
 
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.secondary)
-                            .font(.system(size: 11))
+                            .font(DSFont.micro)
                         TextField("Search…", text: $search)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 12))
+                            .font(DSFont.label)
                         if !search.isEmpty {
                             Button {
                                 search = ""
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.secondary)
-                                    .font(.system(size: 11))
+                                    .font(DSFont.micro)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Clear search")
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, DSSpace.sm)
+                    .padding(.vertical, DSSpace.sm)
                     .background(.bar)
                 }
             }
@@ -263,19 +266,19 @@ private struct SidebarHeader: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DSSpace.xs) {
             Image(systemName: systemImage)
-                .font(.system(size: 11))
+                .font(DSFont.micro)
                 .foregroundColor(.secondary)
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .font(DSFont.sectionHeader)
                 .tracking(0.6)
             Spacer()
             Text(verbatim: String(count))
-                .font(.system(size: 10).monospacedDigit())
+                .font(DSFont.monoDigits(.caption2))
                 .foregroundColor(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DSSpace.xs)
     }
 }
 
@@ -287,18 +290,18 @@ private struct SidebarRunningGroupHeader: View {
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             PulsingDot()
             Text(project.name)
-                .font(.system(size: 13, weight: .semibold))
+                .font(DSFont.body.weight(.semibold))
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(services.map { String($0.port) }.joined(separator: " · "))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.green)
+                .font(DSFont.mono(.caption2))
+                .foregroundColor(DSColor.success)
                 .lineLimit(1)
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, DSSpace.xs)
         .padding(.horizontal, 2)
         .contextMenu {
             ForEach(services, id: \.id) { svc in
@@ -333,34 +336,34 @@ private struct SidebarServiceRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             if !service.isInfra {
                 PulsingDot()
             } else {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 7))
-                    .foregroundColor(.green)
+                    .foregroundColor(DSColor.success)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(nested ? shortName : service.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(DSFont.bodyEmphasized)
                     .lineLimit(1)
-                HStack(spacing: 4) {
+                HStack(spacing: DSSpace.xs) {
                     if !nested, let proj = store.project(for: .service(serviceID: service.id)) {
                         GitRefLabel(path: proj.path, branch: proj.branch)
                     }
                     Text(service.framework)
-                        .font(.system(size: 10))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                 }
                 .lineLimit(1)
             }
             Spacer()
             Text(verbatim: String(service.port))
-                .font(.system(size: 11, design: .monospaced))
+                .font(DSFont.mono(.caption2))
                 .foregroundColor(.secondary)
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, DSSpace.xs)
         .padding(.leading, nested ? 18 : 2)
         .padding(.trailing, 2)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -370,7 +373,7 @@ private struct SidebarServiceRow: View {
                 } label: {
                     Label("Stop", systemImage: "stop.fill")
                 }
-                .tint(.red)
+                .tint(DSColor.danger)
             }
         }
         .contextMenu {
@@ -397,7 +400,7 @@ private struct SidebarProjectRow: View {
     @EnvironmentObject var store: DashboardStore
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpace.sm) {
             if runningPort != nil {
                 PulsingDot()
             } else {
@@ -406,9 +409,9 @@ private struct SidebarProjectRow: View {
                     .foregroundColor(healthColor)
             }
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
+                HStack(spacing: DSSpace.xs) {
                     Text(project.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(DSFont.bodyEmphasized)
                         .lineLimit(1)
                     if store.isPinned(project.path) {
                         Image(systemName: "pin.fill")
@@ -416,15 +419,15 @@ private struct SidebarProjectRow: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                HStack(spacing: 4) {
+                HStack(spacing: DSSpace.xs) {
                     GitRefLabel(path: project.path, branch: project.branch)
                     Text(project.framework)
-                        .font(.system(size: 10))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                     if let days = project.daysSinceCommit {
-                        Text("·").foregroundColor(.secondary).font(.system(size: 10))
+                        Text("·").foregroundColor(.secondary).font(DSFont.micro)
                         Text("\(days)d")
-                            .font(.system(size: 10).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption2))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -433,11 +436,11 @@ private struct SidebarProjectRow: View {
             Spacer()
             if let port = runningPort {
                 Text(verbatim: String(port))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.green)
+                    .font(DSFont.mono(.caption2))
+                    .foregroundColor(DSColor.success)
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, DSSpace.xs)
         .padding(.horizontal, 2)
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button {
@@ -446,7 +449,7 @@ private struct SidebarProjectRow: View {
                 Label(store.isPinned(project.path) ? "Unpin" : "Pin",
                       systemImage: store.isPinned(project.path) ? "pin.slash.fill" : "pin.fill")
             }
-            .tint(.orange)
+            .tint(DSColor.warning)
         }
         .contextMenu {
             Button {
@@ -480,9 +483,9 @@ private struct SidebarProjectRow: View {
 
     private var healthColor: Color {
         switch project.health {
-        case .active: return .green
+        case .active: return DSColor.success
         case .moderate: return .yellow
-        case .stale: return .orange
+        case .stale: return DSColor.warning
         case .archived: return .gray
         case .noGit: return .secondary
         }
@@ -515,11 +518,11 @@ private struct GitRefLabel: View {
             HStack(spacing: 3) {
                 Image(systemName: "square.on.square")
                     .font(.system(size: 8))
-                    .foregroundColor(.purple)
+                    .foregroundColor(DSColor.gitMeta)
                 Text(name)
-                    .font(.system(size: 10).monospaced())
-                    .foregroundColor(.purple)
-                Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+                    .font(DSFont.mono(.caption2))
+                    .foregroundColor(DSColor.gitMeta)
+                Text("·").font(DSFont.micro).foregroundColor(.secondary)
             }
         } else if let b = branch ?? store.gitStatuses[path]?.branch {
             HStack(spacing: 3) {
@@ -527,9 +530,9 @@ private struct GitRefLabel: View {
                     .font(.system(size: 8))
                     .foregroundColor(.secondary)
                 Text(b)
-                    .font(.system(size: 10).monospaced())
+                    .font(DSFont.mono(.caption2))
                     .foregroundColor(.secondary)
-                Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+                Text("·").font(DSFont.micro).foregroundColor(.secondary)
             }
         }
     }

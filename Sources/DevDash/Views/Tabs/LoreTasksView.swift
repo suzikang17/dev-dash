@@ -47,11 +47,11 @@ enum LoreKanbanColumn: String, CaseIterable {
     var color: Color {
         switch self {
         case .backlog:   return .secondary
-        case .speccing:  return .green
-        case .aiWorking: return .blue
-        case .blocked:   return .orange
-        case .reviewQA:  return .purple
-        case .done:      return .green.opacity(0.6)
+        case .speccing:  return DSColor.success
+        case .aiWorking: return DSColor.info
+        case .blocked:   return DSColor.warning
+        case .reviewQA:  return DSColor.assistant
+        case .done:      return DSColor.success.opacity(0.6)
         }
     }
 }
@@ -142,16 +142,16 @@ struct LoreTasksView: View {
                     Text("Ideas").tag(LoreViewMode.ideas)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 12).padding(.vertical, 7)
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                 .background(Color(NSColor.windowBackgroundColor))
                 Divider()
 
-                HStack(spacing: 8) {
+                HStack(spacing: DSSpace.sm) {
                     Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                     TextField("Search tasks…", text: $search).textFieldStyle(.plain)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Color(NSColor.controlBackgroundColor))
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+                .background(DSColor.cardBg)
                 Divider()
 
                 ScrollViewReader { proxy in
@@ -191,10 +191,10 @@ struct LoreTasksView: View {
                             promoteIdea(idea)
                         }
                     } else {
-                        VStack(spacing: 8) {
+                        VStack(spacing: DSSpace.sm) {
                             Text("Select an idea").font(.caption).foregroundColor(.secondary)
                             Text("P promotes to a task via Claude")
-                                .font(.system(size: 10)).foregroundColor(.secondary.opacity(0.6))
+                                .font(DSFont.micro).foregroundColor(.secondary.opacity(0.6))
                         }
                         .padding().frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -205,10 +205,10 @@ struct LoreTasksView: View {
                         onFieldChange: { setField(task, key: $0, value: $1) }
                     )
                 } else {
-                    VStack(spacing: 8) {
+                    VStack(spacing: DSSpace.sm) {
                         Text("Select a task").font(.caption).foregroundColor(.secondary)
                         Text("↑↓ navigate  ·  Tab switch view  ·  S status  ·  A owner  ·  P priority  ·  Space done  ·  C new")
-                            .font(.system(size: 10)).foregroundColor(.secondary.opacity(0.6))
+                            .font(DSFont.micro).foregroundColor(.secondary.opacity(0.6))
                             .multilineTextAlignment(.center)
                     }
                     .padding()
@@ -247,7 +247,7 @@ struct LoreTasksView: View {
                     Section {
                         ForEach(todayDone) { taskRow($0) }
                     } header: {
-                        sectionHeader("Done today", color: .green, count: todayDone.count)
+                        sectionHeader("Done today", color: DSColor.success, count: todayDone.count)
                             .dropDestination(for: String.self) { files, _ in
                                 files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: col) }
                                 return true
@@ -267,9 +267,9 @@ struct LoreTasksView: View {
                 Section {
                     if colTasks.isEmpty {
                         Text("Drop here")
-                            .font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                            .font(DSFont.micro).foregroundColor(.secondary.opacity(0.35))
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 36).padding(.vertical, 8)
+                            .padding(.horizontal, 36).padding(.vertical, DSSpace.sm)
                     } else {
                         ForEach(colTasks) { taskRow($0) }
                     }
@@ -288,14 +288,14 @@ struct LoreTasksView: View {
     private var needsContent: some View {
         Section {
             if yourTurnTasks.isEmpty {
-                Text("Drop here").font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                Text("Drop here").font(DSFont.micro).foregroundColor(.secondary.opacity(0.35))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 36).padding(.vertical, 8)
+                    .padding(.horizontal, 36).padding(.vertical, DSSpace.sm)
             } else {
                 ForEach(yourTurnTasks) { taskRow($0, showColumn: true) }
             }
         } header: {
-            sectionHeader("Your turn", color: .purple, count: yourTurnTasks.count)
+            sectionHeader("Your turn", color: DSColor.assistant, count: yourTurnTasks.count)
                 .dropDestination(for: String.self) { files, _ in
                     files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .speccing) }
                     return true
@@ -304,14 +304,14 @@ struct LoreTasksView: View {
 
         Section {
             if aiTurnTasks.isEmpty {
-                Text("Drop here").font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                Text("Drop here").font(DSFont.micro).foregroundColor(.secondary.opacity(0.35))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 36).padding(.vertical, 8)
+                    .padding(.horizontal, 36).padding(.vertical, DSSpace.sm)
             } else {
                 ForEach(aiTurnTasks) { taskRow($0) }
             }
         } header: {
-            sectionHeader("AI's turn", color: .blue, count: aiTurnTasks.count)
+            sectionHeader("AI's turn", color: DSColor.info, count: aiTurnTasks.count)
                 .dropDestination(for: String.self) { files, _ in
                     files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .aiWorking) }
                     return true
@@ -320,14 +320,14 @@ struct LoreTasksView: View {
 
         Section {
             if blockedNeedsTasks.isEmpty {
-                Text("Drop here").font(.system(size: 11)).foregroundColor(.secondary.opacity(0.35))
+                Text("Drop here").font(DSFont.micro).foregroundColor(.secondary.opacity(0.35))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 36).padding(.vertical, 8)
+                    .padding(.horizontal, 36).padding(.vertical, DSSpace.sm)
             } else {
                 ForEach(blockedNeedsTasks) { taskRow($0) }
             }
         } header: {
-            sectionHeader("Blocked", color: .orange, count: blockedNeedsTasks.count)
+            sectionHeader("Blocked", color: DSColor.warning, count: blockedNeedsTasks.count)
                 .dropDestination(for: String.self) { files, _ in
                     files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .blocked) }
                     return true
@@ -340,10 +340,10 @@ struct LoreTasksView: View {
     @ViewBuilder
     private var ideasContent: some View {
         if ideas.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: DSSpace.sm) {
                 Text("No ideas yet").font(.caption).foregroundColor(.secondary)
                 Text("lore add idea --title \"...\"")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(DSFont.mono(.caption2))
                     .foregroundColor(.secondary.opacity(0.6))
             }
             .frame(maxWidth: .infinity).padding(.vertical, 40)
@@ -354,21 +354,21 @@ struct LoreTasksView: View {
                     listFocused = true
                 } label: {
                     HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: DSSpace.xs) {
                             Text(idea.title)
-                                .font(.system(size: 13))
+                                .font(DSFont.body)
                                 .lineLimit(2).multilineTextAlignment(.leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundColor(idea.status == "promoted" || idea.status == "parked" ? .secondary : .primary)
                                 .strikethrough(idea.status == "parked")
-                            HStack(spacing: 5) {
-                                Text(idea.status).font(.system(size: 10))
-                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                            HStack(spacing: DSSpace.xs) {
+                                Text(idea.status).font(DSFont.micro)
+                                    .padding(.horizontal, DSSpace.xs).padding(.vertical, 1)
                                     .background(ideaStatusColor(idea.status).opacity(0.14))
                                     .foregroundColor(ideaStatusColor(idea.status))
                                     .clipShape(Capsule())
                                 if !idea.category.isEmpty {
-                                    Text(idea.category).font(.system(size: 10)).foregroundColor(.secondary)
+                                    Text(idea.category).font(DSFont.micro).foregroundColor(.secondary)
                                 }
                             }
                         }
@@ -378,22 +378,23 @@ struct LoreTasksView: View {
                             } else {
                                 Button { promoteIdea(idea) } label: {
                                     Image(systemName: "arrow.up.right.circle")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(DSColor.info)
                                 }
                                 .buttonStyle(.plain)
                                 .help("Promote to task via Claude")
+                                .accessibilityLabel("Promote to task via Claude")
                             }
                         }
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .background(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: DSRadius.small)
                         .fill(selectedIdea?.id == idea.id ? Color.accentColor.opacity(0.13) : Color.clear)
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, DSSpace.xs)
                 )
                 Divider().padding(.leading, 36)
             }
@@ -402,10 +403,10 @@ struct LoreTasksView: View {
 
     private func ideaStatusColor(_ status: String) -> Color {
         switch status {
-        case "promising": return .green
-        case "promoted":  return .blue
+        case "promising": return DSColor.success
+        case "promoted":  return DSColor.info
         case "parked":    return .secondary
-        default:          return .orange
+        default:          return DSColor.warning
         }
     }
 
@@ -491,11 +492,11 @@ struct LoreTasksView: View {
     private func sectionHeader(_ label: String, color: Color, count: Int) -> some View {
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 7, height: 7)
-            Text(label).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            Text(verbatim: "\(count)").font(.system(size: 10).monospacedDigit()).foregroundColor(.secondary)
+            Text(label).font(DSFont.sectionHeader).foregroundColor(.secondary)
+            Text(verbatim: "\(count)").font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
             Spacer()
         }
-        .padding(.horizontal, 12).padding(.vertical, 6)
+        .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
         .background(Color(NSColor.windowBackgroundColor))
     }
 
@@ -507,11 +508,11 @@ struct LoreTasksView: View {
                 Image(systemName: showDone ? "chevron.down" : "chevron.right")
                     .font(.system(size: 9)).foregroundColor(.secondary)
                 Circle().fill(LoreKanbanColumn.done.color).frame(width: 7, height: 7)
-                Text("Done").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                Text(verbatim: "\(count)").font(.system(size: 10).monospacedDigit()).foregroundColor(.secondary)
+                Text("Done").font(DSFont.sectionHeader).foregroundColor(.secondary)
+                Text(verbatim: "\(count)").font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
                 Spacer()
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
             .background(Color(NSColor.windowBackgroundColor))
         }
         .buttonStyle(.plain)
@@ -716,32 +717,32 @@ private struct LoreCommandPalette: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
+                .font(DSFont.sectionHeader).foregroundColor(.secondary)
+                .padding(.horizontal, DSSpace.md).padding(.top, DSSpace.sm).padding(.bottom, DSSpace.xs)
             Divider()
             ForEach(Array(options.enumerated()), id: \.offset) { i, opt in
                 Button { onSelect(opt) } label: {
                     HStack(spacing: 10) {
                         Text("\(i + 1)")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(DSFont.monoDigits(.caption))
                             .foregroundColor(.secondary)
                             .frame(width: 14, alignment: .center)
                         Text(opt.isEmpty ? "—" : opt.replacingOccurrences(of: "_", with: " "))
-                            .font(.system(size: 13))
+                            .font(DSFont.body)
                         Spacer()
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
             Divider()
             Text("Esc — dismiss")
-                .font(.system(size: 10)).foregroundColor(.secondary.opacity(0.6))
-                .padding(.horizontal, 12).padding(.vertical, 6)
+                .font(DSFont.micro).foregroundColor(.secondary.opacity(0.6))
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
         }
         .frame(width: 190)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DSRadius.medium))
         .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
     }
 
@@ -784,52 +785,53 @@ private struct LoreTaskRow: View {
             HStack(spacing: 10) {
                 Button(action: onToggle) {
                     Image(systemName: task.status == "done" ? "checkmark.circle.fill" : statusIcon)
-                        .foregroundColor(task.status == "done" ? .green : statusColor)
-                        .font(.system(size: 15))
+                        .foregroundColor(task.status == "done" ? DSColor.success : statusColor)
+                        .font(DSFont.title)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(task.status == "done" ? "Mark task open" : "Mark task done")
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.title)
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .strikethrough(task.status == "done" || task.status == "skipped")
                         .foregroundColor(task.status == "done" || task.status == "skipped" ? .secondary : .primary)
                         .lineLimit(2).multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 5) {
+                    HStack(spacing: DSSpace.xs) {
                         if showColumn {
                             let col = task.kanbanColumn
-                            Text(col.label).font(.system(size: 10))
-                                .padding(.horizontal, 5).padding(.vertical, 1)
+                            Text(col.label).font(DSFont.micro)
+                                .padding(.horizontal, DSSpace.xs).padding(.vertical, 1)
                                 .background(col.color.opacity(0.14)).foregroundColor(col.color)
                                 .clipShape(Capsule())
                         } else if !task.category.isEmpty {
                             categoryChip(task.category)
                         }
                         if !task.priority.isEmpty {
-                            Text(task.priority).font(.system(size: 10)).foregroundColor(priorityColor)
+                            Text(task.priority).font(DSFont.micro).foregroundColor(priorityColor)
                         }
                         if !task.effort.isEmpty {
-                            Text("·").foregroundColor(.secondary).font(.system(size: 10))
-                            Text(task.effort).font(.system(size: 10)).foregroundColor(.secondary)
+                            Text("·").foregroundColor(.secondary).font(DSFont.micro)
+                            Text(task.effort).font(DSFont.micro).foregroundColor(.secondary)
                         }
                         if task.owner != "none" && !task.owner.isEmpty {
-                            Text("·").foregroundColor(.secondary).font(.system(size: 10))
-                            Text(task.owner).font(.system(size: 10))
-                                .foregroundColor(task.owner == "ai" ? .blue : .secondary)
+                            Text("·").foregroundColor(.secondary).font(DSFont.micro)
+                            Text(task.owner).font(DSFont.micro)
+                                .foregroundColor(task.owner == "ai" ? DSColor.info : .secondary)
                         }
                     }
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 7)
+            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 5)
+            RoundedRectangle(cornerRadius: DSRadius.small)
                 .fill(isSelected ? Color.accentColor.opacity(0.13) : Color.clear)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, DSSpace.xs)
         )
     }
 
@@ -842,33 +844,33 @@ private struct LoreTaskRow: View {
     }
     private var statusColor: Color {
         switch task.status {
-        case "blocked":     return .orange
-        case "in_progress": return .blue
+        case "blocked":     return DSColor.warning
+        case "in_progress": return DSColor.info
         default:            return .secondary
         }
     }
     private var priorityColor: Color {
         switch task.priority {
-        case "high":   return .red.opacity(0.85)
-        case "medium": return .orange.opacity(0.85)
+        case "high":   return DSColor.danger.opacity(0.85)
+        case "medium": return DSColor.warning.opacity(0.85)
         default:       return .secondary
         }
     }
     private func categoryChip(_ cat: String) -> some View {
-        Text(cat).font(.system(size: 10))
-            .padding(.horizontal, 5).padding(.vertical, 1)
+        Text(cat).font(DSFont.micro)
+            .padding(.horizontal, DSSpace.xs).padding(.vertical, 1)
             .background(categoryColor(cat).opacity(0.14)).foregroundColor(categoryColor(cat))
             .clipShape(Capsule())
     }
     private func categoryColor(_ cat: String) -> Color {
         switch cat {
-        case "engineering":  return .blue
+        case "engineering":  return DSColor.info
         case "design":       return .pink
-        case "qa":           return .red
+        case "qa":           return DSColor.danger
         case "ops":          return .gray
-        case "distribution": return .teal
-        case "content":      return .purple
-        case "marketing":    return .orange
+        case "distribution": return DSColor.gitMeta
+        case "content":      return DSColor.assistant
+        case "marketing":    return DSColor.warning
         case "research":     return .indigo
         default:             return .secondary
         }
@@ -890,10 +892,10 @@ private struct LoreTaskDetailPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
                 Text(task.title).font(.headline).lineLimit(3)
 
-                HStack(spacing: 16) {
+                HStack(spacing: DSSpace.lg) {
                     field("Status") {
                         Picker("", selection: Binding(get: { task.status }, set: { onStatusChange($0) })) {
                             ForEach(statuses, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ")).tag($0) }
@@ -916,7 +918,7 @@ private struct LoreTaskDetailPane: View {
                     Spacer()
                 }
 
-                HStack(spacing: 16) {
+                HStack(spacing: DSSpace.lg) {
                     field("Category") {
                         Picker("", selection: Binding(get: { task.category }, set: { onFieldChange("category", $0) })) {
                             ForEach(categories, id: \.self) { Text($0).tag($0) }
@@ -939,13 +941,13 @@ private struct LoreTaskDetailPane: View {
                 }
 
                 if !task.notes.isEmpty {
-                    Text(task.notes).font(.system(size: 12)).foregroundColor(.secondary).lineLimit(2)
+                    Text(task.notes).font(DSFont.label).foregroundColor(.secondary).lineLimit(2)
                 }
                 if !task.completed.isEmpty {
-                    Text("Completed \(task.completed)").font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("Completed \(task.completed)").font(DSFont.micro).foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, 14).padding(.vertical, DSSpace.md)
             Divider()
 
             if task.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -960,7 +962,7 @@ private struct LoreTaskDetailPane: View {
     @ViewBuilder
     private func field<C: View>(_ label: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 10)).foregroundColor(.secondary)
+            Text(label).font(DSFont.micro).foregroundColor(.secondary)
             content()
         }
     }
@@ -977,24 +979,24 @@ private struct LoreIdeaDetailPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DSSpace.lg) {
+                VStack(alignment: .leading, spacing: DSSpace.xs) {
                     Text(idea.title).font(.headline)
-                    HStack(spacing: 8) {
+                    HStack(spacing: DSSpace.sm) {
                         Text(idea.status)
-                            .font(.system(size: 11))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .font(DSFont.micro)
+                            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
                             .background(Color.secondary.opacity(0.12))
                             .clipShape(Capsule())
                         if !idea.category.isEmpty {
-                            Text(idea.category).font(.system(size: 11)).foregroundColor(.secondary)
+                            Text(idea.category).font(DSFont.micro).foregroundColor(.secondary)
                         }
                     }
                 }
                 Divider()
                 if !idea.body.isEmpty {
                     Text(idea.body)
-                        .font(.system(size: 12))
+                        .font(DSFont.label)
                         .foregroundColor(.primary.opacity(0.85))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1005,20 +1007,20 @@ private struct LoreIdeaDetailPane: View {
                         onPromote()
                     } label: {
                         if isGenerating {
-                            HStack(spacing: 6) {
+                            HStack(spacing: DSSpace.xs) {
                                 ProgressView().scaleEffect(0.7)
-                                Text("Generating task…").font(.system(size: 12))
+                                Text("Generating task…").font(DSFont.label)
                             }
                         } else {
                             Label("Promote to task", systemImage: "arrow.up.right.circle.fill")
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isGenerating)
                 }
             }
-            .padding(16)
+            .padding(DSSpace.lg)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }

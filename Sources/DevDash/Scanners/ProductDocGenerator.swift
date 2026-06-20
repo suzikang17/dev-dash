@@ -345,8 +345,11 @@ enum ProductDocGenerator {
             .filter { $0.hasSuffix(".md") && $0.lowercased() != "index.md" }
             .sorted(by: >)   // numeric id prefix → newest first
         let lower = section.label.lowercased()
+        let newButton = "<button class=\"lore-new\" data-action=\"lore-new\" data-lore-type=\"\(escapeHTML(section.loreType))\" type=\"button\">+ new \(escapeHTML(section.label))</button>"
         guard !mdFiles.isEmpty else {
-            return "<p class=\"doc-status\">No \(escapeHTML(lower)) at <code>docs/\(escapeHTML(section.dir))/</code> yet. Run <code>lore add \(escapeHTML(section.loreType))</code>.</p>"
+            return """
+            <p class="doc-status">\(newButton) &nbsp; No \(escapeHTML(lower)) at <code>docs/\(escapeHTML(section.dir))/</code> yet — click + new.</p>
+            """
         }
 
         var cards: [String] = []
@@ -362,7 +365,11 @@ enum ProductDocGenerator {
             <div class="lore-card" data-lore-file="\(escapeHTML(absPath))" data-lore-type="\(escapeHTML(section.loreType))">
               <div class="lore-card-head">
                 <span class="lore-card-meta">\(escapeHTML(meta))</span>
-                <button class="lore-edit-toggle" type="button">✎ edit source</button>
+                <span class="lore-warn" style="display:none"></span>
+                <span class="lore-card-actions">
+                  <button class="lore-edit-toggle" type="button">✎ edit source</button>
+                  <button class="lore-del" data-action="lore-delete" data-lore-file="\(escapeHTML(absPath))" title="Delete" type="button">✕</button>
+                </span>
               </div>
               <div class="lore-body">\(Markdown.bodyHTML(bodyMd))</div>
               <textarea class="lore-src" style="display:none">\(escapeHTML(bodyMd))</textarea>
@@ -370,7 +377,7 @@ enum ProductDocGenerator {
             """)
         }
         return """
-        <p class="doc-status">⚙ Engine: <code>lore</code> · \(mdFiles.count) \(escapeHTML(lower)) read live from <code>docs/\(escapeHTML(section.dir))/*.md</code></p>
+        <p class="doc-status">\(newButton) &nbsp; ⚙ Engine: <code>lore</code> · \(mdFiles.count) \(escapeHTML(lower)) read live from <code>docs/\(escapeHTML(section.dir))/*.md</code></p>
         \(cards.joined(separator: "\n"))
         """
     }
@@ -1318,6 +1325,13 @@ enum ProductDocGenerator {
       .lore-src:focus { box-shadow: inset 0 0 0 1px var(--accent); }
       .lore-src.is-dirty { box-shadow: inset 0 0 0 1px var(--orange); }
       .lore-src.is-saved { box-shadow: inset 0 0 0 1px var(--green); }
+      .lore-card-actions { display: inline-flex; gap: 6px; align-items: center; }
+      .lore-warn { font-size: 11px; color: var(--orange); margin-left: auto; }
+      .lore-new { font-size: 11px; color: var(--accent); background: none; border: 1px solid var(--border);
+                  border-radius: 5px; padding: 2px 8px; cursor: pointer; }
+      .lore-new:hover { border-color: var(--accent); }
+      .lore-del { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 2px 4px; }
+      .lore-del:hover { color: var(--red); }
       nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
                  margin-bottom: 22px; position: sticky; top: 0; background: var(--bg);
                  z-index: 5; padding-top: 4px; }

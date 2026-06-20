@@ -9,12 +9,12 @@ struct InfoTabView: View {
         if let project = store.project(for: store.selection) {
             VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: DSSpace.lg) {
                     Text(project.name)
-                        .font(.largeTitle.bold())
+                        .font(DSFont.display)
 
                     Text(DevRoots.shortenPath(project.path))
-                        .font(.system(size: 12).monospaced())
+                        .font(DSFont.mono(.caption))
                         .foregroundColor(.secondary)
                         .textSelection(.enabled)
 
@@ -51,7 +51,7 @@ struct InfoTabView: View {
 
                     NotesCard(project: project)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: DSSpace.md) {
                         if store.runningPort(for: project.path) == nil {
                             Button {
                                 Task { await store.startServer(for: project.path) }
@@ -67,7 +67,7 @@ struct InfoTabView: View {
                                 Label("Stop dev server", systemImage: "stop.fill")
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(.red)
+                            .tint(DSColor.danger)
                         }
                         Button {
                             NSWorkspace.shared.open(URL(fileURLWithPath: project.path))
@@ -89,10 +89,10 @@ struct InfoTabView: View {
                     if let err = serverStore.startError(project.path) {
                         Text(err)
                             .font(.caption)
-                            .foregroundColor(.red)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(8)
+                            .foregroundColor(DSColor.danger)
+                            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                            .background(DSColor.danger.opacity(0.1))
+                            .cornerRadius(DSRadius.small)
                     }
 
                     ProvidersCard(project: project)
@@ -124,10 +124,7 @@ private struct NotesCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("NOTES")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundColor(.secondary)
+                SectionHeader("Notes")
                 Spacer()
                 if editing {
                     Button("Done") {
@@ -135,7 +132,7 @@ private struct NotesCard: View {
                         editing = false
                     }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DSFont.bodyEmphasized)
                     .foregroundColor(.accentColor)
                 } else {
                     Button(saved.isEmpty ? "Add" : "Edit") {
@@ -143,27 +140,27 @@ private struct NotesCard: View {
                         editing = true
                     }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
                 }
             }
 
             if editing {
                 TextEditor(text: $draft)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .frame(minHeight: 72)
                     .scrollContentBackground(.hidden)
                     .padding(6)
                     .background(Color(NSColor.textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor.opacity(0.4), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                    .overlay(RoundedRectangle(cornerRadius: DSRadius.small).stroke(Color.accentColor.opacity(0.4), lineWidth: 1))
             } else if saved.isEmpty {
                 Text("No notes yet.")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             } else {
                 Text(saved)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -171,9 +168,7 @@ private struct NotesCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface()
     }
 }
 
@@ -187,22 +182,22 @@ private struct ProvidersCard: View {
         let providers = store.providers(for: project.path)
         let total = store.totalMonthlyCost(for: project.path)
 
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
             HStack {
                 Label("PROVIDERS", systemImage: "shippingbox")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .tracking(1.2)
                     .foregroundColor(.secondary)
                 if !providers.isEmpty {
                     Text(verbatim: "\(providers.count)")
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(DSFont.monoDigits(.caption2))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
                 if let total = total {
                     Text(verbatim: "~$\(format(total))/mo")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundColor(.green)
+                        .font(DSFont.monoDigits(.caption2).weight(.semibold))
+                        .foregroundColor(DSColor.success)
                 }
                 Button {
                     store.refreshProviders(for: project.path)
@@ -212,6 +207,7 @@ private struct ProvidersCard: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .help("Re-detect from package.json + .env")
+                .accessibilityLabel("Re-detect from package.json + .env")
 
                 Button {
                     addingNew = true
@@ -221,11 +217,12 @@ private struct ProvidersCard: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .help("Add provider manually")
+                .accessibilityLabel("Add provider manually")
             }
 
             if providers.isEmpty {
                 Text("No providers detected. Click + to add one, or refresh to re-scan package.json and .env.")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -243,9 +240,7 @@ private struct ProvidersCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface()
         .sheet(item: $editing) { p in
             ProviderEditor(projectPath: project.path, existing: p)
                 .environmentObject(store)
@@ -279,16 +274,16 @@ private struct ProviderRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(provider.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(DSFont.bodyEmphasized)
                     Text(provider.category.label)
-                        .font(.system(size: 10))
+                        .font(DSFont.micro)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Color.secondary.opacity(0.12))
                         .foregroundColor(.secondary)
                         .clipShape(Capsule())
                     if !provider.detectedFrom.isManual {
                         Text(provider.detectedFrom.label)
-                            .font(.system(size: 10).monospaced())
+                            .font(DSFont.mono(.caption2))
                             .foregroundColor(.secondary.opacity(0.8))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -296,7 +291,7 @@ private struct ProviderRow: View {
                 }
                 if let notes = provider.notes, !notes.isEmpty {
                     Text(notes)
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -304,8 +299,8 @@ private struct ProviderRow: View {
             Spacer()
             if let cost = provider.monthlyEstimateUSD {
                 Text(verbatim: "$\(formatCost(cost))/mo")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .foregroundColor(.green)
+                    .font(DSFont.monoDigits(.caption2).weight(.semibold))
+                    .foregroundColor(DSColor.success)
             }
             if let url = provider.dashboardURL {
                 Button {
@@ -316,6 +311,7 @@ private struct ProviderRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help(url.absoluteString)
+                .accessibilityLabel("Open dashboard")
             }
             if hover {
                 Button {
@@ -325,9 +321,10 @@ private struct ProviderRow: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Edit provider")
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DSSpace.sm)
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .contextMenu {
@@ -369,7 +366,7 @@ private struct ProviderEditor: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(existing == nil ? "Add provider" : "Edit \(existing?.name ?? "")")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(DSFont.title)
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.bordered)
@@ -470,15 +467,12 @@ private struct ContextCard: View {
         let openTodos = (store.tasksByProject.first { $0.projectPath == path }?.todos ?? [])
             .filter { !$0.done }.count
 
-        VStack(alignment: .leading, spacing: 10) {
-            Text("RECENT ACTIVITY")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
-                .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: DSSpace.md) {
+            SectionHeader("Recent activity")
 
             if projectSessions.isEmpty && openTodos == 0 {
                 Text("No recent activity logged for this project.")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             }
 
@@ -487,24 +481,21 @@ private struct ContextCard: View {
                     Image(systemName: "checklist").foregroundColor(.secondary)
                     Text(verbatim: "\(openTodos) open todo\(openTodos == 1 ? "" : "s")")
                 }
-                .font(.system(size: 12))
+                .font(DSFont.label)
             }
 
             if !projectSessions.isEmpty {
                 Divider()
-                Text("RECENT CLAUDE SESSIONS")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundColor(.secondary)
+                SectionHeader("Recent Claude sessions")
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(projectSessions.prefix(5)) { s in
                         HStack(alignment: .top, spacing: 8) {
                             Text(timeAgo(s.lastActivity))
-                                .font(.system(size: 11).monospacedDigit())
+                                .font(DSFont.monoDigits(.caption2))
                                 .foregroundColor(.secondary)
                                 .frame(width: 70, alignment: .leading)
                             Text(s.firstUserMessage ?? "(no user message)")
-                                .font(.system(size: 12))
+                                .font(DSFont.label)
                                 .lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -512,11 +503,9 @@ private struct ContextCard: View {
                 }
             }
         }
-        .padding(16)
+        .padding(DSSpace.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface()
     }
 }
 
@@ -524,11 +513,9 @@ private struct InfoCard<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View {
         VStack(alignment: .leading, spacing: 0) { content() }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+            .padding(.horizontal, DSSpace.lg)
+            .padding(.vertical, DSSpace.xs)
+            .cardSurface()
     }
 }
 
@@ -540,12 +527,12 @@ private struct InfoRow: View {
     var linkURL: URL? = nil
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSSpace.md) {
             Image(systemName: icon)
                 .foregroundColor(.secondary)
                 .frame(width: 16)
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .font(DSFont.label.weight(.medium))
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
             if let url = linkURL {
@@ -554,21 +541,21 @@ private struct InfoRow: View {
                 } label: {
                     Text(value)
                         .foregroundColor(.accentColor)
-                        .font(monospaced ? .system(size: 13).monospaced() : .system(size: 13))
+                        .font(monospaced ? DSFont.mono(.callout) : DSFont.body)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 .buttonStyle(.plain)
             } else {
                 Text(value)
-                    .font(monospaced ? .system(size: 13).monospaced() : .system(size: 13))
+                    .font(monospaced ? DSFont.mono(.callout) : DSFont.body)
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             Spacer()
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, DSSpace.sm)
     }
 }
 
@@ -594,38 +581,38 @@ private struct DevServerURLRow: View {
     private var isRunning: Bool { store.runningPort(for: project.path) != nil }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSSpace.md) {
             Image(systemName: isRunning ? "play.circle.fill" : "link")
-                .foregroundColor(isRunning ? .green : .secondary)
+                .foregroundColor(isRunning ? DSColor.success : .secondary)
                 .frame(width: 16)
             Text("Dev URL")
-                .font(.system(size: 12, weight: .medium))
+                .font(DSFont.label.weight(.medium))
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
             if editing {
                 TextField("http://localhost:3000", text: $draft)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .textFieldStyle(.plain)
                     .onSubmit { save() }
                 Button("Done") { save() }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DSFont.micro.weight(.medium))
                     .foregroundColor(.accentColor)
             } else if displayURL.isEmpty {
                 Text("Not set")
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
                 Spacer()
                 Button("Set") { startEditing() }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             } else {
                 if let url = openURL {
                     Button { NSWorkspace.shared.open(url) } label: {
                         Text(displayURL)
                             .foregroundColor(.accentColor)
-                            .font(.system(size: 13))
+                            .font(DSFont.body)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -634,7 +621,7 @@ private struct DevServerURLRow: View {
                 Spacer()
                 Button("Edit") { startEditing() }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
         }
@@ -661,28 +648,28 @@ private struct ProductionURLRow: View {
     private var savedURL: String? { store.meta(for: project.path).productionURL }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSSpace.md) {
             Image(systemName: "globe")
                 .foregroundColor(.secondary)
                 .frame(width: 16)
             Text("Production URL")
-                .font(.system(size: 12, weight: .medium))
+                .font(DSFont.label.weight(.medium))
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
             if editing {
                 TextField("https://myapp.com", text: $draft)
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .textFieldStyle(.plain)
                     .onSubmit { save() }
                 Button("Done") { save() }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DSFont.micro.weight(.medium))
                     .foregroundColor(.accentColor)
             } else if let url = savedURL {
                 Button { NSWorkspace.shared.open(URL(string: url) ?? URL(fileURLWithPath: "/")) } label: {
                     Text(url)
                         .foregroundColor(.accentColor)
-                        .font(.system(size: 13))
+                        .font(DSFont.body)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -690,16 +677,16 @@ private struct ProductionURLRow: View {
                 Spacer()
                 Button("Edit") { draft = url; editing = true }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             } else {
                 Text("Not set")
-                    .font(.system(size: 13))
+                    .font(DSFont.body)
                     .foregroundColor(.secondary)
                 Spacer()
                 Button("Set") { draft = ""; editing = true }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
             }
         }
@@ -736,17 +723,17 @@ private struct DevAddressBar: View {
         HStack(spacing: 0) {
             if let port = runningPort {
                 Circle()
-                    .fill(Color.green)
+                    .fill(DSColor.success)
                     .frame(width: 6, height: 6)
-                    .padding(.leading, 12)
-                    .padding(.trailing, 8)
+                    .padding(.leading, DSSpace.md)
+                    .padding(.trailing, DSSpace.sm)
                 Text(verbatim: "http://localhost:\(port)")
-                    .font(.system(size: 12).monospaced())
+                    .font(DSFont.mono(.caption))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .fixedSize()
                 TextField("/path", text: $pathDraft)
-                    .font(.system(size: 12).monospaced())
+                    .font(DSFont.mono(.caption))
                     .textFieldStyle(.plain)
                     .focused($focused)
                     .onSubmit { save(); focused = false }
@@ -754,12 +741,12 @@ private struct DevAddressBar: View {
                     .onChange(of: project.path) { _, _ in pathDraft = savedPath }
             } else {
                 Image(systemName: "link")
-                    .font(.system(size: 11))
+                    .font(DSFont.micro)
                     .foregroundColor(.secondary)
-                    .padding(.leading, 12)
-                    .padding(.trailing, 8)
+                    .padding(.leading, DSSpace.md)
+                    .padding(.trailing, DSSpace.sm)
                 TextField("http://localhost:3000", text: $pathDraft)
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .textFieldStyle(.plain)
                     .focused($focused)
                     .onSubmit { save(); focused = false }
@@ -770,11 +757,12 @@ private struct DevAddressBar: View {
             if focused {
                 Button { save(); focused = false } label: {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(DSColor.success)
                 }
                 .buttonStyle(.plain)
                 .help("Save (Enter)")
-                .padding(.trailing, 4)
+                .accessibilityLabel("Save (Enter)")
+                .padding(.trailing, DSSpace.xs)
             }
             Button { open() } label: {
                 Image(systemName: "arrow.up.forward.circle.fill")
@@ -783,7 +771,8 @@ private struct DevAddressBar: View {
             .buttonStyle(.plain)
             .disabled(effectiveURL.isEmpty)
             .help("Save and open in browser")
-            .padding(.trailing, 10)
+            .accessibilityLabel("Save and open in browser")
+            .padding(.trailing, DSSpace.md)
         }
         .frame(height: 32)
         .background(Color(NSColor.windowBackgroundColor))
@@ -824,10 +813,10 @@ private struct GitCard: View {
     private var isOp: Bool { store.gitOpInProgress.contains(project.path) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
             HStack {
                 Label("GIT", systemImage: "arrow.triangle.branch")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(DSFont.sectionHeader)
                     .tracking(1.2)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -840,6 +829,7 @@ private struct GitCard: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .disabled(isOp)
+                .accessibilityLabel("Refresh git status")
             }
 
             if let s = status {
@@ -859,28 +849,28 @@ private struct GitCard: View {
                         .frame(maxWidth: 200)
                     } else {
                         Text(s.branch ?? "detached HEAD")
-                            .font(.system(size: 13).monospaced())
+                            .font(DSFont.mono(.callout))
                     }
                     Spacer()
                     if s.aheadCount > 0 {
                         Label("\(s.aheadCount)", systemImage: "arrow.up.circle.fill")
-                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                            .foregroundColor(.blue)
+                            .font(DSFont.monoDigits(.caption2).weight(.semibold))
+                            .foregroundColor(DSColor.info)
                     }
                     if s.behindCount > 0 {
                         Label("\(s.behindCount)", systemImage: "arrow.down.circle.fill")
-                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                            .foregroundColor(.orange)
+                            .font(DSFont.monoDigits(.caption2).weight(.semibold))
+                            .foregroundColor(DSColor.warning)
                     }
                 }
 
                 if !s.isClean {
                     HStack(spacing: 8) {
                         if s.stagedCount > 0 {
-                            GitStatusChip(count: s.stagedCount, label: "staged", color: .green)
+                            GitStatusChip(count: s.stagedCount, label: "staged", color: DSColor.success)
                         }
                         if s.unstagedCount > 0 {
-                            GitStatusChip(count: s.unstagedCount, label: "modified", color: .orange)
+                            GitStatusChip(count: s.unstagedCount, label: "modified", color: DSColor.warning)
                         }
                         if s.untrackedCount > 0 {
                             GitStatusChip(count: s.untrackedCount, label: "untracked", color: .secondary)
@@ -888,7 +878,7 @@ private struct GitCard: View {
                         Spacer()
                         if s.stashCount > 0 {
                             Text("\(s.stashCount) stashed")
-                                .font(.system(size: 11))
+                                .font(DSFont.micro)
                                 .foregroundColor(.secondary)
                         }
                         Button {
@@ -902,36 +892,33 @@ private struct GitCard: View {
                             Label(loadingDiff ? "Loading…" : "Diff", systemImage: "doc.text.magnifyingglass")
                         }
                         .buttonStyle(.borderless)
-                        .font(.system(size: 11))
+                        .font(DSFont.micro)
                         .controlSize(.small)
                         .disabled(loadingDiff)
                     }
                 } else {
                     HStack(spacing: 5) {
-                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(DSColor.success)
                         Text("Working tree clean")
                     }
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
                 }
 
                 if s.worktrees.count > 1 {
                     Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("WORKTREES")
-                            .font(.system(size: 10, weight: .semibold))
-                            .tracking(1.0)
-                            .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
+                        SectionHeader("Worktrees")
                         ForEach(s.worktrees) { wt in
                             HStack(spacing: 6) {
                                 Image(systemName: wt.isMain ? "house" : "folder")
                                     .foregroundColor(.secondary)
                                     .frame(width: 14)
                                 Text(wt.displayName)
-                                    .font(.system(size: 12))
+                                    .font(DSFont.label)
                                 if let b = wt.branch {
                                     Text(b)
-                                        .font(.system(size: 11).monospaced())
+                                        .font(DSFont.mono(.caption2))
                                         .foregroundColor(.secondary)
                                 }
                                 Spacer()
@@ -957,18 +944,16 @@ private struct GitCard: View {
                         .disabled(isOp || s.aheadCount == 0)
                 }
             } else if project.isGit {
-                HStack { ProgressView().controlSize(.mini); Text("Loading…").font(.system(size: 12)).foregroundColor(.secondary) }
+                HStack { ProgressView().controlSize(.mini); Text("Loading…").font(DSFont.label).foregroundColor(.secondary) }
             } else {
                 Text("Not a git repository.")
-                    .font(.system(size: 12))
+                    .font(DSFont.label)
                     .foregroundColor(.secondary)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .cardSurface()
         .onAppear {
             if store.gitStatus(for: project.path) == nil {
                 Task { await store.refreshGitStatus(for: project.path) }
@@ -991,9 +976,9 @@ private struct GitStatusChip: View {
     var body: some View {
         HStack(spacing: 3) {
             Text("\(count)")
-                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .font(DSFont.monoDigits(.caption2).weight(.semibold))
             Text(label)
-                .font(.system(size: 11))
+                .font(DSFont.micro)
         }
         .foregroundColor(color)
         .padding(.horizontal, 6)
@@ -1011,7 +996,7 @@ private struct DiffSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Uncommitted Changes")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(DSFont.title)
                 Spacer()
                 Button("Close") { dismiss() }
                     .buttonStyle(.bordered)
@@ -1038,14 +1023,14 @@ private struct DiffLineView: View {
 
     var body: some View {
         Text(verbatim: line.isEmpty ? " " : line)
-            .font(.system(size: 12).monospaced())
+            .font(DSFont.mono(.caption))
             .foregroundColor(foregroundColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(backgroundColor)
     }
 
     private var foregroundColor: Color {
-        if line.hasPrefix("+") && !line.hasPrefix("+++") { return .green }
+        if line.hasPrefix("+") && !line.hasPrefix("+++") { return DSColor.success }
         if line.hasPrefix("-") && !line.hasPrefix("---") { return Color(red: 1, green: 0.35, blue: 0.35) }
         if line.hasPrefix("@@") { return .accentColor }
         if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") {
@@ -1055,8 +1040,8 @@ private struct DiffLineView: View {
     }
 
     private var backgroundColor: Color {
-        if line.hasPrefix("+") && !line.hasPrefix("+++") { return .green.opacity(0.05) }
-        if line.hasPrefix("-") && !line.hasPrefix("---") { return .red.opacity(0.05) }
+        if line.hasPrefix("+") && !line.hasPrefix("+++") { return DSColor.success.opacity(0.05) }
+        if line.hasPrefix("-") && !line.hasPrefix("---") { return DSColor.danger.opacity(0.05) }
         return .clear
     }
 }
