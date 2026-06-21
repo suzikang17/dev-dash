@@ -210,10 +210,13 @@ enum ProductDocGenerator {
 
         // Lore-backed sections — rendered straight from docs/<dir>/*.md.
         // KPIs get a structured grid; everything else gets markdown cards.
+        // Build the lore knowledge graph once (resolves [[wikilinks]] + backlinks
+        // across every lore type) and feed it to each section's renderer.
+        let graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreSection.all.map(\.dir))
         for section in LoreSection.all {
             let html = section.isKPI
                 ? renderKPISection(section, projectPath: projectPath)
-                : renderLoreSection(section, projectPath: projectPath)
+                : renderLoreSection(section, projectPath: projectPath, graph: graph)
             try? html.write(toFile: "\(sectionsFolder)/lore-\(section.dir).html", atomically: true, encoding: .utf8)
         }
         // Remove the spike's stale single-file output if present.
@@ -378,7 +381,7 @@ enum ProductDocGenerator {
     /// card carries `data-lore-file` (absolute path) + `data-lore-type` (singular
     /// CLI type) so the save/reindex paths never re-derive the type from the folder.
     /// Editing uses a `<textarea>` so the markdown round-trips byte-exact.
-    static func renderLoreSection(_ section: LoreSection, projectPath: String) -> String {
+    static func renderLoreSection(_ section: LoreSection, projectPath: String, graph: LoreLinkIndex.Graph) -> String {
         let dir = "\(projectPath)/docs/\(section.dir)"
         let fm = FileManager.default
         let files = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
@@ -418,7 +421,8 @@ enum ProductDocGenerator {
                   <button class="lore-del" data-action="lore-delete" data-lore-file="\(escapeHTML(absPath))" title="Delete" type="button">✕</button>
                 </span>
               </div>
-              <div class="lore-body">\(Markdown.bodyHTML(bodyMd))</div>
+              <div class="lore-body">\(linkifyWikilinks(Markdown.bodyHTML(bodyMd), graph: graph))</div>
+              \(backlinksFooter(for: "\(section.dir)/\(file)", graph: graph))
               <textarea class="lore-src" style="display:none">\n\(escapeHTML(bodyMd))</textarea>
             </div>
             """)
@@ -432,6 +436,48 @@ enum ProductDocGenerator {
     /// Render the KPIs section: each `docs/kpis/*.md` becomes a card with inline
     /// number inputs for current/target. Progress bar + delta are computed in JS
     /// (kpiEditJS) from the inputs + data-direction. Edits save to FRONTMATTER.
+    /// Replace `[[token]]` in already-rendered body HTML with links to the
+    /// resolved lore doc (or a dim span if unresolved). Runs AFTER Markdown
+    /// escaping, so the brackets survive as literal text.
+    private static func linkifyWikilinks(_ html: String, graph: LoreLinkIndex.Graph) -> String {
+        guard html.contains("[[") else { return html }
+        let re = try! NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#)
+        let ns = html as NSString
+        var out = ""
+        var last = 0
+        for m in re.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+            out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            let tokenHTML = ns.substring(with: m.range(at: 1))
+            let key = htmlUnescape(tokenHTML).trimmingCharacters(in: .whitespaces).lowercased()
+            if let target = graph.resolve[key] {
+                out += "<a class=\"lore-link\" data-lore-target=\"\(escapeHTML(target.path))\">\(tokenHTML)</a>"
+            } else {
+                out += "<span class=\"lore-link broken\" title=\"unresolved link\">\(tokenHTML)</span>"
+            }
+            last = m.range.location + m.range.length
+        }
+        out += ns.substring(from: last)
+        return out
+    }
+
+    /// "↩ N linked references" footer listing docs that wikilink to this one.
+    private static func backlinksFooter(for relPath: String, graph: LoreLinkIndex.Graph) -> String {
+        guard let bls = graph.backlinks[relPath], !bls.isEmpty else { return "" }
+        let chips = bls.map {
+            "<a class=\"lore-link\" data-lore-target=\"\(escapeHTML($0.fromPath))\">\(escapeHTML($0.fromTitle))</a>"
+        }.joined(separator: " ")
+        let n = bls.count
+        return "<div class=\"lore-backlinks\"><span class=\"lore-backlinks-label\">↩ \(n) linked reference\(n == 1 ? "" : "s")</span> \(chips)</div>"
+    }
+
+    private static func htmlUnescape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&lt;", with: "<")
+         .replacingOccurrences(of: "&gt;", with: ">")
+         .replacingOccurrences(of: "&quot;", with: "\"")
+         .replacingOccurrences(of: "&#39;", with: "'")
+         .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
     static func renderKPISection(_ section: LoreSection, projectPath: String) -> String {
         let dir = "\(projectPath)/docs/\(section.dir)"
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
@@ -1413,6 +1459,16 @@ enum ProductDocGenerator {
                           border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px;
                           cursor: pointer; }
       .lore-edit-toggle:hover { color: var(--fg); border-color: var(--accent); }
+      /* Knowledge-graph links + backlinks */
+      a.lore-link { color: var(--accent); text-decoration: none; cursor: pointer;
+                    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+      a.lore-link:hover { border-bottom-color: var(--accent); }
+      .lore-link.broken { color: var(--muted); border-bottom: 1px dotted var(--muted); cursor: help; }
+      .lore-backlinks { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border);
+                        font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+      .lore-backlinks-label { color: var(--muted); font-size: 11px; }
+      .lore-card-flash { animation: loreFlash 1.2s ease; }
+      @keyframes loreFlash { 0%, 30% { box-shadow: inset 0 0 0 2px var(--accent); } 100% { box-shadow: none; } }
       .lore-src { display: block; box-sizing: border-box; width: 100%; min-height: 120px;
                   white-space: pre-wrap; font: 12px/1.55 var(--font-mono); color: var(--fg);
                   background: var(--code); border: none; border-radius: 8px; padding: 12px;
@@ -1694,6 +1750,30 @@ enum ProductDocGenerator {
             if (idx !== null) { e.preventDefault(); activate(btns[idx], true); }
           });
         });
+
+        // Knowledge-graph nav: clicking a [[wikilink]] or a backlink chip jumps
+        // to the target doc — switches to its tab and scrolls its card into view.
+        document.addEventListener('click', function(e) {
+          var link = e.target.closest('.lore-link[data-lore-target]');
+          if (!link) return;
+          e.preventDefault();
+          var target = link.dataset.loreTarget;           // "dir/file.md"
+          var cards = document.querySelectorAll('[data-lore-file]');
+          var card = null;
+          for (var i = 0; i < cards.length; i++) {
+            var f = cards[i].getAttribute('data-lore-file') || '';
+            if (f.endsWith('/' + target) || f === target) { card = cards[i]; break; }
+          }
+          if (!card) return;
+          var pane = card.closest('.tab-pane');
+          if (pane) {
+            var btn = document.querySelector('nav.tabs .tab[data-tab="' + pane.id.replace(/^tab-/, '') + '"]');
+            if (btn) activate(btn, false);
+          }
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('lore-card-flash');
+          setTimeout(function() { card.classList.remove('lore-card-flash'); }, 1200);
+        }, true);
       })();
     </script>
     """
