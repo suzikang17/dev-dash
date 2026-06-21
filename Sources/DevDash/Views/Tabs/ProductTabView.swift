@@ -159,7 +159,7 @@ struct ProductTabView: View {
                         },
                         onSearchLore: { query in
                             let q = query.lowercased()
-                            return LoreLinkIndex.allDocs(projectPath: project.path, dirs: LoreSection.all.map(\.dir))
+                            return LoreLinkIndex.allDocs(projectPath: project.path, dirs: LoreLinkIndex.allDirs)
                                 .filter { q.isEmpty || $0.title.lowercased().contains(q) }
                                 .prefix(8)
                                 .map { ["title": $0.title, "type": $0.dir, "path": $0.path] }
@@ -229,7 +229,7 @@ struct ProductTabView: View {
         // its [[wikilinks]] live (the live DOM swap would otherwise show plain
         // brackets until the next full regen). Title→target resolution doesn't
         // depend on this doc's body, so building before the write is fine.
-        let graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreSection.all.map(\.dir))
+        let graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreLinkIndex.allDirs)
         func rendered(_ md: String) -> String {
             ProductDocGenerator.linkifyWikilinks(Markdown.bodyHTML(md), graph: graph)
         }

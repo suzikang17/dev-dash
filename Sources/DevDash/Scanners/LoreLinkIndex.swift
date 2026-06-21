@@ -18,12 +18,19 @@ enum LoreLinkIndex {
     private static let wikiRE = try! NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#)
     private static let inlineCodeRE = try! NSRegularExpression(pattern: #"`[^`]*`"#)
 
+    /// Every lore doc dir that participates in the graph: the living-doc sections
+    /// PLUS `tasks` (which render in LoreTasksView, not a LoreSection). Use this
+    /// everywhere the graph is built so links/backlinks span every surface.
+    static var allDirs: [String] { LoreSection.all.map(\.dir) + ["tasks"] }
+
     /// Build the graph for a project over the given lore section dirs.
     static func build(projectPath: String, dirs: [String]) -> Graph {
         let fm = FileManager.default
-        // Pass 1: gather every doc → (path, title, body) and the token index.
-        var docs: [(path: String, title: String, type: String, body: String)] = []
+        // Pass 1: gather every doc → (path, title, body, parent) + the token index
+        // + a per-dir id index (for resolving reference fields like task `parent`).
+        var docs: [(path: String, title: String, type: String, body: String, parent: String?)] = []
         var resolve: [String: Target] = [:]
+        var idIndex: [String: [String: String]] = [:]   // dir → numeric id → path
         for dir in dirs {
             let dirPath = "\(projectPath)/docs/\(dir)"
             // Sort so "first wins" on a title/filename collision is deterministic
@@ -39,21 +46,31 @@ enum LoreLinkIndex {
                 if !titleKey.isEmpty, resolve[titleKey] == nil { resolve[titleKey] = target }
                 let fileKey = file.replacingOccurrences(of: ".md", with: "").lowercased()
                 if resolve[fileKey] == nil { resolve[fileKey] = target }
-                docs.append((path, title, dir, bodyOf(raw)))
+                let id = String(file.prefix(while: { $0.isNumber }))
+                if !id.isEmpty { idIndex[dir, default: [:]][id] = path }
+                docs.append((path, title, dir, bodyOf(raw), front["parent"]))
             }
         }
         // Pass 2: scan bodies for [[token]] → backlinks. De-dup (target, source)
         // in O(1) so multiple links from one doc count once.
         var backlinks: [String: [Backlink]] = [:]
         var seen = Set<String>()
+        func add(target: String, from doc: (path: String, title: String, type: String, body: String, parent: String?)) {
+            guard target != doc.path, seen.insert("\(target)|\(doc.path)").inserted else { return }
+            backlinks[target, default: []].append(
+                Backlink(fromPath: doc.path, fromTitle: doc.title, fromType: doc.type))
+        }
         for doc in docs {
             for token in wikilinks(in: doc.body) {
-                guard let t = resolve[token.lowercased()], t.path != doc.path else { continue }
-                if seen.insert("\(t.path)|\(doc.path)").inserted {
-                    backlinks[t.path, default: []].append(
-                        Backlink(fromPath: doc.path, fromTitle: doc.title, fromType: doc.type))
-                }
+                if let t = resolve[token.lowercased()] { add(target: t.path, from: doc) }
             }
+        }
+        // Pass 3: reference-frontmatter backlinks (e.g. task `parent: 0003` → the
+        // parent task), resolving the bare id within the doc's own type.
+        for doc in docs {
+            guard let parent = doc.parent else { continue }
+            let pid = String(parent.trimmingCharacters(in: .whitespaces).prefix(while: { $0.isNumber }))
+            if !pid.isEmpty, let parentPath = idIndex[doc.type]?[pid] { add(target: parentPath, from: doc) }
         }
         return Graph(resolve: resolve, backlinks: backlinks)
     }

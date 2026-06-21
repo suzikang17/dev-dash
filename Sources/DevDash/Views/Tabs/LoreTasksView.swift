@@ -86,6 +86,7 @@ struct LoreTasksView: View {
     @State private var selectedIdea: LoreIdeaItem? = nil
     @State private var generatingIdeaFile: String? = nil
     @State private var loreInitialized = true
+    @State private var graph: LoreLinkIndex.Graph? = nil
 
     private var filtered: [LoreTaskItem] {
         guard !search.isEmpty else { return tasks }
@@ -201,8 +202,10 @@ struct LoreTasksView: View {
                 } else if let task = selected {
                     LoreTaskDetailPane(
                         task: task,
+                        backlinks: backlinks(for: task),
                         onStatusChange: { setStatus(task, to: $0) },
-                        onFieldChange: { setField(task, key: $0, value: $1) }
+                        onFieldChange: { setField(task, key: $0, value: $1) },
+                        onBodyChange: { setBody(task, body: $0) }
                     )
                 } else {
                     VStack(spacing: DSSpace.sm) {
@@ -667,6 +670,12 @@ struct LoreTasksView: View {
             }
         tasks = loaded
         if let sel = selected { selected = tasks.first { $0.file == sel.file } }
+        graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreLinkIndex.allDirs)
+    }
+
+    /// Backlinks pointing at a task ([[wikilinks]] + `parent:` references).
+    private func backlinks(for task: LoreTaskItem) -> [LoreLinkIndex.Backlink] {
+        graph?.backlinks["tasks/\(task.file)"] ?? []
     }
 
     private func setStatus(_ task: LoreTaskItem, to newStatus: String) {
@@ -703,6 +712,23 @@ struct LoreTasksView: View {
             }
         }
         try? lines.joined(separator: "\n").write(toFile: task.path, atomically: true, encoding: .utf8)
+        reload()
+    }
+
+    /// Replace the markdown body (everything after the frontmatter), preserving
+    /// the `--- … ---` frontmatter block, then reload.
+    private func setBody(_ task: LoreTaskItem, body: String) {
+        guard let raw = try? String(contentsOfFile: task.path, encoding: .utf8) else { return }
+        let lines = raw.components(separatedBy: "\n")
+        var fences = 0, closeIdx = -1
+        for (i, line) in lines.enumerated() where line.trimmingCharacters(in: .whitespaces) == "---" {
+            fences += 1
+            if fences == 2 { closeIdx = i; break }
+        }
+        let header = closeIdx >= 0 ? lines[0...closeIdx].joined(separator: "\n") : ""
+        let newBody = body.hasSuffix("\n") ? body : body + "\n"
+        let content = header.isEmpty ? newBody : header + "\n" + newBody
+        try? content.write(toFile: task.path, atomically: true, encoding: .utf8)
         reload()
     }
 }
@@ -881,8 +907,13 @@ private struct LoreTaskRow: View {
 
 private struct LoreTaskDetailPane: View {
     let task: LoreTaskItem
+    var backlinks: [LoreLinkIndex.Backlink] = []
     let onStatusChange: (String) -> Void
     let onFieldChange: (String, String) -> Void
+    var onBodyChange: (String) -> Void = { _ in }
+
+    @State private var editingBody = false
+    @State private var draft = ""
 
     private let statuses   = ["open", "in_progress", "blocked", "done", "skipped"]
     private let owners     = ["none", "human", "ai"]
@@ -946,17 +977,48 @@ private struct LoreTaskDetailPane: View {
                 if !task.completed.isEmpty {
                     Text("Completed \(task.completed)").font(DSFont.micro).foregroundColor(.secondary)
                 }
+                if !backlinks.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("↩ \(backlinks.count) LINKED REFERENCE\(backlinks.count == 1 ? "" : "S")")
+                            .font(DSFont.micro).foregroundColor(.secondary).tracking(0.5)
+                        ForEach(backlinks, id: \.fromPath) { bl in
+                            HStack(spacing: 5) {
+                                Text(bl.fromTitle).font(DSFont.label)
+                                Text(bl.fromType).font(DSFont.micro).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
             .padding(.horizontal, 14).padding(.vertical, DSSpace.md)
+
+            HStack {
+                Text("CONTENT").font(DSFont.micro).foregroundColor(.secondary).tracking(1)
+                Spacer()
+                Button(editingBody ? "Done" : "Edit") {
+                    if editingBody { onBodyChange(draft) } else { draft = task.body }
+                    editingBody.toggle()
+                }
+                .buttonStyle(.borderless).controlSize(.small)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 6)
             Divider()
 
-            if task.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("No body").font(.caption).foregroundColor(.secondary)
+            if editingBody {
+                TextEditor(text: $draft)
+                    .font(DSFont.mono(.body))
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if task.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("No content yet — click Edit.").font(.caption).foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 MarkdownWebView(markdown: task.body)
             }
         }
+        // Reset edit state when a different task is selected.
+        .onChange(of: task.id) { _, _ in editingBody = false; draft = "" }
     }
 
     @ViewBuilder

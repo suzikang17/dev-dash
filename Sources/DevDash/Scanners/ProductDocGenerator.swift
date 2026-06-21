@@ -212,10 +212,10 @@ enum ProductDocGenerator {
         // KPIs get a structured grid; everything else gets markdown cards.
         // Build the lore knowledge graph once (resolves [[wikilinks]] + backlinks
         // across every lore type) and feed it to each section's renderer.
-        let graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreSection.all.map(\.dir))
+        let graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreLinkIndex.allDirs)
         for section in LoreSection.all {
             let html = section.isKPI
-                ? renderKPISection(section, projectPath: projectPath)
+                ? renderKPISection(section, projectPath: projectPath, graph: graph)
                 : renderLoreSection(section, projectPath: projectPath, graph: graph)
             try? html.write(toFile: "\(sectionsFolder)/lore-\(section.dir).html", atomically: true, encoding: .utf8)
         }
@@ -487,7 +487,7 @@ enum ProductDocGenerator {
          .replacingOccurrences(of: "&amp;", with: "&")
     }
 
-    static func renderKPISection(_ section: LoreSection, projectPath: String) -> String {
+    static func renderKPISection(_ section: LoreSection, projectPath: String, graph: LoreLinkIndex.Graph) -> String {
         let dir = "\(projectPath)/docs/\(section.dir)"
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
         let mdFiles = files.filter { $0.hasSuffix(".md") && $0.lowercased() != "index.md" }.sorted()
@@ -519,6 +519,7 @@ enum ProductDocGenerator {
               </div>
               <div class="kpi-progress"><div class="kpi-bar"></div></div>
               <div class="kpi-delta"></div>
+              \(backlinksFooter(for: "\(section.dir)/\(file)", graph: graph))
             </div>
             """)
         }
