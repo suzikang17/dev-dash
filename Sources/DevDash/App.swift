@@ -8,6 +8,7 @@ struct DevDashApp: App {
 
     init() {
         TerminalSelfTest.runIfRequested()   // exits early when launched with --selftest-terminal
+        DocRegenCLI.runIfRequested()        // exits early when launched with --regen <projectPath>
     }
 
     var body: some Scene {
