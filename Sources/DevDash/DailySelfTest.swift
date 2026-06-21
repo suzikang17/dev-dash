@@ -16,6 +16,7 @@ enum DailySelfTest {
         outlineOps(check)
         pageStoreIO(check)
         supertagRegistry(check)
+        loreWriter(check)
 
         let msg = failures.isEmpty
             ? "daily-selftest: ALL PASS\n"
@@ -103,6 +104,36 @@ enum DailySelfTest {
         check(SupertagRegistry.find("decision")?.bodyIsFree == false, "registry: decision is sections schema")
         check(SupertagRegistry.find("task")?.frontmatterFields.contains("status=open") == true,
               "registry: task seeds status=open")
+    }
+
+    private static func loreWriter(_ check: (Bool, String) -> Void) {
+        let nodes = DayOutline.parse("- ship login\n  - add form\n  - wire api\n- other\n")
+        let target = nodes[0].id
+
+        guard let ex = LoreDocWriter.extract(nodeId: target, type: SupertagRegistry.find("task")!, from: nodes) else {
+            check(false, "extract: returned nil"); return
+        }
+        check(ex.docTitle == "ship login", "extract: title from bullet text")
+        check(ex.docBody.contains("- add form") && ex.docBody.contains("- wire api"), "extract: children become body")
+        check(ex.backlink == "[[ship login]]", "extract: backlink token")
+        check(ex.mutatedNodes[0].text == "[[ship login]]", "extract: bullet replaced with backlink")
+        check(ex.mutatedNodes[0].children.isEmpty, "extract: children moved out of outline")
+        check(ex.mutatedNodes.count == 2, "extract: sibling 'other' untouched")
+
+        let task = LoreDocWriter.docContent(type: SupertagRegistry.find("task")!,
+                                            title: "ship login", bodyMarkdown: "- add form", today: "2026-06-21")
+        check(task.contains("status: open"), "docContent: task seeds status")
+        check(task.contains("title: \"ship login\""), "docContent: title in frontmatter")
+
+        let dec = LoreDocWriter.docContent(type: SupertagRegistry.find("decision")!,
+                                           title: "use sqlite", bodyMarkdown: "because simple", today: "2026-06-21")
+        check(dec.contains("date:"), "docContent: sections schema gets date")
+        check(dec.contains("## Why this choice"), "docContent: decision scaffolds required H2s")
+
+        // empty bullet cannot be extracted
+        let empty = DayOutline.parse("- \n")
+        check(LoreDocWriter.extract(nodeId: empty[0].id, type: SupertagRegistry.find("task")!, from: empty) == nil,
+              "extract: empty bullet -> nil")
     }
 
     private static func roundTrip(_ check: (Bool, String) -> Void) {
