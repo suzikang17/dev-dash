@@ -1207,12 +1207,15 @@ Add these `@State`s near the existing ones (top of `struct DailyTabView`):
     @State private var watcher: NotesFileWatcher? = nil
 ```
 
-- [ ] **Step 2: Replace the `.daily` timeline body with editable day pages**
+- [ ] **Step 2: Replace the daily-mode timeline body with editable day pages**
 
-In `timeline(project:)`, replace the `else if mode == .daily { ScrollView { ... ForEach(days) ... } }` branch with:
+In `timeline(project:)` the content area currently branches:
+`if !loaded { ProgressView() } else if mode == .browse { browseContent() } else if days.isEmpty { emptyTimelineState } else { ScrollView { … ForEach(days) … dayContent(day) … } }`.
+
+Change ONLY the trailing `else { … }` (the daily-mode branch): replace its `dayContent(day)` call with `dayPage(day, project: project)`. The branch becomes:
 
 ```swift
-            } else if mode == .daily {
+            } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: DSSpace.xl, pinnedViews: .sectionHeaders) {
                         ForEach(days) { day in
@@ -1225,8 +1228,10 @@ In `timeline(project:)`, replace the `else if mode == .daily { ScrollView { ... 
                     }
                     .padding()
                 }
-            } else {
+            }
 ```
+
+Leave the `!loaded`, `mode == .browse`, and `days.isEmpty` branches untouched.
 
 Add the `dayPage` builder (alongside `dayContent`):
 
@@ -1283,7 +1288,26 @@ Add the `dayPage` builder (alongside `dayContent`):
     }
 ```
 
-- [ ] **Step 3: Start the file watcher; refresh non-focused days on external change**
+- [ ] **Step 3: Guarantee today is always in the day list**
+
+The daily page must let you "land on today and start typing" even when today has no dated docs or sessions yet. `reload()` builds `days` only from dates that have docs/sessions, so inject today. In `reload()`, find:
+
+```swift
+            let allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
+            let todayStr = Self.dayFormatter.string(from: Date())
+```
+
+and change the first line to `var` and insert today:
+
+```swift
+            var allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
+            let todayStr = Self.dayFormatter.string(from: Date())
+            allDates.insert(todayStr)   // today always shows, even with no docs/sessions yet
+```
+
+(With today always present, `days` is never empty in daily mode, so `emptyTimelineState` becomes a browse/edge fallback — leave it in place.)
+
+- [ ] **Step 4: Start the file watcher; refresh non-focused days on external change**
 
 In `content(project:)`, add to the `.onAppear { reload(project: project) }` modifier a watcher start, and stop on disappear. Replace that `.onAppear` line with:
 
@@ -1315,12 +1339,12 @@ Add the watcher methods:
     }
 ```
 
-- [ ] **Step 4: Verify it builds**
+- [ ] **Step 5: Verify it builds**
 
 Run: `swift build 2>&1 | tail -3`
 Expected: build succeeds.
 
-- [ ] **Step 5: Manual verification**
+- [ ] **Step 6: Manual verification**
 
 Run: `bash run.sh`
 Check, with a project selected, on the **Today** tab:
@@ -1332,7 +1356,7 @@ Check, with a project selected, on the **Today** tab:
 Run: `swift run DevDash --daily-selftest 2>&1 | tail -3`
 Expected: `daily-selftest: ALL PASS` (no regressions).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add Sources/DevDash/Views/Tabs/DailyTabView.swift
