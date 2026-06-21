@@ -16,6 +16,7 @@ enum LoreLinkIndex {
     }
 
     private static let wikiRE = try! NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#)
+    private static let inlineCodeRE = try! NSRegularExpression(pattern: #"`[^`]*`"#)
 
     /// Build the graph for a project over the given lore section dirs.
     static func build(projectPath: String, dirs: [String]) -> Graph {
@@ -25,7 +26,9 @@ enum LoreLinkIndex {
         var resolve: [String: Target] = [:]
         for dir in dirs {
             let dirPath = "\(projectPath)/docs/\(dir)"
-            for file in (try? fm.contentsOfDirectory(atPath: dirPath)) ?? [] {
+            // Sort so "first wins" on a title/filename collision is deterministic
+            // (matches lore-core, which indexes a sorted doc list).
+            for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
                 guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
                 guard let raw = try? String(contentsOfFile: "\(dirPath)/\(file)", encoding: .utf8) else { continue }
                 let front = LoreReader.parseFrontmatter(raw)
@@ -39,28 +42,35 @@ enum LoreLinkIndex {
                 docs.append((path, title, dir, bodyOf(raw)))
             }
         }
-        // Pass 2: scan bodies for [[token]] → backlinks.
+        // Pass 2: scan bodies for [[token]] → backlinks. De-dup (target, source)
+        // in O(1) so multiple links from one doc count once.
         var backlinks: [String: [Backlink]] = [:]
+        var seen = Set<String>()
         for doc in docs {
             for token in wikilinks(in: doc.body) {
-                guard let t = resolve[token.lowercased()] else { continue }
-                guard t.path != doc.path else { continue }   // ignore self-links
-                let bl = Backlink(fromPath: doc.path, fromTitle: doc.title, fromType: doc.type)
-                if !(backlinks[t.path]?.contains(bl) ?? false) { backlinks[t.path, default: []].append(bl) }
+                guard let t = resolve[token.lowercased()], t.path != doc.path else { continue }
+                if seen.insert("\(t.path)|\(doc.path)").inserted {
+                    backlinks[t.path, default: []].append(
+                        Backlink(fromPath: doc.path, fromTitle: doc.title, fromType: doc.type))
+                }
             }
         }
         return Graph(resolve: resolve, backlinks: backlinks)
     }
 
-    /// `[[token]]` occurrences in a body, skipping fenced code blocks.
+    /// `[[token]]` occurrences in a body, skipping fenced AND inline code so the
+    /// graph matches what the renderer linkifies (literal `[[x]]` in code stays literal).
     static func wikilinks(in body: String) -> [String] {
         var tokens: [String] = []
         var inFence = false
         for line in body.components(separatedBy: "\n") {
             if line.hasPrefix("```") { inFence.toggle(); continue }
             if inFence { continue }
-            let ns = line as NSString
-            for m in wikiRE.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
+            // Blank out inline `code` spans before matching.
+            let stripped = inlineCodeRE.stringByReplacingMatches(
+                in: line, range: NSRange(location: 0, length: (line as NSString).length), withTemplate: " ")
+            let ns = stripped as NSString
+            for m in wikiRE.matches(in: stripped, range: NSRange(location: 0, length: ns.length)) {
                 tokens.append(ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces))
             }
         }

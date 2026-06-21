@@ -218,12 +218,20 @@ struct ProductTabView: View {
     /// the write path of "lore as the living doc's engine".
     @discardableResult
     private func saveLoreDoc(projectPath: String, absPath rawPath: String, markdownBody: String) -> (html: String, warning: String?) {
+        // Render the returned card body through the graph so an inline edit keeps
+        // its [[wikilinks]] live (the live DOM swap would otherwise show plain
+        // brackets until the next full regen). Title→target resolution doesn't
+        // depend on this doc's body, so building before the write is fine.
+        let graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreSection.all.map(\.dir))
+        func rendered(_ md: String) -> String {
+            ProductDocGenerator.linkifyWikilinks(Markdown.bodyHTML(md), graph: graph)
+        }
         // Containment: the page hands back the target path — never write outside docs/.
         guard let absPath = containedPath(rawPath, within: "\(projectPath)/docs") else {
-            return (Markdown.bodyHTML(markdownBody), "not saved: path is outside docs/")
+            return (rendered(markdownBody), "not saved: path is outside docs/")
         }
         guard let existing = try? String(contentsOfFile: absPath, encoding: .utf8) else {
-            return (Markdown.bodyHTML(markdownBody), nil)
+            return (rendered(markdownBody), nil)
         }
         // Normalize away a BOM + CRLF before fence detection — otherwise the first
         // line reads "\u{FEFF}---" or "---\r", the exact-match fence check misses,
@@ -242,7 +250,7 @@ struct ProductTabView: View {
             }) else {
                 // Frontmatter opens but never closes — refuse to write (would corrupt)
                 // AND surface it, so the green "saved" flash doesn't imply a phantom save.
-                return (Markdown.bodyHTML(markdownBody), "not saved: frontmatter fences (---) are malformed")
+                return (rendered(markdownBody), "not saved: frontmatter fences (---) are malformed")
             }
             frontmatter = lines[0...close].joined(separator: "\n")
         }
@@ -272,7 +280,7 @@ struct ProductTabView: View {
             if !missing.isEmpty { warning = "missing section: " + missing.joined(separator: ", ") }
         }
         // Hand back the freshly-rendered body HTML (live re-render) + any warning.
-        return (Markdown.bodyHTML(markdownBody), warning)
+        return (rendered(markdownBody), warning)
     }
 
     /// Resolve the lore binary — PATH inside the app host process isn't reliable.

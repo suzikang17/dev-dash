@@ -436,16 +436,25 @@ enum ProductDocGenerator {
     /// Render the KPIs section: each `docs/kpis/*.md` becomes a card with inline
     /// number inputs for current/target. Progress bar + delta are computed in JS
     /// (kpiEditJS) from the inputs + data-direction. Edits save to FRONTMATTER.
+    // Single-line token (no newline span); cached so it isn't recompiled per card.
+    private static let linkRE = try! NSRegularExpression(pattern: #"\[\[([^\]\n]+)\]\]"#)
+    // Rendered code regions — never linkify inside them (literal [[x]] in code stays literal).
+    private static let codeRE = try! NSRegularExpression(pattern: #"<pre[\s\S]*?</pre>|<code[\s\S]*?</code>"#)
+
     /// Replace `[[token]]` in already-rendered body HTML with links to the
     /// resolved lore doc (or a dim span if unresolved). Runs AFTER Markdown
-    /// escaping, so the brackets survive as literal text.
-    private static func linkifyWikilinks(_ html: String, graph: LoreLinkIndex.Graph) -> String {
+    /// escaping, so the brackets survive as literal text. Skips matches inside
+    /// `<code>`/`<pre>` so it stays consistent with LoreLinkIndex.wikilinks.
+    static func linkifyWikilinks(_ html: String, graph: LoreLinkIndex.Graph) -> String {
         guard html.contains("[[") else { return html }
-        let re = try! NSRegularExpression(pattern: #"\[\[([^\]]+)\]\]"#)
         let ns = html as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        let codeRanges = codeRE.matches(in: html, range: full).map { $0.range }
+        func inCode(_ r: NSRange) -> Bool { codeRanges.contains { NSIntersectionRange($0, r).length > 0 } }
         var out = ""
         var last = 0
-        for m in re.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+        for m in linkRE.matches(in: html, range: full) {
+            if inCode(m.range) { continue }   // leave it literal; included in the next slice
             out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
             let tokenHTML = ns.substring(with: m.range(at: 1))
             let key = htmlUnescape(tokenHTML).trimmingCharacters(in: .whitespaces).lowercased()
