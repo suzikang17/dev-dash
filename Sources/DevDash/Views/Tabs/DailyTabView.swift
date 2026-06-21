@@ -86,7 +86,12 @@ struct DailyTabView: View {
                 startWatcher(project: project)
             }
             .onDisappear { watcher?.stop(); watcher = nil }
-            .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; browseType = nil; loaded = false; reload(project: project) }
+            .onChange(of: project.path) { _, _ in
+                selectedEntry = nil; selectedSession = nil; browseType = nil; loaded = false
+                outlineByDate = [:]; focusedDate = nil   // drop the previous project's pages
+                reload(project: project)
+                startWatcher(project: project)            // re-point the watcher at the new project
+            }
             .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
             .onChange(of: mode) { _, newMode in if newMode == .daily { browseType = nil } }
             .sheet(isPresented: $showNewTask) {
@@ -325,6 +330,10 @@ struct DailyTabView: View {
         let nodes = outlineByDate[date] ?? []
         let item = DispatchWorkItem {
             try? DailyPageStore.write(projectPath: project.path, date: date, nodes: nodes)
+            // Edit flushed to disk — release the "actively editing" lock so the watcher
+            // can reconcile external (Claude Code) writes to this day again. A new
+            // keystroke before this fires cancels this item, so we never clear mid-edit.
+            if focusedDate == date { focusedDate = nil }
         }
         saveWork[date] = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
