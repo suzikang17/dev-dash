@@ -41,6 +41,10 @@ enum LoreRunner {
     }
 
     /// Whether lore has been initialized for a project (the `docs/.lore` marker dir exists).
+    ///
+    /// The marker dir alone is the right signal: by default schemas live in the
+    /// lore package, so `docs/.lore/types/` is legitimately empty unless the
+    /// project has ejected a local override. Don't require files under `types/`.
     static func isInitialized(projectPath: String) -> Bool {
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(

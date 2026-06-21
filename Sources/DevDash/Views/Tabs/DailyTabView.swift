@@ -12,6 +12,9 @@ struct DailyTabView: View {
     @State private var showNewTask = false
     @State private var summarizingDate: String? = nil
     @State private var loreInitialized = true
+    /// False until the first `reload()` finishes, so the timeline can tell
+    /// "still loading" apart from "loaded, but nothing to show."
+    @State private var loaded = false
 
     private enum ViewMode { case daily, browse }
 
@@ -75,7 +78,7 @@ struct DailyTabView: View {
                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear { reload(project: project) }
-            .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; browseType = nil; reload(project: project) }
+            .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; browseType = nil; loaded = false; reload(project: project) }
             .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
             .onChange(of: mode) { _, newMode in if newMode == .daily { browseType = nil } }
             .sheet(isPresented: $showNewTask) {
@@ -107,10 +110,14 @@ struct DailyTabView: View {
             .padding(.horizontal, DSSpace.md)
             .padding(.vertical, DSSpace.sm)
             Divider()
-            if days.isEmpty {
+            if !loaded {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if mode == .daily {
+            } else if mode == .browse {
+                browseContent()
+            } else if days.isEmpty {
+                emptyTimelineState
+            } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: DSSpace.xl, pinnedViews: .sectionHeaders) {
                         ForEach(days) { day in
@@ -123,10 +130,28 @@ struct DailyTabView: View {
                     }
                     .padding()
                 }
-            } else {
-                browseContent()
             }
         }
+    }
+
+    /// Shown in Daily mode when lore is initialized but nothing maps to a date
+    /// yet (no dated devlogs/tasks and no sessions). Without this the timeline
+    /// would spin forever on an empty `days`, mimicking a hang.
+    private var emptyTimelineState: some View {
+        VStack(spacing: DSSpace.sm) {
+            Image(systemName: "calendar.badge.clock")
+                .font(DSFont.display)
+                .foregroundStyle(.tertiary)
+            Text("Nothing dated yet")
+                .font(DSFont.body)
+            Text("Devlogs, tasks, and sessions show up here by day. Add a task with +, or switch to Browse to see all docs.")
+                .font(DSFont.label)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 
     @ViewBuilder
@@ -297,7 +322,7 @@ struct DailyTabView: View {
                     }
                 )
             }
-            await MainActor.run { self.days = groups; self.allDocs = allDocsList }
+            await MainActor.run { self.days = groups; self.allDocs = allDocsList; self.loaded = true }
         }
     }
 
