@@ -538,7 +538,7 @@ enum Selection: Hashable {
 }
 
 enum DetailTab: String, CaseIterable, Identifiable {
-    case info, preview, claude, tasks, product, files, logs, docs, daily
+    case info, preview, claude, tasks, product, files, logs, daily
     var id: String { rawValue }
 
     var label: String {
@@ -550,7 +550,6 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .product: return "Product"
         case .files: return "Files"
         case .logs: return "Logs"
-        case .docs: return "Docs"
         case .daily: return "Today"
         }
     }
@@ -564,7 +563,6 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .product: return "doc.richtext"
         case .files: return "folder"
         case .logs: return "terminal"
-        case .docs: return "books.vertical"
         case .daily: return "calendar.day.timeline.left"
         }
     }

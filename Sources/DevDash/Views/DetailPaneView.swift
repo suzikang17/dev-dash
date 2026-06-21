@@ -47,7 +47,6 @@ struct DetailPaneView: View {
                 case .info: InfoTabView()
                 case .product: ProductTabView()
                 case .files: FilesTabView()
-                case .docs: DocsTabView()
                 case .daily: DailyTabView()
                 }
             }
