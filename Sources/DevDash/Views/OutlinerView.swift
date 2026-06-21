@@ -4,7 +4,8 @@ import SwiftUI
 /// all tree mutations go through DayOutline so they stay testable.
 struct OutlinerView: View {
     @Binding var nodes: [DayNode]
-    var onSupertag: (UUID) -> Void
+    let projectPath: String
+    @State private var pickerNodeId: UUID?
 
     @State private var focusedId: UUID?
     @State private var caretToEnd = false
@@ -29,11 +30,16 @@ struct OutlinerView: View {
                         onKey: { handle($0, on: row.node.id) },
                         onFocus: { focusedId = row.node.id; caretToEnd = false }
                     )
-                    Button { onSupertag(row.node.id) } label: {
+                    Button { pickerNodeId = row.node.id } label: {
                         Image(systemName: "number").font(.caption2).foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
                     .help("Turn into a typed doc")
+                    .popover(isPresented: Binding(
+                        get: { pickerNodeId == row.node.id },
+                        set: { if !$0 { pickerNodeId = nil } })) {
+                        supertagPicker(for: row.node.id)
+                    }
                 }
                 .padding(.leading, CGFloat(row.depth) * 18)
             }
@@ -78,5 +84,34 @@ struct OutlinerView: View {
         guard let i = flat.firstIndex(where: { $0.node.id == id }) else { return nil }
         let j = i + delta
         return flat.indices.contains(j) ? flat[j].node.id : nil
+    }
+
+    @ViewBuilder
+    private func supertagPicker(for id: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Turn into").font(.caption).foregroundColor(.secondary)
+                .padding(.bottom, 2)
+            ForEach(SupertagRegistry.all(), id: \.loreType) { type in
+                Button { apply(type, to: id) } label: {
+                    HStack { Text("#\(type.loreType)"); Spacer(); Text(type.label).foregroundColor(.secondary) }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 3).padding(.horizontal, 6)
+            }
+        }
+        .padding(8)
+        .frame(width: 220)
+    }
+
+    private func apply(_ type: SupertagType, to id: UUID) {
+        pickerNodeId = nil
+        guard let ex = LoreDocWriter.extract(nodeId: id, type: type, from: nodes) else { return }
+        let before = nodes
+        nodes = ex.mutatedNodes                                  // optimistic: show backlink
+        Task {
+            let ok = await LoreDocWriter.commit(projectPath: projectPath, type: type, result: ex)
+            if !ok { await MainActor.run { nodes = before } }    // revert on failure
+        }
     }
 }
