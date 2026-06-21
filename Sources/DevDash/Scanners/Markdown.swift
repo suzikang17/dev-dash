@@ -130,8 +130,11 @@ enum Markdown {
                 paragraph.append(next)
                 i += 1
             }
-            let joined = paragraph.joined(separator: " ")
-            out.append("<p>\(processInline(joined))</p>")
+            // Preserve single newlines as line breaks (notes/PKM expectation),
+            // rather than collapsing them to spaces like strict markdown. Inline
+            // formatting is applied per line, then joined with <br>.
+            let rendered = paragraph.map { processInline($0) }.joined(separator: "<br>")
+            out.append("<p>\(rendered)</p>")
         }
         flushList()
 
