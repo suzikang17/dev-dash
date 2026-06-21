@@ -15,6 +15,10 @@ struct DailyTabView: View {
     /// False until the first `reload()` finishes, so the timeline can tell
     /// "still loading" apart from "loaded, but nothing to show."
     @State private var loaded = false
+    @State private var outlineByDate: [String: [DayNode]] = [:]
+    @State private var saveWork: [String: DispatchWorkItem] = [:]
+    @State private var focusedDate: String? = nil
+    @State private var watcher: NotesFileWatcher? = nil
 
     private enum ViewMode { case daily, browse }
 
@@ -77,7 +81,11 @@ struct DailyTabView: View {
                 }
                 .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
             }
-            .onAppear { reload(project: project) }
+            .onAppear {
+                reload(project: project)
+                startWatcher(project: project)
+            }
+            .onDisappear { watcher?.stop(); watcher = nil }
             .onChange(of: project.path) { _, _ in selectedEntry = nil; selectedSession = nil; browseType = nil; loaded = false; reload(project: project) }
             .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
             .onChange(of: mode) { _, newMode in if newMode == .daily { browseType = nil } }
@@ -122,7 +130,7 @@ struct DailyTabView: View {
                     LazyVStack(alignment: .leading, spacing: DSSpace.xl, pinnedViews: .sectionHeaders) {
                         ForEach(days) { day in
                             Section {
-                                dayContent(day)
+                                dayPage(day, project: project)
                             } header: {
                                 dayHeader(day)
                             }
@@ -255,6 +263,73 @@ struct DailyTabView: View {
         }
     }
 
+    private func startWatcher(project: Project) {
+        watcher?.stop()
+        watcher = NotesFileWatcher(dir: "\(project.path)/docs/notes") {
+            refreshUnfocusedPages(project: project)
+        }
+    }
+
+    /// Re-load every loaded day EXCEPT the one being actively edited, so external
+    /// writes (Claude Code) appear without clobbering local edits.
+    private func refreshUnfocusedPages(project: Project) {
+        for date in outlineByDate.keys where date != focusedDate {
+            outlineByDate[date] = DailyPageStore.load(projectPath: project.path, date: date)
+        }
+        reload(project: project)   // refresh the day list (new files may add days)
+    }
+
+    @ViewBuilder
+    private func dayPage(_ day: DayGroup, project: Project) -> some View {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
+            OutlinerView(
+                nodes: outlineBinding(for: day.dateStr, project: project),
+                projectPath: project.path
+            )
+            .onAppear {
+                if outlineByDate[day.dateStr] == nil {
+                    outlineByDate[day.dateStr] = DailyPageStore.load(projectPath: project.path, date: day.dateStr)
+                }
+            }
+
+            if !day.sessions.isEmpty {
+                DisclosureGroup {
+                    ForEach(day.sessions) { session in
+                        DailyRow(
+                            label: session.title ?? session.firstUserMessage ?? "Session",
+                            detail: session.durationSeconds > 0 ? formatDuration(session.durationSeconds) : nil,
+                            isSelected: selectedSession?.id == session.id,
+                            action: { selectedEntry = nil; selectedSession = session }
+                        )
+                    }
+                } label: {
+                    Text("Claude · \(day.sessions.count)").font(.caption.weight(.semibold)).foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    private func outlineBinding(for date: String, project: Project) -> Binding<[DayNode]> {
+        Binding(
+            get: { outlineByDate[date] ?? [] },
+            set: { newValue in
+                outlineByDate[date] = newValue
+                focusedDate = date
+                scheduleSave(date: date, project: project)
+            }
+        )
+    }
+
+    private func scheduleSave(date: String, project: Project) {
+        saveWork[date]?.cancel()
+        let nodes = outlineByDate[date] ?? []
+        let item = DispatchWorkItem {
+            try? DailyPageStore.write(projectPath: project.path, date: date, nodes: nodes)
+        }
+        saveWork[date] = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
+    }
+
     private func reload(project: Project) {
         let docsRoot = "\(project.path)/docs"
         let projectPath = project.path
@@ -309,8 +384,9 @@ struct DailyTabView: View {
                 sessionsByDate[dateStr, default: []].append(digest)
             }
 
-            let allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
+            var allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
             let todayStr = Self.dayFormatter.string(from: Date())
+            allDates.insert(todayStr)   // today always shows, even with no docs/sessions yet
             let groups = allDates.sorted(by: >).map { dateStr in
                 DayGroup(
                     dateStr: dateStr,
