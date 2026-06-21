@@ -14,6 +14,7 @@ enum DailySelfTest {
 
         roundTrip(check)
         outlineOps(check)
+        pageStoreIO(check)
 
         let msg = failures.isEmpty
             ? "daily-selftest: ALL PASS\n"
@@ -52,6 +53,39 @@ enum DailySelfTest {
         var coll = base; coll[1].collapsed = true
         let visible = DayOutline.flatten(coll, includeCollapsedChildren: false)
         check(visible.count == 2, "flatten: collapsed b hides c (a,b visible)")
+    }
+
+    private static func pageStoreIO(_ check: (Bool, String) -> Void) {
+        let tmp = NSTemporaryDirectory() + "ddtest-\(UUID().uuidString)"
+        let docs = tmp + "/docs/notes"
+        try? FileManager.default.createDirectory(atPath: docs, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: tmp) }
+
+        let date = "2026-06-21"
+        let nodes = DayOutline.parse("- hello\n  - world\n")
+        do {
+            try DailyPageStore.write(projectPath: tmp, date: date, nodes: nodes)
+        } catch { check(false, "pageStore: write threw \(error)"); return }
+
+        let path = DailyPageStore.fileURL(projectPath: tmp, date: date).path
+        let raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        check(raw.contains("title:"), "pageStore: frontmatter title written on create")
+        check(raw.contains("- hello"), "pageStore: body serialized")
+
+        let reloaded = DailyPageStore.load(projectPath: tmp, date: date)
+        check(reloaded.first?.text == "hello", "pageStore: round-trip load text")
+        check(reloaded.first?.children.first?.text == "world", "pageStore: round-trip load child")
+
+        // Frontmatter (e.g. tags) preserved across re-write.
+        var fm = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        fm = fm.replacingOccurrences(of: "title:", with: "tags: keep\ntitle:")
+        try? fm.write(toFile: path, atomically: true, encoding: .utf8)
+        try? DailyPageStore.write(projectPath: tmp, date: date, nodes: DayOutline.parse("- changed\n"))
+        let raw2 = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        check(raw2.contains("tags: keep"), "pageStore: preserves existing frontmatter on re-write")
+        check(raw2.contains("- changed") && !raw2.contains("- hello"), "pageStore: body replaced")
+
+        check(DailyPageStore.load(projectPath: tmp, date: "2099-01-01").isEmpty, "pageStore: missing file -> []")
     }
 
     private static func roundTrip(_ check: (Bool, String) -> Void) {
