@@ -29,16 +29,20 @@ up in Tasks/Product/Browse automatically).
 
 ## Supertags (V1: single type, extract-on-tag)
 
-The valid supertags map to existing lore types that make sense at bullet altitude:
-`#task` → `docs/tasks/`, `#idea` → `docs/ideas/`, `#kpi` → `docs/kpis/`, `#decision` → `docs/decisions/`.
-Untagged bullets stay plain note bullets (default, no-op).
+**The supertag set is every registered lore type, discovered dynamically** — not a hardcoded list.
+The outliner queries the lore type registry (local ejected schemas in `docs/.lore/types/` plus the
+package-provided types) and offers all of them: `#task`, `#idea`, `#kpi`, `#decision`, `#devlog`,
+`#overview`, `#note`, and anything added later. Each maps to its schema's `dir`
+(`task`→`docs/tasks/`, `kpi`→`docs/kpis/`, `idea`→`docs/ideas/`, etc.). `note` is the default
+(untagged) bullet state, so tagging `#note` is a no-op. `overview`/`devlog` are included for
+completeness even though they're day-/living-doc shaped — the registry decides, not a curated list.
 
 Note: only `task`, `note`, `kpi`, `overview` schemas are *ejected* locally
-(`docs/.lore/types/`); `idea` and `decision` are package-provided types. So extraction must not
-assume hand-written frontmatter for every type — it goes through a **lore-aware writer** that
-derives each type's required fields from its schema (planning task: confirm required fields per
-type; `task` can reuse the known field logic from `NewLoreTaskSheet`, others resolve via the lore
-schema / CLI).
+(`docs/.lore/types/`); `idea`, `decision`, `devlog` are package-provided. So extraction must not
+assume hand-written frontmatter for any specific type — it goes through a **lore-aware writer** that
+derives each type's required fields from its schema (planning task: a single schema-driven writer;
+`task`'s known field logic from `NewLoreTaskSheet` is a reference, but the writer must generalize to
+all types via the lore schema / CLI).
 
 **Applying a supertag to a focused bullet** (via inline `#type` token *or* a "Turn into ▸" action):
 1. Extract that bullet's text + its subtree.
