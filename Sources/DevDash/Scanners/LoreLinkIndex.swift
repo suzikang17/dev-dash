@@ -58,6 +58,22 @@ enum LoreLinkIndex {
         return Graph(resolve: resolve, backlinks: backlinks)
     }
 
+    /// Every lore doc (title + dir) — backs the `[[` autocomplete.
+    static func allDocs(projectPath: String, dirs: [String]) -> [(title: String, dir: String, path: String)] {
+        let fm = FileManager.default
+        var out: [(title: String, dir: String, path: String)] = []
+        for dir in dirs {
+            let dirPath = "\(projectPath)/docs/\(dir)"
+            for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
+                guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
+                guard let raw = try? String(contentsOfFile: "\(dirPath)/\(file)", encoding: .utf8) else { continue }
+                let title = LoreReader.parseFrontmatter(raw)["title"] ?? file.replacingOccurrences(of: ".md", with: "")
+                out.append((title: title, dir: dir, path: "\(dir)/\(file)"))
+            }
+        }
+        return out
+    }
+
     /// `[[token]]` occurrences in a body, skipping fenced AND inline code so the
     /// graph matches what the renderer linkifies (literal `[[x]]` in code stays literal).
     static func wikilinks(in body: String) -> [String] {

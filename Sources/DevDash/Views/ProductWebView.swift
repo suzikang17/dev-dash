@@ -19,6 +19,7 @@ struct ProductWebView: NSViewRepresentable {
     var onSaveKPI: (String, [String: String]) -> Void = { _, _ in } // (absLorePath, frontmatter fields) — writes current/target/unit to frontmatter
     let onAction: ([String: Any]) -> Void                  // generic dispatch
     var onSearchItems: ((String) -> [[String: Any]])? = nil  // (query) → [{id,title,type,status}]
+    var onSearchLore: ((String) -> [[String: Any]])? = nil   // (query) → [{title,type,path}] for [[ autocomplete
     var onCreateTask: ((String, String?) -> [String: Any])? = nil  // (title, linkedDocPath) → {id,title,status}
 
     func makeNSView(context: Context) -> WKWebView {
@@ -91,6 +92,7 @@ struct ProductWebView: NSViewRepresentable {
         context.coordinator.onSaveKPI = onSaveKPI
         context.coordinator.onAction = onAction
         context.coordinator.onSearchItems = onSearchItems
+        context.coordinator.onSearchLore = onSearchLore
         context.coordinator.onCreateTask = onCreateTask
     }
 
@@ -99,6 +101,7 @@ struct ProductWebView: NSViewRepresentable {
         c.onSaveLore = onSaveLore
         c.onSaveKPI = onSaveKPI
         c.onSearchItems = onSearchItems
+        c.onSearchLore = onSearchLore
         c.onCreateTask = onCreateTask
         return c
     }
@@ -110,6 +113,7 @@ struct ProductWebView: NSViewRepresentable {
         var onSaveKPI: (String, [String: String]) -> Void = { _, _ in }
         var onAction: ([String: Any]) -> Void
         var onSearchItems: ((String) -> [[String: Any]])?
+        var onSearchLore: ((String) -> [[String: Any]])?
         var onCreateTask: ((String, String?) -> [String: Any])?
         var lastReloadToken: Int = -1
         weak var webView: WKWebView?
@@ -154,6 +158,10 @@ struct ProductWebView: NSViewRepresentable {
                       let callbackId = body["callbackId"] as? String else { return }
                 let results = onSearchItems?(query) ?? []
                 resolve(callbackId: callbackId, value: results)
+            case "search-lore":
+                guard let query = body["query"] as? String,
+                      let callbackId = body["callbackId"] as? String else { return }
+                resolve(callbackId: callbackId, value: onSearchLore?(query) ?? [])
             case "create-task":
                 guard let title = body["title"] as? String,
                       let callbackId = body["callbackId"] as? String else { return }
@@ -200,6 +208,9 @@ struct ProductWebView: NSViewRepresentable {
       }
       window.devdash.searchItems = function(query) {
         return _makePromise('search-items', { query: query || '' });
+      };
+      window.devdash.searchLore = function(query) {
+        return _makePromise('search-lore', { query: query || '' });
       };
       window.devdash.createTask = function(title, linkedDocPath) {
         return _makePromise('create-task', { title: title, linkedDocPath: linkedDocPath || '' });
@@ -1022,6 +1033,76 @@ struct ProductWebView: NSViewRepresentable {
         ta.classList.add('is-saved');
         setTimeout(function() { ta.classList.remove('is-saved'); }, 1500);
       }
+
+      // ---- [[ wikilink autocomplete over lore docs ----
+      var AC = { box: null, ta: null, items: [], sel: 0, start: -1 };
+      function acHide() { if (AC.box) AC.box.style.display = 'none'; AC.ta = null; AC.items = []; AC.start = -1; }
+      function acBox() {
+        if (AC.box) return AC.box;
+        var b = document.createElement('div');
+        b.className = 'lore-ac'; b.style.display = 'none';
+        document.body.appendChild(b);
+        b.addEventListener('mousedown', function(e) {
+          var it = e.target.closest('.lore-ac-item'); if (!it) return;
+          e.preventDefault(); acInsert(parseInt(it.dataset.i, 10));
+        });
+        AC.box = b; return b;
+      }
+      function acRender() {
+        var b = acBox();
+        if (!AC.items.length || !AC.ta) { b.style.display = 'none'; return; }
+        b.innerHTML = AC.items.map(function(it, i) {
+          return '<div class="lore-ac-item' + (i === AC.sel ? ' sel' : '') + '" data-i="' + i + '">' +
+                 '<span class="lore-ac-title"></span><span class="lore-ac-type"></span></div>';
+        }).join('');
+        // Set text via textContent to avoid HTML injection from titles.
+        var rows = b.querySelectorAll('.lore-ac-item');
+        AC.items.forEach(function(it, i) {
+          rows[i].querySelector('.lore-ac-title').textContent = it.title || '';
+          rows[i].querySelector('.lore-ac-type').textContent = it.type || '';
+        });
+        var r = AC.ta.getBoundingClientRect();
+        b.style.left = (window.scrollX + r.left) + 'px';
+        b.style.top = (window.scrollY + r.bottom + 4) + 'px';
+        b.style.minWidth = Math.min(Math.max(r.width, 200), 360) + 'px';
+        b.style.display = 'block';
+      }
+      function acInsert(i) {
+        if (!AC.ta || !AC.items[i]) return;
+        var ta = AC.ta, title = AC.items[i].title || '';
+        var caret = ta.selectionStart;
+        var before = ta.value.slice(0, AC.start), after = ta.value.slice(caret);
+        var ins = '[[' + title + ']]';
+        ta.value = before + ins + after;
+        var pos = before.length + ins.length;
+        ta.selectionStart = ta.selectionEnd = pos;
+        acHide();
+        ta.dispatchEvent(new Event('input'));   // autosize + dirty + debounced save
+        ta.focus();
+      }
+      function updateAC(ta) {
+        var caret = ta.selectionStart;
+        var pre = ta.value.slice(0, caret);
+        var open = pre.lastIndexOf('[[');
+        if (open === -1) { acHide(); return; }
+        var frag = pre.slice(open + 2);
+        if (frag.indexOf(']') !== -1 || frag.indexOf('\\n') !== -1) { acHide(); return; }
+        AC.ta = ta; AC.start = open;
+        if (!(window.devdash && window.devdash.searchLore)) { acHide(); return; }
+        window.devdash.searchLore(frag).then(function(res) {
+          if (AC.ta !== ta) return;            // stale (caret/textarea changed)
+          AC.items = res || []; AC.sel = 0; acRender();
+        });
+      }
+      // Registered before the Esc-finishes-editing handler so it can preempt while open.
+      document.addEventListener('keydown', function(e) {
+        if (!AC.box || AC.box.style.display === 'none' || !AC.items.length) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); AC.sel = (AC.sel + 1) % AC.items.length; acRender(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); AC.sel = (AC.sel - 1 + AC.items.length) % AC.items.length; acRender(); }
+        else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); acInsert(AC.sel); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); acHide(); }
+      }, true);
+
       function wire(ta) {
         if (ta.dataset.wired) return;
         ta.dataset.wired = '1';
@@ -1030,10 +1111,12 @@ struct ProductWebView: NSViewRepresentable {
         ta.addEventListener('input', function() {
           ta.classList.add('is-dirty');
           autosize(ta);
+          updateAC(ta);
           clearTimeout(t);
           t = setTimeout(function() { save(ta); }, 900);
         });
         ta.addEventListener('blur', function() {
+          setTimeout(acHide, 120);   // after a dropdown mousedown has a chance to fire
           if (ta.classList.contains('is-dirty')) { clearTimeout(t); save(ta); }
         });
         ta.addEventListener('keydown', function(e) {

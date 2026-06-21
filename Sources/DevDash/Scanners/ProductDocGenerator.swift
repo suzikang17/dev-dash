@@ -1478,6 +1478,13 @@ enum ProductDocGenerator {
       .lore-backlinks-label { color: var(--muted); font-size: 11px; }
       .lore-card-flash { animation: loreFlash 1.2s ease; }
       @keyframes loreFlash { 0%, 30% { box-shadow: inset 0 0 0 2px var(--accent); } 100% { box-shadow: none; } }
+      /* [[ autocomplete dropdown (appended to body) */
+      .lore-ac { position: absolute; z-index: 9999; background: var(--card); border: 1px solid var(--border);
+                 border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); padding: 4px; max-height: 260px; overflow: auto; }
+      .lore-ac-item { display: flex; justify-content: space-between; gap: 14px; align-items: baseline;
+                      padding: 5px 9px; border-radius: 5px; font-size: 13px; cursor: pointer; }
+      .lore-ac-item.sel, .lore-ac-item:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+      .lore-ac-type { color: var(--muted); font-size: 11px; }
       .lore-src { display: block; box-sizing: border-box; width: 100%; min-height: 120px;
                   white-space: pre-wrap; font: 12px/1.55 var(--font-mono); color: var(--fg);
                   background: var(--code); border: none; border-radius: 8px; padding: 12px;
