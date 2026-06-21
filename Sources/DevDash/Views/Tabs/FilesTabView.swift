@@ -15,7 +15,7 @@ struct FilesTabView: View {
                 }
                 HSplitView {
                     treePane(project: project)
-                        .frame(minWidth: 200, idealWidth: 280, maxWidth: 480)
+                        .frame(minWidth: 140, idealWidth: 220, maxWidth: 480)
                         .background(DSColor.cardBg)
                     contentPane
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -126,13 +126,13 @@ struct FileContentView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var content: FileTreeScanner.FileContent?
     @State private var loadedPath: String?
-    @State private var renderMode: RenderMode = .nvim
+    @State private var renderMode: RenderMode = .source
     @State private var editing = false
     @State private var draft: String = ""
     @State private var saveError: String?
 
     enum RenderMode: String, CaseIterable, Identifiable {
-        case nvim, source, rendered
+        case source, nvim, rendered
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -280,6 +280,8 @@ struct FileContentView: View {
                 } else {
                     placeholder("nvim not found", subtitle: "Install via brew install neovim")
                 }
+            } else if renderMode == .source, canEdit {
+                sourceView
             } else {
                 renderedView
             }
@@ -303,6 +305,30 @@ struct FileContentView: View {
             saveError = nil
         } catch {
             saveError = "Couldn't save: \(error.localizedDescription)"
+        }
+    }
+
+    /// "Source" mode: glow for markdown, bat for code/other text, rendered as a
+    /// read-only terminal pager. Falls back to plain monospace text if neither
+    /// tool is installed.
+    @ViewBuilder
+    private var sourceView: some View {
+        if let term = EmbeddedTerminal.sourceViewer(filePath: path, isMarkdown: isMarkdown,
+                                                    appearance: store.terminals.currentAppearance) {
+            term
+                .background(Color(NSColor.windowBackgroundColor))
+                .id(path)
+        } else if case .text(let text)? = content {
+            ScrollView([.vertical, .horizontal]) {
+                Text(text)
+                    .font(DSFont.mono(.caption))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(DSSpace.md)
+            }
+        } else {
+            placeholder("Source viewer unavailable",
+                        subtitle: isMarkdown ? "Install via brew install glow" : "Install via brew install bat")
         }
     }
 
