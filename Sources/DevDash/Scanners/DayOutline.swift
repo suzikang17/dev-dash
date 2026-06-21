@@ -78,4 +78,103 @@ enum DayOutline {
         }
         return roots
     }
+
+    // MARK: - Operations (value semantics; return new trees)
+
+    static func update(_ id: UUID, text: String, in nodes: [DayNode]) -> [DayNode] {
+        map(nodes) { n in if n.id == id { var m = n; m.text = text; return m }; return n }
+    }
+
+    static func insertSibling(after id: UUID, in nodes: [DayNode]) -> (nodes: [DayNode], focus: UUID) {
+        let new = DayNode(text: "")
+        func walk(_ list: [DayNode]) -> [DayNode] {
+            var out: [DayNode] = []
+            for n in list {
+                var m = n
+                m.children = walk(n.children)
+                out.append(m)
+                if n.id == id { out.append(new) }
+            }
+            return out
+        }
+        return (walk(nodes), new.id)
+    }
+
+    static func indent(_ id: UUID, in nodes: [DayNode]) -> [DayNode] {
+        guard let idx = nodes.firstIndex(where: { $0.id == id }) else {
+            return nodes.map { var m = $0; m.children = indent(id, in: $0.children); return m }
+        }
+        guard idx > 0 else { return nodes }     // no previous sibling -> no-op
+        var out = nodes
+        let moving = out.remove(at: idx)
+        out[idx - 1].children.append(moving)
+        return out
+    }
+
+    static func outdent(_ id: UUID, in nodes: [DayNode]) -> [DayNode] {
+        // Find id among some parent's children; lift it to be the parent's next sibling.
+        func walk(_ list: [DayNode]) -> [DayNode] {
+            var out: [DayNode] = []
+            for var parent in list {
+                if let childIdx = parent.children.firstIndex(where: { $0.id == id }) {
+                    let moving = parent.children.remove(at: childIdx)
+                    out.append(parent)
+                    out.append(moving)
+                } else {
+                    parent.children = walk(parent.children)
+                    out.append(parent)
+                }
+            }
+            return out
+        }
+        return walk(nodes)   // id at top level has no parent -> unchanged
+    }
+
+    static func mergeIntoPrevious(_ id: UUID, in nodes: [DayNode]) -> (nodes: [DayNode], focus: UUID?, caret: Int)? {
+        let flat = flatten(nodes, includeCollapsedChildren: true)
+        guard let pos = flat.firstIndex(where: { $0.node.id == id }), pos > 0 else { return nil }
+        let prev = flat[pos - 1].node
+        let cur = flat[pos].node
+        let caret = prev.text.count
+        var working = update(prev.id, text: prev.text + cur.text, in: nodes)
+        // reparent cur's children under prev, then delete cur
+        for child in cur.children { working = append(child, under: prev.id, in: working) }
+        working = delete(id, in: working)
+        return (working, prev.id, caret)
+    }
+
+    static func delete(_ id: UUID, in nodes: [DayNode]) -> [DayNode] {
+        var out: [DayNode] = []
+        for n in nodes where n.id != id {
+            var m = n; m.children = delete(id, in: n.children); out.append(m)
+        }
+        return out
+    }
+
+    static func flatten(_ nodes: [DayNode], includeCollapsedChildren: Bool) -> [(node: DayNode, depth: Int)] {
+        var out: [(DayNode, Int)] = []
+        func walk(_ list: [DayNode], _ depth: Int) {
+            for n in list {
+                out.append((n, depth))
+                if includeCollapsedChildren || !n.collapsed { walk(n.children, depth + 1) }
+            }
+        }
+        walk(nodes, 0)
+        return out
+    }
+
+    // MARK: - private helpers
+
+    private static func map(_ nodes: [DayNode], _ f: (DayNode) -> DayNode) -> [DayNode] {
+        nodes.map { n in var m = f(n); m.children = map(n.children, f); return m }
+    }
+
+    private static func append(_ child: DayNode, under parentId: UUID, in nodes: [DayNode]) -> [DayNode] {
+        nodes.map { n in
+            var m = n
+            if n.id == parentId { m.children.append(child) }
+            else { m.children = append(child, under: parentId, in: n.children) }
+            return m
+        }
+    }
 }
