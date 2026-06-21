@@ -12,6 +12,7 @@ struct LoreSection: Hashable {
     let requiredSections: [String]  // required H2s (sections schema) — Swift section check
     let newDocFields: [String]      // `--field k=v` args so an authored doc validates
     var isKPI: Bool = false         // structured KPI grid instead of markdown cards
+    var newestFirst: Bool = true    // false = ascending by id (overview's fixed slot order)
 
     static let all: [LoreSection] = [
         LoreSection(dir: "decisions", loreType: "decision", label: "Decisions",
@@ -33,6 +34,14 @@ struct LoreSection: Hashable {
                     requiredSections: [],
                     newDocFields: [],    // local `kpi` type; current/target optional, edited inline
                     isKPI: true),
+        // The Overview: fixed slot cards (scaffolded) + extras, ascending by id.
+        // Rendered into the static first "overview" tab (lore-overview.html), so it
+        // is NOT spliced as its own lore-<dir> tab.
+        LoreSection(dir: "overview", loreType: "overview", label: "Overview",
+                    bodyIsFree: true,
+                    requiredSections: [],
+                    newDocFields: [],
+                    newestFirst: false),
     ]
 
     /// Lookup by the plural folder name (e.g. derived from a doc's path).

@@ -1,0 +1,15 @@
+name: overview
+dir: overview
+heading: Overview
+id: { strategy: sequential, pad: 4 }
+body: free
+frontmatter:
+  - { name: title, type: string, required: true }
+  - { name: created, type: date }
+index:
+  - { header: "#", source: id }
+  - { header: Section, source: title, link: true }
+prompt: |
+  You are writing one card of a product one-pager (e.g. TL;DR, What is it?, Risks).
+  Given the card's title, produce the markdown body only (no frontmatter) — a tight,
+  concrete answer for that card. No padding.

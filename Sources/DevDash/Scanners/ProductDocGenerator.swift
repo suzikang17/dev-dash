@@ -123,13 +123,16 @@ enum ProductDocGenerator {
     /// promote-idea flow is unaffected — it reads TaskStore, not this tab).
     static var tabs: [DocTab] {
         var t: [DocTab] = [
-            .init(id: "overview",     label: "Overview",     source: .userHtml(file: "overview.html")),
+            // Overview is lore-backed (cards from docs/overview/*.md) but keeps the
+            // first-tab slot + id "overview" (so the Snapshot injection still fires).
+            .init(id: "overview",     label: "Overview",     source: .generatedHtml(file: "lore-overview.html")),
             .init(id: "notes",        label: "Notes",        source: .userHtml(file: "notes.html")),
             .init(id: "blocks",       label: "Blocks",       source: .blocksView),
             .init(id: "roadmap",      label: "Roadmap",      source: .generatedHtml(file: "roadmap.html")),
             .init(id: "initiatives",  label: "Initiatives",  source: .generatedHtml(file: "initiatives.html")),
         ]
-        t += LoreSection.all.map {
+        // Splice the other lore sections (overview has its own static tab above).
+        t += LoreSection.all.filter { $0.dir != "overview" }.map {
             .init(id: "lore-\($0.dir)", label: $0.label, source: .generatedHtml(file: "lore-\($0.dir).html"))
         }
         t += [
@@ -190,10 +193,13 @@ enum ProductDocGenerator {
         }
 
         // User-authored stubs — only scaffold when missing.
-        scaffold(at: "\(sectionsFolder)/overview.html", with: stub(.overview(projectName: projectName)))
         scaffold(at: "\(sectionsFolder)/notes.html",    with: stub(.notes(projectName: projectName)))
         scaffold(at: "\(sectionsFolder)/goals.html",    with: stub(.goals(projectName: projectName)))
         scaffold(at: "\(sectionsFolder)/ideas.html",    with: stub(.ideas))
+
+        // Overview is now lore-backed cards (docs/overview/*.md) — scaffold the
+        // fixed slot docs on first run so the curated one-pager structure exists.
+        scaffoldOverviewSlots(projectPath: projectPath)
 
         // Generated sections — overwritten every regen.
         let roadmapHtml = renderRoadmap(meta: meta, template: template, tasks: tasks)
@@ -332,6 +338,41 @@ enum ProductDocGenerator {
 
     // MARK: - Lore-backed sections (SPIKE)
 
+    /// Fixed one-pager slots, scaffolded as `docs/overview/NNNN-slug.md` on first
+    /// run so the curated structure exists; extras are added via "+ new".
+    private static let overviewSlots: [(slug: String, title: String, prompt: String)] = [
+        ("tldr",          "TL;DR",                       "One sentence the rest of the page is justifying."),
+        ("what-is-it",    "What is it?",                 "One sentence — what does this do?"),
+        ("who-is-it-for", "Who's it for?",               "Specific. Role + situation, not a persona poster."),
+        ("why-now",       "Why now?",                    "What changed that makes this the right time?"),
+        ("what-its-not",  "What it's not",               "Out-of-scope — the features you're consciously skipping."),
+        ("how-well-know", "How we'll know it's working", "Pick 1–3 signals: activation, retention, revenue, qualitative."),
+        ("risks",         "Risks & assumptions",         "Key risks — likelihood, impact, mitigation."),
+    ]
+
+    /// Write the fixed slot docs only when `docs/overview/` has none yet — so we
+    /// never clobber edits or re-add a slot the user deleted.
+    private static func scaffoldOverviewSlots(projectPath: String) {
+        let dir = "\(projectPath)/docs/overview"
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let existing = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+        guard existing.filter({ $0.hasSuffix(".md") && $0.lowercased() != "index.md" }).isEmpty else { return }
+        for (i, slot) in overviewSlots.enumerated() {
+            let id = String(format: "%04d", i + 1)
+            let doc = """
+            ---
+            lore_type: overview
+            title: "\(slot.title)"
+            ---
+            ## \(slot.title)
+
+            _\(slot.prompt)_
+            """
+            try? doc.write(toFile: "\(dir)/\(id)-\(slot.slug).md", atomically: true, encoding: .utf8)
+        }
+    }
+
     /// Render a lore-backed section (`docs/<dir>/*.md`) as editable cards — lore
     /// is the engine, this is the living doc's render+edit surface over it. Each
     /// card carries `data-lore-file` (absolute path) + `data-lore-type` (singular
@@ -343,7 +384,7 @@ enum ProductDocGenerator {
         let files = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
         let mdFiles = files
             .filter { $0.hasSuffix(".md") && $0.lowercased() != "index.md" }
-            .sorted(by: >)   // numeric id prefix → newest first
+            .sorted(by: section.newestFirst ? (>) : (<))   // id prefix order
         let lower = section.label.lowercased()
         let newButton = "<button class=\"lore-new\" data-action=\"lore-new\" data-lore-type=\"\(escapeHTML(section.loreType))\" type=\"button\">+ new \(escapeHTML(section.label))</button>"
         guard !mdFiles.isEmpty else {
