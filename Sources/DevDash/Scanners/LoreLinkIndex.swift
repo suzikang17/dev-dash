@@ -1,12 +1,20 @@
 import Foundation
 
 /// The lore knowledge-graph layer: resolves `[[wikilinks]]` and computes backlinks
-/// across every lore doc type in a project — mirroring lore-core's buildLinkIndex/
-/// computeBacklinks (the lore CLI doesn't expose them). Tokens are a doc's title
-/// or filename base (lowercased); links live in markdown bodies as `[[token]]`.
+/// across every lore doc type in a project (the lore CLI doesn't expose its own
+/// graph). Tokens are a doc's title or filename base (lowercased); links live in
+/// markdown bodies as `[[token]]`.
+///
+/// Backlink sources are: (a) body `[[wikilinks]]` (like lore-core), and (b) the
+/// `parent` frontmatter key specifically (task→parent). This is NOT the full
+/// schema-driven `reference`-field walk lore-core does — dev-dash has no
+/// `type: reference` fields, and `parent` is the only reference edge it needs.
 enum LoreLinkIndex {
     struct Target: Hashable { let path: String; let title: String }   // path = "dir/file.md"
-    struct Backlink: Hashable { let fromPath: String; let fromTitle: String; let fromType: String }
+    struct Backlink: Hashable {
+        let fromPath: String; let fromTitle: String; let fromType: String
+        let via: String   // "body" (a [[wikilink]]) or "parent" (a reference field)
+    }
 
     struct Graph {
         /// lowercased token (title or filename base) → target
@@ -46,8 +54,12 @@ enum LoreLinkIndex {
                 if !titleKey.isEmpty, resolve[titleKey] == nil { resolve[titleKey] = target }
                 let fileKey = file.replacingOccurrences(of: ".md", with: "").lowercased()
                 if resolve[fileKey] == nil { resolve[fileKey] = target }
-                let id = String(file.prefix(while: { $0.isNumber }))
-                if !id.isEmpty { idIndex[dir, default: [:]][id] = path }
+                // Normalize the numeric id (0001 and 1 both → "1") so a hand-typed
+                // `parent: 1` resolves to `0001-*.md`. First-wins, like `resolve`.
+                if let n = Int(file.prefix(while: { $0.isNumber })),
+                   idIndex[dir, default: [:]][String(n)] == nil {
+                    idIndex[dir, default: [:]][String(n)] = path
+                }
                 docs.append((path, title, dir, bodyOf(raw), front["parent"]))
             }
         }
@@ -55,22 +67,24 @@ enum LoreLinkIndex {
         // in O(1) so multiple links from one doc count once.
         var backlinks: [String: [Backlink]] = [:]
         var seen = Set<String>()
-        func add(target: String, from doc: (path: String, title: String, type: String, body: String, parent: String?)) {
+        func add(target: String, from doc: (path: String, title: String, type: String, body: String, parent: String?), via: String) {
+            // De-dup per (target, source) regardless of via: a source lists once.
             guard target != doc.path, seen.insert("\(target)|\(doc.path)").inserted else { return }
             backlinks[target, default: []].append(
-                Backlink(fromPath: doc.path, fromTitle: doc.title, fromType: doc.type))
+                Backlink(fromPath: doc.path, fromTitle: doc.title, fromType: doc.type, via: via))
         }
         for doc in docs {
             for token in wikilinks(in: doc.body) {
-                if let t = resolve[token.lowercased()] { add(target: t.path, from: doc) }
+                if let t = resolve[token.lowercased()] { add(target: t.path, from: doc, via: "body") }
             }
         }
-        // Pass 3: reference-frontmatter backlinks (e.g. task `parent: 0003` → the
-        // parent task), resolving the bare id within the doc's own type.
+        // Pass 3: reference-frontmatter backlinks (task `parent: 0003` → the parent
+        // task), resolving the normalized numeric id within the doc's own type.
         for doc in docs {
-            guard let parent = doc.parent else { continue }
-            let pid = String(parent.trimmingCharacters(in: .whitespaces).prefix(while: { $0.isNumber }))
-            if !pid.isEmpty, let parentPath = idIndex[doc.type]?[pid] { add(target: parentPath, from: doc) }
+            guard let parent = doc.parent,
+                  let n = Int(parent.trimmingCharacters(in: .whitespaces).prefix(while: { $0.isNumber })),
+                  let parentPath = idIndex[doc.type]?[String(n)] else { continue }
+            add(target: parentPath, from: doc, via: "parent")
         }
         return Graph(resolve: resolve, backlinks: backlinks)
     }
