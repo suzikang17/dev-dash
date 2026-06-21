@@ -15,6 +15,7 @@ enum DailySelfTest {
         roundTrip(check)
         outlineOps(check)
         pageStoreIO(check)
+        supertagRegistry(check)
 
         let msg = failures.isEmpty
             ? "daily-selftest: ALL PASS\n"
@@ -86,6 +87,22 @@ enum DailySelfTest {
         check(raw2.contains("- changed") && !raw2.contains("- hello"), "pageStore: body replaced")
 
         check(DailyPageStore.load(projectPath: tmp, date: "2099-01-01").isEmpty, "pageStore: missing file -> []")
+    }
+
+    private static func supertagRegistry(_ check: (Bool, String) -> Void) {
+        let types = SupertagRegistry.all()
+        let names = types.map(\.loreType)
+        check(names.contains("task"), "registry: includes task")
+        check(names.contains("idea"), "registry: includes idea")
+        check(names.contains("decision"), "registry: includes decision")
+        check(names.contains("kpi"), "registry: includes kpi")
+        check(names.contains("devlog"), "registry: includes devlog")
+        check(!names.contains("note"), "registry: note is default, not offered")
+        check(SupertagRegistry.find("task")?.dir == "tasks", "registry: task dir == tasks")
+        check(SupertagRegistry.find("kpi")?.dir == "kpis", "registry: kpi dir == kpis (plural)")
+        check(SupertagRegistry.find("decision")?.bodyIsFree == false, "registry: decision is sections schema")
+        check(SupertagRegistry.find("task")?.frontmatterFields.contains("status=open") == true,
+              "registry: task seeds status=open")
     }
 
     private static func roundTrip(_ check: (Bool, String) -> Void) {
