@@ -19,6 +19,7 @@ struct DailyTabView: View {
     @State private var saveWork: [String: DispatchWorkItem] = [:]
     @State private var focusedDate: String? = nil
     @State private var watcher: NotesFileWatcher? = nil
+    @State private var openDoc: OpenDocRef? = nil
 
     private enum ViewMode { case daily, browse }
 
@@ -98,6 +99,9 @@ struct DailyTabView: View {
                 NewLoreTaskSheet(projectPath: project.path) {
                     reload(project: project)
                 }
+            }
+            .sheet(item: $openDoc) { ref in
+                BacklinkDocSheet(path: ref.path) { openDoc = nil }
             }
     }
 
@@ -276,10 +280,16 @@ struct DailyTabView: View {
     }
 
     /// Re-load every loaded day EXCEPT the one being actively edited, so external
-    /// writes (Claude Code) appear without clobbering local edits.
+    /// writes (Claude Code) appear without clobbering local edits. Only reassign a
+    /// day whose on-disk content actually DIFFERS from memory — our own debounced
+    /// save also trips the watcher, and reloading then (new node ids) would steal
+    /// focus from the field mid-edit.
     private func refreshUnfocusedPages(project: Project) {
         for date in outlineByDate.keys where date != focusedDate {
-            outlineByDate[date] = DailyPageStore.load(projectPath: project.path, date: date)
+            let fresh = DailyPageStore.load(projectPath: project.path, date: date)
+            if DayOutline.serialize(fresh) != DayOutline.serialize(outlineByDate[date] ?? []) {
+                outlineByDate[date] = fresh
+            }
         }
         reload(project: project)   // refresh the day list (new files may add days)
     }
@@ -289,7 +299,8 @@ struct DailyTabView: View {
         VStack(alignment: .leading, spacing: DSSpace.md) {
             OutlinerView(
                 nodes: outlineBinding(for: day.dateStr, project: project),
-                projectPath: project.path
+                projectPath: project.path,
+                onOpenDoc: { openDoc = OpenDocRef(path: $0) }
             )
             .onAppear {
                 if outlineByDate[day.dateStr] == nil {
@@ -977,5 +988,59 @@ struct NewLoreTaskSheet: View {
             return Int(f.prefix(4))
         }
         return (nums.max() ?? 0) + 1
+    }
+}
+
+// MARK: - Backlink doc viewer
+
+/// Identifies the doc opened from a `[[backlink]]` (absolute path is the identity).
+struct OpenDocRef: Identifiable {
+    let path: String
+    var id: String { path }
+}
+
+/// A lightweight read-only viewer for a lore doc opened by clicking a backlink in
+/// the outliner. Daily mode is full-width (no side panel), so the doc opens here.
+private struct BacklinkDocSheet: View {
+    let path: String
+    let onClose: () -> Void
+    @State private var raw: String = ""
+
+    private var title: String {
+        LoreReader.parseFrontmatter(raw)["title"] ?? (path as NSString).lastPathComponent
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: DSSpace.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(DSFont.title).lineLimit(1)
+                    Text((path as NSString).lastPathComponent)
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityLabel("Close")
+            }
+            .padding(DSSpace.lg)
+            Divider()
+            MarkdownWebView(markdown: Self.stripFrontmatter(raw))
+        }
+        .frame(width: 640, height: 520)
+        .onAppear { raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "" }
+    }
+
+    private static func stripFrontmatter(_ s: String) -> String {
+        guard s.hasPrefix("---") else { return s }
+        let lines = s.components(separatedBy: "\n")
+        var fences = 0, start = 0
+        for (i, line) in lines.enumerated() {
+            if line.hasPrefix("---") { fences += 1; if fences == 2 { start = i + 1; break } }
+        }
+        return lines.dropFirst(start).joined(separator: "\n").trimmingCharacters(in: .newlines)
     }
 }

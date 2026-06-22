@@ -5,6 +5,7 @@ import SwiftUI
 struct OutlinerView: View {
     @Binding var nodes: [DayNode]
     let projectPath: String
+    var onOpenDoc: (String) -> Void = { _ in }
     @State private var pickerNodeId: UUID?
 
     @State private var focusedId: UUID?
@@ -23,13 +24,21 @@ struct OutlinerView: View {
                 HStack(alignment: .top, spacing: DSSpace.xs) {
                     Circle().fill(Color.secondary.opacity(0.4)).frame(width: 5, height: 5)
                         .padding(.top, 7)
-                    BulletRow(
-                        text: binding(for: row.node.id),
-                        isFocused: focusedId == row.node.id,
-                        caretToEnd: caretToEnd && focusedId == row.node.id,
-                        onKey: { handle($0, on: row.node.id) },
-                        onFocus: { focusedId = row.node.id; caretToEnd = false }
-                    )
+                    if focusedId == row.node.id {
+                        BulletRow(
+                            text: binding(for: row.node.id),
+                            isFocused: true,
+                            caretToEnd: caretToEnd,
+                            onKey: { handle($0, on: row.node.id) },
+                            onFocus: { focusedId = row.node.id; caretToEnd = false }
+                        )
+                    } else {
+                        BulletRendered(
+                            text: row.node.text,
+                            onOpenLink: { openLink($0) },
+                            onEdit: { focusedId = row.node.id; caretToEnd = true }
+                        )
+                    }
                     Button { pickerNodeId = row.node.id } label: {
                         Image(systemName: "number").font(.caption2).foregroundColor(.secondary)
                     }
@@ -62,6 +71,14 @@ struct OutlinerView: View {
 
     private func node(_ id: UUID) -> DayNode? {
         DayOutline.flatten(nodes, includeCollapsedChildren: true).first { $0.node.id == id }?.node
+    }
+
+    /// Resolve a `[[title]]` backlink to its lore doc and ask the host to open it.
+    private func openLink(_ title: String) {
+        let docs = LoreLinkIndex.allDocs(projectPath: projectPath, dirs: LoreLinkIndex.allDirs)
+        if let hit = docs.first(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) {
+            onOpenDoc("\(projectPath)/docs/\(hit.path)")
+        }
     }
 
     private func startFirstBullet() {
