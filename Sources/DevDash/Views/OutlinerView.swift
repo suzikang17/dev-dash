@@ -50,8 +50,18 @@ struct OutlinerView: View {
     private func binding(for id: UUID) -> Binding<String> {
         Binding(
             get: { DayOutline.flatten(nodes, includeCollapsedChildren: true).first { $0.node.id == id }?.node.text ?? "" },
-            set: { nodes = DayOutline.update(id, text: $0, in: nodes) }
+            set: { newText in
+                nodes = DayOutline.update(id, text: newText, in: nodes)
+                // Inline supertag: typing "title #task " (trailing space) commits the tag.
+                if let tag = Self.inlineSupertag(in: newText, committedBySpace: true) {
+                    applyInlineTag(id: id, type: tag.type, title: tag.title)
+                }
+            }
         )
+    }
+
+    private func node(_ id: UUID) -> DayNode? {
+        DayOutline.flatten(nodes, includeCollapsedChildren: true).first { $0.node.id == id }?.node
     }
 
     private func startFirstBullet() {
@@ -62,8 +72,14 @@ struct OutlinerView: View {
     private func handle(_ key: BulletKey, on id: UUID) {
         switch key {
         case .enterNew:
-            let r = DayOutline.insertSibling(after: id, in: nodes)
-            nodes = r.nodes; focusedId = r.focus; caretToEnd = true
+            // If the bullet ends in a "#task" tag, Enter commits the tag instead of
+            // making a new sibling.
+            if let n = node(id), let tag = Self.inlineSupertag(in: n.text, committedBySpace: false) {
+                applyInlineTag(id: id, type: tag.type, title: tag.title)
+            } else {
+                let r = DayOutline.insertSibling(after: id, in: nodes)
+                nodes = r.nodes; focusedId = r.focus; caretToEnd = true
+            }
         case .indent:
             nodes = DayOutline.indent(id, in: nodes)
         case .outdent:
@@ -104,8 +120,20 @@ struct OutlinerView: View {
         .frame(width: 220)
     }
 
+    /// Apply a supertag via the inline token: strip the "#task" text, then extract.
+    private func applyInlineTag(id: UUID, type: SupertagType, title: String) {
+        nodes = DayOutline.update(id, text: title, in: nodes)
+        apply(type, to: id)
+    }
+
     private func apply(_ type: SupertagType, to id: UUID) {
         pickerNodeId = nil
+        // Defensive: if the bullet still carries a trailing "#task" token (e.g. the
+        // button was used after typing one), drop it so the title is clean.
+        if let n = node(id) {
+            let cleaned = Self.strippedTrailingTag(n.text)
+            if cleaned != n.text { nodes = DayOutline.update(id, text: cleaned, in: nodes) }
+        }
         guard let ex = LoreDocWriter.extract(nodeId: id, type: type, from: nodes) else { return }
         let before = nodes
         nodes = ex.mutatedNodes                                  // optimistic: show backlink
@@ -113,5 +141,35 @@ struct OutlinerView: View {
             let ok = await LoreDocWriter.commit(projectPath: projectPath, type: type, result: ex)
             if !ok { await MainActor.run { nodes = before } }    // revert on failure
         }
+    }
+
+    // MARK: - Inline supertag parsing
+
+    /// Detects a trailing `#<knownType>` token in a bullet and returns the matched
+    /// type plus the title with the token removed. `committedBySpace` requires a
+    /// trailing space (the space keystroke commits); otherwise the token may sit at
+    /// the very end (Enter commits). The token must be the LAST thing in the bullet,
+    /// must be a known lore type, and must leave a non-empty title — so "#taskforce",
+    /// "use #task force", "#unknown", and a bare "#task" never fire.
+    private static func inlineSupertag(in text: String, committedBySpace: Bool) -> (type: SupertagType, title: String)? {
+        let names = SupertagRegistry.all().map { $0.loreType }.joined(separator: "|")
+        let tail = committedBySpace ? "\\s+$" : "\\s*$"
+        let pattern = "^(.*?)\\s*#(\(names))\(tail)"
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let ns = text as NSString
+        guard let m = re.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        let title = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
+        let typeName = ns.substring(with: m.range(at: 2)).lowercased()
+        guard !title.isEmpty, let type = SupertagRegistry.find(typeName) else { return nil }
+        return (type, title)
+    }
+
+    /// Removes a trailing `#<knownType>` token from a title (used by the button path).
+    private static func strippedTrailingTag(_ text: String) -> String {
+        let names = SupertagRegistry.all().map { $0.loreType }.joined(separator: "|")
+        guard let re = try? NSRegularExpression(pattern: "\\s*#(\(names))\\s*$", options: [.caseInsensitive]) else { return text }
+        let ns = text as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        return re.stringByReplacingMatches(in: text, range: range, withTemplate: "").trimmingCharacters(in: .whitespaces)
     }
 }
