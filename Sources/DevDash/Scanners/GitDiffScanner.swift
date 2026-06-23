@@ -82,6 +82,39 @@ enum GitDiffScanner {
             cwd: path, timeout: 20)
     }
 
+    /// Multi-file working-tree diff (vs HEAD) for a specific set of files. Used for
+    /// "what a Claude Code session changed". Empty list -> empty diff.
+    static func workingDiff(path: String, files: [String]) async -> String? {
+        guard !files.isEmpty else { return "" }
+        return await ShellRunner.run("/usr/bin/git",
+            args: ["-c", "core.quotepath=false", "diff", "HEAD", "--"] + files,
+            cwd: path, timeout: 20)
+    }
+
+    // MARK: - GitHub PRs (via gh)
+
+    private struct GHAuthor: Decodable { let login: String? }
+    private struct GHPR: Decodable {
+        let number: Int; let title: String; let state: String
+        let author: GHAuthor?; let headRefName: String?
+    }
+
+    /// List PRs (open + merged/closed) via `gh`. Returns [] if gh is missing/unauthed.
+    static func pullRequests(path: String) async -> [PRSummary] {
+        let cmd = "gh pr list --state all --limit 50 --json number,title,state,author,headRefName"
+        guard let raw = await ShellRunner.run("/bin/zsh", args: ["-lc", cmd], cwd: path, timeout: 25),
+              let data = raw.data(using: .utf8),
+              let prs = try? JSONDecoder().decode([GHPR].self, from: data) else { return [] }
+        return prs.map {
+            PRSummary(number: $0.number, title: $0.title, state: $0.state,
+                      author: $0.author?.login ?? "?", headRefName: $0.headRefName ?? "")
+        }
+    }
+
+    static func prDiff(path: String, number: Int) async -> String? {
+        await ShellRunner.run("/bin/zsh", args: ["-lc", "gh pr diff \(number)"], cwd: path, timeout: 30)
+    }
+
     /// Raw unified diff for one file from the requested source. `untracked` files
     /// have no tracked diff, so use --no-index against /dev/null to show them as added.
     static func fileDiff(path: String, file: String, source: FileDiffSource,

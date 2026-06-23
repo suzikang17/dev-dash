@@ -23,3 +23,12 @@ enum FileDiffSource: Hashable {
     case staged
     case commit(String)
 }
+
+struct PRSummary: Identifiable, Hashable {
+    let number: Int
+    let title: String
+    let state: String          // OPEN / MERGED / CLOSED
+    let author: String
+    let headRefName: String
+    var id: Int { number }
+}

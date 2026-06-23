@@ -5,22 +5,40 @@ import DevDashCore
 struct ChangesTabView: View {
     @EnvironmentObject var store: DashboardStore
 
+    enum ViewMode: String, CaseIterable, Identifiable {
+        case changes, prs, sessions
+        var id: String { rawValue }
+        var label: String {
+            switch self { case .changes: return "Changes"; case .prs: return "PRs"; case .sessions: return "Sessions" }
+        }
+    }
+    @State private var viewMode: ViewMode = .changes
+
     @State private var unstaged: [ChangedFile] = []
     @State private var staged: [ChangedFile] = []
     @State private var commits: [GitCommit] = []
+    @State private var prs: [PRSummary] = []
+    @State private var sessions: [SessionDigest] = []
+    @State private var loadingList = false
 
     // Working-tree single-file selection
     @State private var selection: DiffSelection? = nil
     @State private var diff: FileDiff? = nil
     @State private var loadingDiff = false
 
-    // Commit detail (stacked all-files view)
-    @State private var selectedCommit: GitCommit? = nil
-    @State private var commitSections: [FileDiffSection] = []
-    @State private var loadingCommit = false
+    // Stacked all-files view (commit / PR / session)
+    @State private var stacked: StackedSelection? = nil
+    @State private var stackedSections: [FileDiffSection] = []
+    @State private var loadingStacked = false
 
     @State private var revertTarget: ChangedFile? = nil
     @State private var errorMessage: String? = nil
+
+    struct StackedSelection: Equatable {
+        let key: String
+        let title: String
+        let subtitle: String
+    }
 
     // Persisted, resizable sidebar width (sane default; clamped on drag).
     @AppStorage("devdash.changesSidebarWidth") private var sidebarWidth: Double = 300
@@ -39,12 +57,21 @@ struct ChangesTabView: View {
     enum NavItem: Equatable {
         case file(path: String, source: FileDiffSource, untracked: Bool, name: String)
         case commit(GitCommit)
+        case pr(PRSummary)
+        case session(SessionDigest)
     }
 
     private var navItems: [NavItem] {
-        unstaged.map { .file(path: $0.path, source: .unstaged, untracked: $0.isUntracked, name: $0.name) }
-        + staged.map { .file(path: $0.path, source: .staged, untracked: $0.isUntracked, name: $0.name) }
-        + commits.map { .commit($0) }
+        switch viewMode {
+        case .changes:
+            return unstaged.map { .file(path: $0.path, source: .unstaged, untracked: $0.isUntracked, name: $0.name) }
+                + staged.map { .file(path: $0.path, source: .staged, untracked: $0.isUntracked, name: $0.name) }
+                + commits.map { .commit($0) }
+        case .prs:
+            return prs.map { .pr($0) }
+        case .sessions:
+            return sessions.map { .session($0) }
+        }
     }
 
     struct DiffSelection: Equatable {
@@ -181,8 +208,8 @@ struct ChangesTabView: View {
         if press.characters == "h" { focus = .sidebar; pendingG = false; return .handled }
 
         let ctrl = press.modifiers.contains(.control)
-        if selectedCommit != nil {
-            let count = commitSections.count
+        if stacked != nil {
+            let count = stackedSections.count
             guard count > 0 else { return .handled }
             if ctrl, press.key.character == "d" { moveSection(1); return .handled }
             if ctrl, press.key.character == "u" { moveSection(-1); return .handled }
@@ -227,13 +254,55 @@ struct ChangesTabView: View {
     private func activate(_ item: NavItem, _ projectPath: String) {
         switch item {
         case let .file(path, source, untracked, _):
-            selectedCommit = nil
+            stacked = nil
             diffRowID = nil; diffLineCursor = 0
             selection = DiffSelection(file: path, source: source, untracked: untracked)
             Task { await loadDiff(projectPath) }
         case let .commit(c):
-            commitSectionID = nil; sectionCursor = 0
-            Task { await selectCommit(c, projectPath: projectPath) }
+            loadStacked(key: "commit:\(c.sha)", title: c.subject,
+                        subtitle: "\(c.shortSha) · \(c.author) · \(c.relativeDate)", projectPath: projectPath) {
+                let raw = await GitDiffScanner.commitFullDiff(path: projectPath, sha: c.sha) ?? ""
+                return UnifiedDiffParser.parseMultiFile(raw)
+            }
+        case let .pr(pr):
+            loadStacked(key: "pr:\(pr.number)", title: "#\(pr.number) \(pr.title)",
+                        subtitle: "\(pr.state.lowercased()) · \(pr.author) · \(pr.headRefName)", projectPath: projectPath) {
+                let raw = await GitDiffScanner.prDiff(path: projectPath, number: pr.number) ?? ""
+                return UnifiedDiffParser.parseMultiFile(raw)
+            }
+        case let .session(s):
+            let written = s.filesTouched.filter { $0.writes > 0 }
+                .map { rel($0.path, projectPath) }
+            loadStacked(key: "session:\(s.id)", title: s.title ?? (s.firstUserMessage ?? "Session"),
+                        subtitle: "\(written.count) file\(written.count == 1 ? "" : "s") written · \(s.id.prefix(8))",
+                        projectPath: projectPath) {
+                let raw = await GitDiffScanner.workingDiff(path: projectPath, files: written) ?? ""
+                return UnifiedDiffParser.parseMultiFile(raw)
+            }
+        }
+    }
+
+    /// Repo-relative path (strip a leading projectPath prefix if present).
+    private func rel(_ path: String, _ projectPath: String) -> String {
+        if path.hasPrefix(projectPath + "/") { return String(path.dropFirst(projectPath.count + 1)) }
+        return path
+    }
+
+    private func loadStacked(key: String, title: String, subtitle: String, projectPath: String,
+                             _ load: @escaping () async -> [FileDiffSection]) {
+        selection = nil
+        diff = nil
+        commitSectionID = nil; sectionCursor = 0
+        stacked = StackedSelection(key: key, title: title, subtitle: subtitle)
+        stackedSections = []
+        loadingStacked = true
+        Task {
+            let sections = await load()
+            await MainActor.run {
+                guard stacked?.key == key else { return }   // user moved on
+                stackedSections = sections
+                loadingStacked = false
+            }
         }
     }
 
@@ -247,25 +316,150 @@ struct ChangesTabView: View {
 
     private func moveSection(_ delta: Int) { setSection(sectionCursor + delta) }
     private func setSection(_ idx: Int) {
-        guard !commitSections.isEmpty else { return }
-        sectionCursor = max(0, min(commitSections.count - 1, idx))
-        commitSectionID = commitSections[sectionCursor].id
+        guard !stackedSections.isEmpty else { return }
+        sectionCursor = max(0, min(stackedSections.count - 1, idx))
+        commitSectionID = stackedSections[sectionCursor].id
     }
 
     // MARK: Sidebar
 
     @ViewBuilder
     private func sidebar(projectPath: String) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                fileGroup(title: "Unstaged", files: unstaged, projectPath: projectPath,
-                          source: .unstaged, isStaged: false)
-                fileGroup(title: "Staged", files: staged, projectPath: projectPath,
-                          source: .staged, isStaged: true)
-                Divider().padding(.vertical, DSSpace.xs)
-                historyGroup(projectPath: projectPath)
+        VStack(spacing: 0) {
+            Picker("", selection: $viewMode) {
+                ForEach(ViewMode.allCases) { Text($0.label).tag($0) }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(DSSpace.sm)
+            .onChange(of: viewMode) { _, newMode in
+                clearSelection()
+                cursor = 0
+                Task { await loadList(for: newMode, projectPath: projectPath) }
+            }
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    switch viewMode {
+                    case .changes:
+                        fileGroup(title: "Unstaged", files: unstaged, projectPath: projectPath,
+                                  source: .unstaged, isStaged: false)
+                        fileGroup(title: "Staged", files: staged, projectPath: projectPath,
+                                  source: .staged, isStaged: true)
+                        Divider().padding(.vertical, DSSpace.xs)
+                        historyGroup(projectPath: projectPath)
+                    case .prs:
+                        prsGroup(projectPath: projectPath)
+                    case .sessions:
+                        sessionsGroup(projectPath: projectPath)
+                    }
+                }
+                .padding(DSSpace.sm)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func prsGroup(projectPath: String) -> some View {
+        if loadingList {
+            ProgressView().padding(DSSpace.md).frame(maxWidth: .infinity)
+        } else if prs.isEmpty {
+            Text("No PRs (or gh not authenticated)")
+                .font(DSFont.label).foregroundColor(.secondary).padding(DSSpace.md)
+        } else {
+            ForEach(prs) { pr in
+                let isSel = stacked?.key == "pr:\(pr.number)"
+                HStack(spacing: 6) {
+                    Text("#\(pr.number)").font(DSFont.monoDigits(.caption2)).foregroundColor(prStateColor(pr.state))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(pr.title).font(DSFont.label).lineLimit(1).truncationMode(.tail)
+                        Text("\(pr.state.lowercased()) · \(pr.author)")
+                            .font(DSFont.micro).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 3).padding(.horizontal, 6)
+                .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    focus = .sidebar
+                    if let i = navItems.firstIndex(of: .pr(pr)) { cursor = i }
+                    activate(.pr(pr), projectPath)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionsGroup(projectPath: String) -> some View {
+        if sessions.isEmpty {
+            Text("No Claude Code sessions for this project")
+                .font(DSFont.label).foregroundColor(.secondary).padding(DSSpace.md)
+        } else {
+            ForEach(sessions) { s in
+                let isSel = stacked?.key == "session:\(s.id)"
+                let written = s.filesTouched.filter { $0.writes > 0 }.count
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").font(.system(size: 10)).foregroundColor(DSColor.assistant)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(s.title ?? s.firstUserMessage ?? "Session")
+                            .font(DSFont.label).lineLimit(1).truncationMode(.tail)
+                        Text("\(written) changed · \(relTime(s.startedAt))")
+                            .font(DSFont.micro).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 3).padding(.horizontal, 6)
+                .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    focus = .sidebar
+                    if let i = navItems.firstIndex(of: .session(s)) { cursor = i }
+                    activate(.session(s), projectPath)
+                }
+            }
+        }
+    }
+
+    private func prStateColor(_ s: String) -> Color {
+        switch s.uppercased() {
+        case "OPEN": return DSColor.success
+        case "MERGED": return DSColor.assistant
+        case "CLOSED": return DSColor.danger
+        default: return .secondary
+        }
+    }
+
+    private func relTime(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func clearSelection() {
+        selection = nil; diff = nil
+        stacked = nil; stackedSections = []
+    }
+
+    private func loadList(for mode: ViewMode, projectPath: String) async {
+        switch mode {
+        case .changes:
+            await refresh(projectPath)
+        case .prs:
+            await MainActor.run { loadingList = true }
+            let list = await GitDiffScanner.pullRequests(path: projectPath)
+            await MainActor.run { prs = list; loadingList = false; cursor = 0 }
+        case .sessions:
+            store.refreshSessionDigests()
+            await MainActor.run {
+                sessions = store.sessionDigests.values
+                    .filter { $0.projectPath == projectPath }
+                    .sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+                cursor = 0
+            }
         }
     }
 
@@ -326,7 +520,7 @@ struct ChangesTabView: View {
     private func historyGroup(projectPath: String) -> some View {
         SectionHeader("History")
         ForEach(commits) { commit in
-            let isSel = selectedCommit?.sha == commit.sha
+            let isSel = stacked?.key == "commit:\(commit.sha)"
             HStack(spacing: 6) {
                 Text(commit.shortSha).font(DSFont.mono(.caption2)).foregroundColor(DSColor.gitMeta)
                 Text(commit.subject).font(DSFont.label).lineLimit(1).truncationMode(.tail)
@@ -373,12 +567,12 @@ struct ChangesTabView: View {
 
     @ViewBuilder
     private var diffPane: some View {
-        if loadingCommit || loadingDiff {
+        if loadingStacked || loadingDiff {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let selectedCommit {
-            CommitDetailView(commit: selectedCommit, sections: commitSections,
-                             scrollID: $commitSectionID)
-                .id(selectedCommit.sha)
+        } else if let stacked {
+            StackedDiffView(title: stacked.title, subtitle: stacked.subtitle,
+                            sections: stackedSections, scrollID: $commitSectionID)
+                .id(stacked.key)
         } else if let diff, let selection {
             VStack(spacing: 0) {
                 HStack {
@@ -426,24 +620,6 @@ struct ChangesTabView: View {
         }
     }
 
-    private func selectCommit(_ commit: GitCommit, projectPath: String) async {
-        await MainActor.run {
-            selection = nil
-            diff = nil
-            selectedCommit = commit
-            commitSections = []
-            loadingCommit = true
-        }
-        let raw = await GitDiffScanner.commitFullDiff(path: projectPath, sha: commit.sha) ?? ""
-        let sections = UnifiedDiffParser.parseMultiFile(raw)
-        await MainActor.run {
-            // Ignore if the user moved on to another commit while this loaded.
-            guard selectedCommit?.sha == commit.sha else { return }
-            commitSections = sections
-            loadingCommit = false
-        }
-    }
-
     private func doRevert(_ projectPath: String, _ file: ChangedFile) async {
         await MainActor.run { revertTarget = nil }
         await doMutation(projectPath, file, verb: "discard changes to") {
@@ -462,10 +638,11 @@ struct ChangesTabView: View {
     }
 }
 
-// MARK: - Commit detail (stacked all-files diff in one scroll)
+// MARK: - Stacked all-files diff in one scroll (commits, PRs, sessions)
 
-private struct CommitDetailView: View {
-    let commit: GitCommit
+private struct StackedDiffView: View {
+    let title: String
+    let subtitle: String
     let sections: [FileDiffSection]
     var scrollID: Binding<String?> = .constant(nil)
 
@@ -501,11 +678,9 @@ private struct CommitDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DSSpace.xs) {
-            Text(commit.subject).font(DSFont.title)
+            Text(title).font(DSFont.title)
             HStack(spacing: DSSpace.sm) {
-                Text(commit.shortSha).font(DSFont.mono(.caption2)).foregroundColor(DSColor.gitMeta)
-                Text("\(commit.author) · \(commit.relativeDate)")
-                    .font(DSFont.micro).foregroundColor(.secondary)
+                Text(subtitle).font(DSFont.micro).foregroundColor(.secondary).lineLimit(1)
                 Text("\(sections.count) file\(sections.count == 1 ? "" : "s")")
                     .font(DSFont.micro).foregroundColor(.secondary)
                 Text("+\(totalAdds)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.success)
