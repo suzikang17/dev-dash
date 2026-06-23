@@ -22,6 +22,10 @@ struct ChangesTabView: View {
     @State private var revertTarget: ChangedFile? = nil
     @State private var errorMessage: String? = nil
 
+    // Persisted, resizable sidebar width (sane default; clamped on drag).
+    @AppStorage("devdash.changesSidebarWidth") private var sidebarWidth: Double = 300
+    @State private var dragStartWidth: Double? = nil
+
     struct DiffSelection: Equatable {
         let file: String
         let source: FileDiffSource
@@ -32,9 +36,9 @@ struct ChangesTabView: View {
         if let project = store.project(for: store.selection) {
             HStack(spacing: 0) {
                 sidebar(projectPath: project.path)
-                    .frame(width: 300)
+                    .frame(width: sidebarWidth)
                     .background(DSColor.cardBg)
-                Divider()
+                resizeHandle
                 diffPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
@@ -78,6 +82,28 @@ struct ChangesTabView: View {
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: Resizable divider
+
+    private var resizeHandle: some View {
+        Rectangle()
+            .fill(DSColor.hairline)
+            .frame(width: 1)
+            .padding(.horizontal, 3)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        let start = dragStartWidth ?? sidebarWidth
+                        if dragStartWidth == nil { dragStartWidth = sidebarWidth }
+                        sidebarWidth = min(500, max(200, start + value.translation.width))
+                    }
+                    .onEnded { _ in dragStartWidth = nil }
+            )
     }
 
     // MARK: Sidebar
