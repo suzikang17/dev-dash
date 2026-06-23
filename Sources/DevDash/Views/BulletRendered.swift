@@ -16,22 +16,17 @@ struct BulletRendered: View {
     private static let linkScheme = "devdash-lore:"
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            Button(action: onEdit) {
-                Rectangle().fill(Color.clear).frame(maxWidth: .infinity, minHeight: 18)
-            }
-            .buttonStyle(.plain)
-
-            rendered
-                .font(DSFont.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.openURL, OpenURLAction { url in
-                    guard url.absoluteString.hasPrefix(Self.linkScheme) else { return .systemAction }
-                    let title = String(url.absoluteString.dropFirst(Self.linkScheme.count)).removingPercentEncoding ?? ""
-                    if !title.isEmpty { onOpenLink(title) }
-                    return .handled
-                })
-        }
+        rendered
+            .font(DSFont.body)
+            .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { onEdit() }            // tap anywhere on the bullet → edit
+            .environment(\.openURL, OpenURLAction { url in   // tapping a link glyph → open
+                guard url.absoluteString.hasPrefix(Self.linkScheme) else { return .systemAction }
+                let title = String(url.absoluteString.dropFirst(Self.linkScheme.count)).removingPercentEncoding ?? ""
+                if !title.isEmpty { onOpenLink(title) }
+                return .handled
+            })
     }
 
     // Inline markdown handled in rendered bullets, in priority order (earliest match
