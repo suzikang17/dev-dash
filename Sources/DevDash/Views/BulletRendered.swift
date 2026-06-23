@@ -19,14 +19,19 @@ struct BulletRendered: View {
         rendered
             .font(DSFont.body)
             .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture { onEdit() }            // tap anywhere on the bullet → edit
-            .environment(\.openURL, OpenURLAction { url in   // tapping a link glyph → open
+            // Link glyphs (on top) consume their tap → open. Everything else is
+            // non-interactive text, so taps pass to the clear edit layer behind → edit.
+            .environment(\.openURL, OpenURLAction { url in
                 guard url.absoluteString.hasPrefix(Self.linkScheme) else { return .systemAction }
                 let title = String(url.absoluteString.dropFirst(Self.linkScheme.count)).removingPercentEncoding ?? ""
                 if !title.isEmpty { onOpenLink(title) }
                 return .handled
             })
+            .background(
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { onEdit() }
+            )
     }
 
     // Inline markdown handled in rendered bullets, in priority order (earliest match
