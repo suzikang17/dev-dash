@@ -311,6 +311,10 @@ private struct CommitDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .onAppear {
+            // Big files start collapsed so opening a large commit stays snappy.
+            collapsed = Set(sections.filter { $0.diff.rows.count > 600 }.map(\.path))
+        }
     }
 
     private var header: some View {
@@ -376,7 +380,8 @@ private struct CommitDetailView: View {
             .background(DSColor.cardBg.opacity(0.5))
 
             if !isCollapsed {
-                SideBySideDiffView(diff: section.diff, language: language(for: section.path))
+                DiffRowsView(diff: section.diff, language: language(for: section.path))
+                    .padding(.vertical, DSSpace.xs)
             }
             Divider()
         }

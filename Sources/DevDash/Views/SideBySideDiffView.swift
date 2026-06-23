@@ -2,31 +2,43 @@ import SwiftUI
 import AppKit
 import DevDashCore
 
+/// Single-file diff: scrolls on its own. For embedding many diffs in one shared
+/// scroll (e.g. a whole commit), use `DiffRowsView` directly instead.
 struct SideBySideDiffView: View {
     let diff: FileDiff
     let language: SyntaxHighlighter.Language
 
     var body: some View {
-        Group {
-            if diff.isBinary {
-                placeholder("Binary file — no text diff")
-            } else if diff.tooLarge {
-                placeholder("Diff too large to render")
-            } else if diff.rows.isEmpty {
-                placeholder("No changes")
-            } else {
-                ScrollView(.vertical) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(diff.rows.enumerated()), id: \.offset) { _, row in
-                            DiffRowView(row: row, language: language)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, DSSpace.xs)
+        ScrollView(.vertical) {
+            DiffRowsView(diff: diff, language: language)
+                .padding(.vertical, DSSpace.xs)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.textBackgroundColor))
+    }
+}
+
+/// The diff rows themselves, with NO enclosing ScrollView. Lazily renders rows so
+/// it can be embedded inside an outer ScrollView (commit detail) without nesting
+/// scroll views, and large diffs only build rows as they scroll into view.
+struct DiffRowsView: View {
+    let diff: FileDiff
+    let language: SyntaxHighlighter.Language
+
+    var body: some View {
+        if diff.isBinary {
+            placeholder("Binary file — no text diff")
+        } else if diff.tooLarge {
+            placeholder("Diff too large to render")
+        } else if diff.rows.isEmpty {
+            placeholder("No changes")
+        } else {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(diff.rows.enumerated()), id: \.offset) { _, row in
+                    DiffRowView(row: row, language: language)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.textBackgroundColor))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -34,7 +46,8 @@ struct SideBySideDiffView: View {
         Text(text)
             .font(DSFont.label)
             .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DSSpace.md)
     }
 }
 
