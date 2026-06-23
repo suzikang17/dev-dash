@@ -22,8 +22,25 @@ struct BulletRendered: View {
     }
 
     var body: some View {
-        HStack(spacing: DSSpace.xs) {
-            // Clicking the bullet always enters edit mode (reliable, no link-eats-tap).
+        if let title = pureLinkTitle {
+            // A bullet that's just a [[page]] link → clicking it opens the page
+            // (the natural action for a link); a small ✎ edits the bullet instead.
+            HStack(spacing: DSSpace.xs) {
+                Button { onOpenLink(title) } label: {
+                    rendered
+                        .font(DSFont.body)
+                        .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Button(action: onEdit) {
+                    Image(systemName: "pencil").font(.caption2).foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Edit bullet")
+            }
+        } else {
+            // Normal bullet → clicking enters edit mode.
             Button(action: onEdit) {
                 rendered
                     .font(DSFont.body)
@@ -31,17 +48,6 @@ struct BulletRendered: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            // A pure [[page]] backlink gets an explicit open affordance.
-            if let title = pureLinkTitle {
-                Button { onOpenLink(title) } label: {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Open page")
-            }
         }
     }
 
