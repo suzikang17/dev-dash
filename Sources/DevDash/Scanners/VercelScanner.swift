@@ -48,13 +48,34 @@ enum VercelScanner {
 
     static var isAuthenticated: Bool { authToken() != nil }
 
-    /// projectId + orgId from `.vercel/project.json`. nil if the project isn't linked.
+    /// projectId + orgId for a linked project. Handles both link formats:
+    /// `.vercel/project.json` (single-project `vercel link`) and
+    /// `.vercel/repo.json` (repo-level `vercel link --repo`, incl. monorepos).
     static func projectLink(_ projectPath: String) -> VercelProjectLink? {
-        let path = projectPath + "/.vercel/project.json"
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let projectId = obj["projectId"] as? String, !projectId.isEmpty else { return nil }
-        return VercelProjectLink(projectId: projectId, orgId: obj["orgId"] as? String ?? "")
+        let dir = projectPath + "/.vercel"
+
+        // Single-project link.
+        if let obj = readJSONObject(dir + "/project.json"),
+           let projectId = obj["projectId"] as? String, !projectId.isEmpty {
+            return VercelProjectLink(projectId: projectId, orgId: obj["orgId"] as? String ?? "")
+        }
+
+        // Repo-level link: pick the project mapped to the repo root (directory
+        // "."), else the first. orgId lives per-project, falling back to top level.
+        if let obj = readJSONObject(dir + "/repo.json"),
+           let projects = obj["projects"] as? [[String: Any]], !projects.isEmpty {
+            let chosen = projects.first { ($0["directory"] as? String) == "." } ?? projects[0]
+            if let id = chosen["id"] as? String, !id.isEmpty {
+                let org = (chosen["orgId"] as? String) ?? (obj["orgId"] as? String) ?? ""
+                return VercelProjectLink(projectId: id, orgId: org)
+            }
+        }
+        return nil
+    }
+
+    private static func readJSONObject(_ path: String) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
     static func isLinked(_ projectPath: String) -> Bool { projectLink(projectPath) != nil }

@@ -449,7 +449,7 @@ struct ChangesTabView: View {
                     case .files:
                         fileTreeGroup(projectPath: projectPath)
                     case .deploys:
-                        deploysGroup()
+                        deploysGroup(projectPath: projectPath)
                     }
                 }
                 .padding(DSSpace.sm)
@@ -974,7 +974,20 @@ struct ChangesTabView: View {
     // MARK: Deploys (Vercel) pane
 
     @ViewBuilder
-    private func deploysGroup() -> some View {
+    private func deploysGroup(projectPath: String) -> some View {
+        HStack(spacing: 4) {
+            Text("Deployments").font(DSFont.micro).foregroundColor(.secondary)
+            Spacer()
+            if loadingList { ProgressView().controlSize(.mini) }
+            Button { Task { await loadDeployments(projectPath) } } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.borderless).controlSize(.small)
+            .disabled(loadingList)
+            .help("Refresh deployments")
+            .accessibilityLabel("Refresh deployments")
+        }
+        .padding(.horizontal, 6).padding(.vertical, 2)
         switch deploysResult {
         case nil:
             ProgressView().padding(DSSpace.md).frame(maxWidth: .infinity)
