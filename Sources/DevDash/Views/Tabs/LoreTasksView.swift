@@ -220,7 +220,8 @@ struct LoreTasksView: View {
                         backlinks: backlinks(for: task),
                         onStatusChange: { setStatus(task, to: $0) },
                         onFieldChange: { setField(task, key: $0, value: $1) },
-                        onBodyChange: { setBody(task, body: $0) }
+                        onBodyChange: { setBody(task, body: $0) },
+                        onDelete: { deleteTask(task) }
                     )
                     .id(task.file)   // stable per task (id is a fresh UUID each reload); avoids losing focus on autosave
                 } else {
@@ -750,6 +751,12 @@ struct LoreTasksView: View {
         graph?.backlinks["tasks/\(task.file)"] ?? []
     }
 
+    private func deleteTask(_ task: LoreTaskItem) {
+        try? FileManager.default.removeItem(atPath: task.path)
+        if selected?.file == task.file { selected = nil }
+        reload()
+    }
+
     private func setStatus(_ task: LoreTaskItem, to newStatus: String) {
         guard newStatus != task.status else { return }
         guard let raw = try? String(contentsOfFile: task.path, encoding: .utf8) else { return }
@@ -984,7 +991,9 @@ private struct LoreTaskDetailPane: View {
     let onStatusChange: (String) -> Void
     let onFieldChange: (String, String) -> Void
     var onBodyChange: (String) -> Void = { _ in }
+    var onDelete: () -> Void = {}
 
+    @State private var showDeleteConfirm = false
     @State private var nodes: [DayNode] = []
     @State private var loadedBody = ""
     @State private var saveWork: DispatchWorkItem? = nil
@@ -1045,6 +1054,17 @@ private struct LoreTaskDetailPane: View {
                         .labelsHidden().fixedSize()
                     }
                     Spacer()
+                    Button(role: .destructive) { showDeleteConfirm = true } label: {
+                        Image(systemName: "trash").foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete task")
+                    .confirmationDialog("Delete this task?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                        Button("Delete task", role: .destructive) { onDelete() }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This removes the task file. This can't be undone.")
+                    }
                 }
 
                 if !task.notes.isEmpty {

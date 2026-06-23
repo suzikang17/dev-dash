@@ -65,7 +65,12 @@ struct DailyTabView: View {
                             path: ref.path,
                             onClose: { openDoc = nil },
                             projectPath: project.path,
-                            onOpenDoc: { openDoc = OpenDocRef(path: $0) }
+                            onOpenDoc: { openDoc = OpenDocRef(path: $0) },
+                            onDelete: {
+                                try? FileManager.default.removeItem(atPath: ref.path)
+                                openDoc = nil
+                                reload(project: project)
+                            }
                         )
                         .id(ref.path)   // rebuild when navigating to a different doc
                     } else if let entry = selectedEntry {
@@ -1015,7 +1020,9 @@ private struct BacklinkDocPanel: View {
     @State private var frontmatter: String = ""
     let projectPath: String
     var onOpenDoc: (String) -> Void = { _ in }
+    var onDelete: () -> Void = {}
 
+    @State private var showDeleteConfirm = false
     @State private var nodes: [DayNode] = []
     @State private var loadedPath: String? = nil
     @State private var loadedBody: String = ""
@@ -1034,6 +1041,17 @@ private struct BacklinkDocPanel: View {
                         .font(.caption).foregroundColor(.secondary)
                 }
                 Spacer()
+                Button(role: .destructive) { showDeleteConfirm = true } label: {
+                    Image(systemName: "trash").foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Delete page")
+                .confirmationDialog("Delete this page?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                    Button("Delete page", role: .destructive) { onDelete() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This removes the file. This can't be undone.")
+                }
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                 }
