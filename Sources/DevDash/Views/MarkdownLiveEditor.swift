@@ -89,6 +89,8 @@ struct MarkdownLiveEditor: NSViewRepresentable {
             storage.setAttributes([.font: Self.base, .foregroundColor: NSColor.labelColor], range: full)
 
             styleHeadings(storage, s, active: active)
+            styleLists(storage, s)
+            styleBlockquote(storage, s, active: active)
             styleInline(storage, s, active: active,
                         pattern: "`([^`]+?)`", marker: 1,
                         content: [.font: Self.mono, .foregroundColor: NSColor.systemPink])
@@ -96,6 +98,7 @@ struct MarkdownLiveEditor: NSViewRepresentable {
                         pattern: "\\[\\[([^\\]]+?)\\]\\]", marker: 2,
                         content: [.foregroundColor: NSColor.controlAccentColor,
                                   .underlineStyle: NSUnderlineStyle.single.rawValue])
+            styleLinks(storage, s, active: active)
             styleWrapped(storage, s, active: active, delimiter: "**", trait: .bold)
             styleWrapped(storage, s, active: active, delimiter: "__", trait: .bold)
             styleWrapped(storage, s, active: active, delimiter: "*", trait: .italic)
@@ -114,6 +117,46 @@ struct MarkdownLiveEditor: NSViewRepresentable {
                 let size: CGFloat = [0: 22, 1: 22, 2: 19, 3: 17, 4: 15, 5: 14, 6: 14][min(level, 6)] ?? 15
                 storage.addAttributes([.font: NSFont.boldSystemFont(ofSize: size)], range: lineRange)
                 hideOrReveal(storage, marker: m.range, active: active, dimColor: .tertiaryLabelColor)
+            }
+        }
+
+        /// `[text](url)` links: accent the visible text, hide `[`, `](url)` off-line.
+        private func styleLinks(_ storage: NSTextStorage, _ s: NSString, active: NSRange) {
+            let re = try! NSRegularExpression(pattern: "\\[([^\\]\\n]+?)\\]\\(([^)\\n]+?)\\)")
+            re.enumerateMatches(in: s as String, range: NSRange(location: 0, length: s.length)) { m, _, _ in
+                guard let m else { return }
+                let text = m.range(at: 1)
+                storage.addAttributes([.foregroundColor: NSColor.controlAccentColor,
+                                       .underlineStyle: NSUnderlineStyle.single.rawValue], range: text)
+                let lead = NSRange(location: m.range.location, length: 1)                       // [
+                let trailLoc = text.location + text.length                                       // ](url)
+                let trail = NSRange(location: trailLoc, length: NSMaxRange(m.range) - trailLoc)
+                hideOrReveal(storage, marker: lead, active: active)
+                hideOrReveal(storage, marker: trail, active: active)
+            }
+        }
+
+        /// `>` blockquotes: italic + secondary content, hide the `> ` marker off-line.
+        private func styleBlockquote(_ storage: NSTextStorage, _ s: NSString, active: NSRange) {
+            let re = try! NSRegularExpression(pattern: "^(>\\s?)(.*)$", options: [.anchorsMatchLines])
+            re.enumerateMatches(in: s as String, range: NSRange(location: 0, length: s.length)) { m, _, _ in
+                guard let m else { return }
+                storage.addAttributes([.foregroundColor: NSColor.secondaryLabelColor], range: m.range(at: 2))
+                applyTrait(storage, .italic, range: m.range(at: 2))
+                hideOrReveal(storage, marker: m.range(at: 1), active: active)
+            }
+        }
+
+        /// List items: dim the `-`/`*`/`1.` marker and add a hanging indent so wrapped
+        /// lines align under the text. The marker stays visible (it reads as a bullet).
+        private func styleLists(_ storage: NSTextStorage, _ s: NSString) {
+            let re = try! NSRegularExpression(pattern: "^([ \\t]*)([-*+]|\\d+\\.)([ \\t]+)", options: [.anchorsMatchLines])
+            re.enumerateMatches(in: s as String, range: NSRange(location: 0, length: s.length)) { m, _, _ in
+                guard let m else { return }
+                storage.addAttributes([.foregroundColor: NSColor.tertiaryLabelColor], range: m.range(at: 2))
+                let para = NSMutableParagraphStyle()
+                para.headIndent = 16
+                storage.addAttributes([.paragraphStyle: para], range: s.lineRange(for: m.range))
             }
         }
 

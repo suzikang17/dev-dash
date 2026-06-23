@@ -34,23 +34,53 @@ struct BulletRendered: View {
         }
     }
 
-    private var rendered: Text {
-        let ns = text as NSString
-        let matches = (try? NSRegularExpression(pattern: "\\[\\[(.+?)\\]\\]"))?
-            .matches(in: text, range: NSRange(location: 0, length: ns.length)) ?? []
-        if matches.isEmpty { return Text(text.isEmpty ? " " : text) }
+    // Inline markdown handled in rendered bullets, in priority order (earliest match
+    // wins; ties break by this order). Kept simple/non-nested for V1.
+    private static let patterns: [(re: NSRegularExpression, kind: Int)] = [
+        (try! NSRegularExpression(pattern: "\\[\\[([^\\]]+?)\\]\\]"), 0),               // [[wikilink]]
+        (try! NSRegularExpression(pattern: "\\[([^\\]\\n]+?)\\]\\(([^)\\n]+?)\\)"), 1), // [text](url)
+        (try! NSRegularExpression(pattern: "`([^`]+?)`"), 2),                            // `code`
+        (try! NSRegularExpression(pattern: "(\\*\\*|__)([^\\n]+?)\\1"), 3),              // **bold**
+        (try! NSRegularExpression(pattern: "(?<![*_])([*_])([^\\n]+?)\\1"), 4),          // *italic*
+    ]
 
+    private var rendered: Text {
+        if text.isEmpty { return Text(" ") }
+        let ns = text as NSString
         var result = Text("")
-        var loc = 0
-        for m in matches {
-            if m.range.location > loc {
-                result = result + Text(ns.substring(with: NSRange(location: loc, length: m.range.location - loc)))
+        var idx = 0
+        while idx < ns.length {
+            let search = NSRange(location: idx, length: ns.length - idx)
+            var best: NSTextCheckingResult?
+            var bestKind = -1
+            for (re, kind) in Self.patterns {
+                guard let m = re.firstMatch(in: text, range: search) else { continue }
+                if best == nil || m.range.location < best!.range.location {
+                    best = m; bestKind = kind
+                }
             }
-            result = result + link(ns.substring(with: m.range(at: 1)))
-            loc = m.range.location + m.range.length
+            guard let m = best else {
+                result = result + Text(ns.substring(from: idx)); break
+            }
+            if m.range.location > idx {
+                result = result + Text(ns.substring(with: NSRange(location: idx, length: m.range.location - idx)))
+            }
+            result = result + styled(m, kind: bestKind, ns: ns)
+            idx = m.range.location + m.range.length
         }
-        if loc < ns.length { result = result + Text(ns.substring(from: loc)) }
         return result
+    }
+
+    private func styled(_ m: NSTextCheckingResult, kind: Int, ns: NSString) -> Text {
+        func grp(_ i: Int) -> String { m.range(at: i).location == NSNotFound ? "" : ns.substring(with: m.range(at: i)) }
+        switch kind {
+        case 0: return link(grp(1))                                                   // wikilink (clickable)
+        case 1: return Text(grp(1)).foregroundColor(.accentColor)                     // [text](url)
+        case 2: return Text(grp(1)).font(.system(.body, design: .monospaced)).foregroundColor(.pink)
+        case 3: return Text(grp(2)).bold()
+        case 4: return Text(grp(2)).italic()
+        default: return Text(ns.substring(with: m.range))
+        }
     }
 
     private func link(_ title: String) -> Text {
