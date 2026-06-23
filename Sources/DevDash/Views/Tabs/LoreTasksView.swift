@@ -81,6 +81,7 @@ struct LoreTasksView: View {
     @State private var viewMode: LoreViewMode = .kanban
     @State private var activeCommand: LoreCommandMode? = nil
     @State private var showNewTask = false
+    @State private var showListDeleteConfirm = false
     @State private var newTaskTitle = ""
     @FocusState private var listFocused: Bool
     @State private var ideas: [LoreIdeaItem] = []
@@ -188,6 +189,12 @@ struct LoreTasksView: View {
                 }
             }
             .frame(minWidth: 260, idealWidth: 320, maxWidth: 420)
+            .confirmationDialog("Delete this task?", isPresented: $showListDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete task", role: .destructive) { if let t = selected { deleteTask(t) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes the task file. This can't be undone.")
+            }
             .overlay(alignment: .center) {
                 if let cmd = activeCommand, selected != nil {
                     LoreCommandPalette(mode: cmd) { value in
@@ -561,6 +568,7 @@ struct LoreTasksView: View {
         if ch == "a" { guard selected != nil else { return .ignored }; activeCommand = .owner;    return .handled }
         if ch == "p" { guard selected != nil else { return .ignored }; activeCommand = .priority; return .handled }
         if ch == "c" { showNewTask = true; return .handled }
+        if key == .delete { guard selected != nil else { return .ignored }; showListDeleteConfirm = true; return .handled }
         return .ignored
     }
 
