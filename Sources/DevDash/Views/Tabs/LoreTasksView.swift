@@ -221,7 +221,7 @@ struct LoreTasksView: View {
                         onFieldChange: { setField(task, key: $0, value: $1) },
                         onBodyChange: { setBody(task, body: $0) }
                     )
-                    .id(task.id)   // fresh editor state per task
+                    .id(task.file)   // stable per task (id is a fresh UUID each reload); avoids losing focus on autosave
                 } else {
                     VStack(spacing: DSSpace.sm) {
                         Text("Select a task").font(.caption).foregroundColor(.secondary)
@@ -957,6 +957,8 @@ private struct LoreTaskDetailPane: View {
     @State private var nodes: [DayNode] = []
     @State private var loadedBody = ""
     @State private var saveWork: DispatchWorkItem? = nil
+    @State private var titleDraft = ""
+    @State private var titleSaveWork: DispatchWorkItem? = nil
 
     private let statuses   = ["open", "in_progress", "blocked", "done", "skipped"]
     private let owners     = ["none", "human", "ai"]
@@ -967,7 +969,11 @@ private struct LoreTaskDetailPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: DSSpace.sm) {
-                Text(task.title).font(.headline).lineLimit(3)
+                TextField("Task title", text: $titleDraft, axis: .vertical)
+                    .font(.headline)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...3)
+                    .onChange(of: titleDraft) { _, _ in scheduleTitleSave() }
 
                 HStack(spacing: DSSpace.lg) {
                     field("Status") {
@@ -1057,6 +1063,18 @@ private struct LoreTaskDetailPane: View {
         if parsed.isEmpty { parsed = [DayNode(text: "")] }   // ready to type immediately
         nodes = parsed
         loadedBody = DayOutline.serialize(parsed)             // baseline — opening must not write
+        titleDraft = task.title
+    }
+
+    private func scheduleTitleSave() {
+        let t = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, t != task.title else { return }
+        titleSaveWork?.cancel()
+        let item = DispatchWorkItem {
+            onFieldChange("title", "\"\(t.replacingOccurrences(of: "\"", with: "'"))\"")
+        }
+        titleSaveWork = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
     }
 
     private func scheduleBodySave() {
