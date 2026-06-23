@@ -39,9 +39,21 @@ enum GitDiffScanner {
             let f = line.components(separatedBy: "\u{1f}")
             guard f.count == 5 else { continue }
             commits.append(GitCommit(sha: f[0], shortSha: f[1], subject: f[2],
-                                     author: f[3], relativeDate: f[4]))
+                                     author: f[3], relativeDate: abbreviateRelative(f[4])))
         }
         return commits
+    }
+
+    /// Abbreviate git's `%cr` ("34 seconds ago" -> "34s ago", "3 minutes ago" -> "3m ago").
+    static func abbreviateRelative(_ s: String) -> String {
+        let abbr = ["second": "s", "minute": "m", "hour": "h",
+                    "day": "d", "week": "w", "month": "mo", "year": "y"]
+        let pattern = #"^(?:(\d+)|an?)\s+(second|minute|hour|day|week|month|year)s?\s+ago$"#
+        guard let rx = try? NSRegularExpression(pattern: pattern),
+              let m = rx.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+              let unitRange = Range(m.range(at: 2), in: s) else { return s }
+        let num = Range(m.range(at: 1), in: s).map { String(s[$0]) } ?? "1"
+        return "\(num)\(abbr[String(s[unitRange])] ?? "") ago"
     }
 
     /// Files changed in a single commit (vs its first parent).
