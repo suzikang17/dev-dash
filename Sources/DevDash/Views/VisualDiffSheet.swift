@@ -140,7 +140,7 @@ struct VisualDiffSheet: View {
 
             Button("View in Files") {
                 store.pendingFilePath = "\(result.runPath)/snapshot.png"
-                store.tabStore.detailTab = .files
+                store.tabStore.detailTab = .changes
                 dismiss()
             }
             .buttonStyle(.bordered)

@@ -114,7 +114,7 @@ final class DashboardStore: ObservableObject {
     )
     @Published var sessionDigests: [String: SessionDigest] = [:]
     @Published var openSessionId: String? = nil
-    /// Path the FilesTab should open. Set then switch detailTab to .files.
+    /// Path the Changes tab should open when navigating from another tab.
     @Published var pendingFilePath: String? = nil
     /// Open a TaskDetailSheet for this task. Set to nil to dismiss.
     @Published var openTaskId: String? = nil

@@ -432,7 +432,7 @@ struct TasksTabView: View {
                 Spacer()
                 Button {
                     store.pendingFilePath = path
-                    store.tabStore.detailTab = .files
+                    store.tabStore.detailTab = .changes
                 } label: {
                     Label("Open", systemImage: "doc.text")
                         .font(DSFont.micro)

@@ -485,7 +485,7 @@ struct ProductTabView: View {
 
     private func openFile(_ path: String) {
         store.pendingFilePath = path
-        store.tabStore.detailTab = .files
+        store.tabStore.detailTab = .changes
     }
 
     /// Scaffold a rich HTML artifact from a template type, then open it.
