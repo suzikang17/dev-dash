@@ -998,15 +998,21 @@ struct OpenDocRef: Identifiable {
     var id: String { path }
 }
 
-/// Read-only viewer for a lore doc opened by clicking a `[[backlink]]` in the
-/// outliner. Shown in the right-hand pane of the daily split (not a modal).
+/// Editable viewer for a lore doc opened by clicking a `[[backlink]]` in the
+/// outliner. Shown in the right-hand pane of the daily split (not a modal). You
+/// type directly into the body; edits debounce-save back to the file, preserving
+/// its frontmatter.
 private struct BacklinkDocPanel: View {
     let path: String
     let onClose: () -> Void
-    @State private var raw: String = ""
+
+    @State private var frontmatter: String = ""
+    @State private var docBody: String = ""
+    @State private var loadedPath: String? = nil
+    @State private var saveWork: DispatchWorkItem? = nil
 
     private var title: String {
-        LoreReader.parseFrontmatter(raw)["title"] ?? (path as NSString).lastPathComponent
+        LoreReader.parseFrontmatter(frontmatter)["title"] ?? (path as NSString).lastPathComponent
     }
 
     var body: some View {
@@ -1027,20 +1033,60 @@ private struct BacklinkDocPanel: View {
             .padding(.horizontal, DSSpace.lg)
             .padding(.vertical, DSSpace.sm)
             Divider()
-            MarkdownWebView(markdown: Self.stripFrontmatter(raw))
+            TextEditor(text: $docBody)
+                .font(.system(size: 13))
+                .lineSpacing(2)
+                .padding(.horizontal, DSSpace.md)
+                .padding(.vertical, DSSpace.sm)
+                .onChange(of: docBody) { _, _ in scheduleSave() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "" }
-        .onChange(of: path) { _, _ in raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "" }
+        .onAppear { load() }
+        .onChange(of: path) { _, _ in flushNow(); load() }
+        .onDisappear { flushNow() }
     }
 
-    private static func stripFrontmatter(_ s: String) -> String {
-        guard s.hasPrefix("---") else { return s }
-        let lines = s.components(separatedBy: "\n")
-        var fences = 0, start = 0
-        for (i, line) in lines.enumerated() {
-            if line.hasPrefix("---") { fences += 1; if fences == 2 { start = i + 1; break } }
+    private func load() {
+        let raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        let parts = Self.splitFrontmatter(raw)
+        frontmatter = parts.fm
+        docBody = parts.body
+        loadedPath = path
+    }
+
+    private func scheduleSave() {
+        guard loadedPath == path else { return }   // ignore the change from load()
+        saveWork?.cancel()
+        let fm = frontmatter, content = docBody, target = path
+        let item = DispatchWorkItem {
+            let text = fm.isEmpty ? content + "\n" : fm + "\n\n" + content + "\n"
+            try? text.write(toFile: target, atomically: true, encoding: .utf8)
         }
-        return lines.dropFirst(start).joined(separator: "\n").trimmingCharacters(in: .newlines)
+        saveWork = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
+    }
+
+    /// Write any pending edit immediately (on close / doc switch) so nothing is lost.
+    /// Writes to `loadedPath` — the file the current body came from — because on a
+    /// doc switch `path` has already advanced to the new doc.
+    private func flushNow() {
+        guard let work = saveWork, let target = loadedPath else { return }
+        work.cancel()
+        saveWork = nil
+        let text = frontmatter.isEmpty ? docBody + "\n" : frontmatter + "\n\n" + docBody + "\n"
+        try? text.write(toFile: target, atomically: true, encoding: .utf8)
+    }
+
+    private static func splitFrontmatter(_ s: String) -> (fm: String, body: String) {
+        guard s.hasPrefix("---") else { return ("", s) }
+        let lines = s.components(separatedBy: "\n")
+        var fences = 0, end = 0
+        for (i, line) in lines.enumerated() {
+            if line.hasPrefix("---") { fences += 1; if fences == 2 { end = i; break } }
+        }
+        guard fences == 2 else { return ("", s) }
+        let fm = lines[0...end].joined(separator: "\n")
+        let body = lines.dropFirst(end + 1).joined(separator: "\n").trimmingCharacters(in: .newlines)
+        return (fm, body)
     }
 }
