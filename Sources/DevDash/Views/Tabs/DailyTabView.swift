@@ -20,6 +20,7 @@ struct DailyTabView: View {
     @State private var focusedDate: String? = nil
     @State private var watcher: NotesFileWatcher? = nil
     @State private var openDoc: OpenDocRef? = nil
+    @State private var collapsedSessionDays: Set<String> = []   // days whose Claude band is collapsed
 
     private enum ViewMode { case daily, browse }
 
@@ -319,7 +320,13 @@ struct DailyTabView: View {
             }
 
             if !day.sessions.isEmpty {
-                DisclosureGroup {
+                DisclosureGroup(isExpanded: Binding(
+                    get: { !collapsedSessionDays.contains(day.dateStr) },   // expanded by default
+                    set: { exp in
+                        if exp { collapsedSessionDays.remove(day.dateStr) }
+                        else { collapsedSessionDays.insert(day.dateStr) }
+                    }
+                )) {
                     ForEach(day.sessions) { session in
                         DailyRow(
                             label: session.title ?? session.firstUserMessage ?? "Session",
