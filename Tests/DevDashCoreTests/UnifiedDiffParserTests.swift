@@ -9,6 +9,42 @@ final class UnifiedDiffParserTests: XCTestCase {
         XCTAssertFalse(d.isBinary)
     }
 
+    func test_parseMultiFile_splitsPerFileWithPathsAndStats() {
+        let text = """
+        commit deadbeef
+        Author: Suzi <s@x.com>
+
+            a message line
+
+        diff --git a/src/Foo.swift b/src/Foo.swift
+        --- a/src/Foo.swift
+        +++ b/src/Foo.swift
+        @@ -1,2 +1,2 @@
+         keep
+        -old
+        +new
+        diff --git a/docs/x.md b/docs/x.md
+        new file mode 100644
+        --- /dev/null
+        +++ b/docs/x.md
+        @@ -0,0 +1,1 @@
+        +hello
+        """
+        let sections = UnifiedDiffParser.parseMultiFile(text)
+        XCTAssertEqual(sections.map(\.path), ["src/Foo.swift", "docs/x.md"])
+        // Foo: one modified pair -> 1 add, 1 del
+        XCTAssertEqual(sections[0].diff.additions, 1)
+        XCTAssertEqual(sections[0].diff.deletions, 1)
+        // x.md: one added line
+        XCTAssertEqual(sections[1].diff.additions, 1)
+        XCTAssertEqual(sections[1].diff.deletions, 0)
+    }
+
+    func test_parseMultiFile_ignoresLeadingMetadata() {
+        let text = "commit abc\n\n    msg\n"   // no diff --git
+        XCTAssertTrue(UnifiedDiffParser.parseMultiFile(text).isEmpty)
+    }
+
     func test_binaryDiff_isDetected() {
         let text = "diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n"
         let d = UnifiedDiffParser.parse(text)

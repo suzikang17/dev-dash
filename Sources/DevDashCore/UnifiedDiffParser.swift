@@ -2,6 +2,44 @@ import Foundation
 
 public enum UnifiedDiffParser {
 
+    /// Split a multi-file diff (e.g. `git show <sha>`) into one section per file,
+    /// parsing each. Sections are delimited by `diff --git` lines; any leading
+    /// content (commit metadata / message) before the first one is ignored.
+    public static func parseMultiFile(_ diffText: String) -> [FileDiffSection] {
+        var sections: [FileDiffSection] = []
+        var currentPath: String? = nil
+        var buf: [String] = []
+
+        func flush() {
+            guard let p = currentPath else { return }
+            sections.append(FileDiffSection(path: p, diff: parse(buf.joined(separator: "\n"))))
+        }
+
+        for line in diffText.components(separatedBy: "\n") {
+            if line.hasPrefix("diff --git ") {
+                flush()
+                currentPath = pathFromGitHeader(line)
+                buf = [line]
+            } else if currentPath != nil {
+                buf.append(line)
+            }
+        }
+        flush()
+        return sections
+    }
+
+    /// Extract the file path from a `diff --git a/<p> b/<p>` line (prefers the b/ side).
+    static func pathFromGitHeader(_ line: String) -> String {
+        if let r = line.range(of: " b/") {
+            return String(line[r.upperBound...])
+        }
+        if let r = line.range(of: "a/") {
+            let rest = String(line[r.upperBound...])
+            return rest.components(separatedBy: " b/").first ?? rest
+        }
+        return String(line.dropFirst("diff --git ".count))
+    }
+
     public static func parse(_ diffText: String) -> FileDiff {
         if diffText.range(of: "\nBinary files ") != nil || diffText.hasPrefix("Binary files ") {
             return FileDiff(rows: [], isBinary: true)

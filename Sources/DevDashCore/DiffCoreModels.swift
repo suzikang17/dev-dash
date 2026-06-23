@@ -54,4 +54,24 @@ public struct FileDiff: Equatable {
         self.isBinary = isBinary
         self.tooLarge = tooLarge
     }
+
+    /// Added-line count (added rows + the right side of modified rows).
+    public var additions: Int {
+        rows.reduce(0) { $0 + ($1.kind == .added || $1.kind == .modified ? 1 : 0) }
+    }
+    /// Removed-line count (removed rows + the left side of modified rows).
+    public var deletions: Int {
+        rows.reduce(0) { $0 + ($1.kind == .removed || $1.kind == .modified ? 1 : 0) }
+    }
+}
+
+/// One file's diff within a multi-file diff (e.g. a whole commit).
+public struct FileDiffSection: Equatable, Identifiable {
+    public let path: String
+    public let diff: FileDiff
+    public var id: String { path }
+    public init(path: String, diff: FileDiff) {
+        self.path = path
+        self.diff = diff
+    }
 }

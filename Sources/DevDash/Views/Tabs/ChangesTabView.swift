@@ -8,12 +8,17 @@ struct ChangesTabView: View {
     @State private var unstaged: [ChangedFile] = []
     @State private var staged: [ChangedFile] = []
     @State private var commits: [GitCommit] = []
-    @State private var expandedSha: String? = nil
-    @State private var commitFiles: [ChangedFile] = []
 
+    // Working-tree single-file selection
     @State private var selection: DiffSelection? = nil
     @State private var diff: FileDiff? = nil
     @State private var loadingDiff = false
+
+    // Commit detail (stacked all-files view)
+    @State private var selectedCommit: GitCommit? = nil
+    @State private var commitSections: [FileDiffSection] = []
+    @State private var loadingCommit = false
+
     @State private var revertTarget: ChangedFile? = nil
     @State private var errorMessage: String? = nil
 
@@ -137,6 +142,7 @@ struct ChangesTabView: View {
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
         .contentShape(Rectangle())
         .onTapGesture {
+            selectedCommit = nil
             selection = DiffSelection(file: file.path, source: source, untracked: file.isUntracked)
             Task { await loadDiff(projectPath) }
         }
@@ -146,39 +152,18 @@ struct ChangesTabView: View {
     private func historyGroup(projectPath: String) -> some View {
         SectionHeader("History")
         ForEach(commits) { commit in
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
-                    Image(systemName: expandedSha == commit.sha ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9)).foregroundColor(.secondary)
-                    Text(commit.shortSha).font(DSFont.mono(.caption2)).foregroundColor(DSColor.gitMeta)
-                    Text(commit.subject).font(DSFont.label).lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Text(commit.relativeDate).font(DSFont.micro).foregroundColor(.secondary)
-                }
-                .padding(.vertical, 3).padding(.horizontal, 6)
-                .contentShape(Rectangle())
-                .onTapGesture { Task { await toggleCommit(commit, projectPath: projectPath) } }
-
-                if expandedSha == commit.sha {
-                    ForEach(commitFiles) { file in
-                        let isSel = selection?.file == file.path && selection?.source == .commit(commit.sha)
-                        HStack(spacing: 6) {
-                            Text(file.stagedStatus.map(String.init) ?? "M")
-                                .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary).frame(width: 14)
-                            Text(file.name).font(DSFont.label).lineLimit(1).truncationMode(.middle)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.vertical, 2).padding(.leading, 22).padding(.trailing, 6)
-                        .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
-                        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selection = DiffSelection(file: file.path, source: .commit(commit.sha), untracked: false)
-                            Task { await loadDiff(projectPath) }
-                        }
-                    }
-                }
+            let isSel = selectedCommit?.sha == commit.sha
+            HStack(spacing: 6) {
+                Text(commit.shortSha).font(DSFont.mono(.caption2)).foregroundColor(DSColor.gitMeta)
+                Text(commit.subject).font(DSFont.label).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 4)
+                Text(commit.relativeDate).font(DSFont.micro).foregroundColor(.secondary)
             }
+            .padding(.vertical, 3).padding(.horizontal, 6)
+            .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+            .contentShape(Rectangle())
+            .onTapGesture { Task { await selectCommit(commit, projectPath: projectPath) } }
         }
     }
 
@@ -210,8 +195,11 @@ struct ChangesTabView: View {
 
     @ViewBuilder
     private var diffPane: some View {
-        if loadingDiff {
+        if loadingCommit || loadingDiff {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let selectedCommit {
+            CommitDetailView(commit: selectedCommit, sections: commitSections)
+                .id(selectedCommit.sha)
         } else if let diff, let selection {
             VStack(spacing: 0) {
                 HStack {
@@ -223,7 +211,7 @@ struct ChangesTabView: View {
                 SideBySideDiffView(diff: diff, language: language(for: selection.file))
             }
         } else {
-            Text("Select a file to view its diff")
+            Text("Select a file or commit to view its diff")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -257,13 +245,22 @@ struct ChangesTabView: View {
         }
     }
 
-    private func toggleCommit(_ commit: GitCommit, projectPath: String) async {
-        if expandedSha == commit.sha {
-            await MainActor.run { expandedSha = nil; commitFiles = [] }
-            return
+    private func selectCommit(_ commit: GitCommit, projectPath: String) async {
+        await MainActor.run {
+            selection = nil
+            diff = nil
+            selectedCommit = commit
+            commitSections = []
+            loadingCommit = true
         }
-        let files = await GitDiffScanner.commitFiles(path: projectPath, sha: commit.sha)
-        await MainActor.run { expandedSha = commit.sha; commitFiles = files }
+        let raw = await GitDiffScanner.commitFullDiff(path: projectPath, sha: commit.sha) ?? ""
+        let sections = UnifiedDiffParser.parseMultiFile(raw)
+        await MainActor.run {
+            // Ignore if the user moved on to another commit while this loaded.
+            guard selectedCommit?.sha == commit.sha else { return }
+            commitSections = sections
+            loadingCommit = false
+        }
     }
 
     private func doRevert(_ projectPath: String, _ file: ChangedFile) async {
@@ -281,5 +278,128 @@ struct ChangesTabView: View {
             errorMessage = ok ? nil : "Failed to \(verb) \(file.name)."
         }
         await refresh(projectPath)
+    }
+}
+
+// MARK: - Commit detail (stacked all-files diff in one scroll)
+
+private struct CommitDetailView: View {
+    let commit: GitCommit
+    let sections: [FileDiffSection]
+
+    @State private var collapsed: Set<String> = []
+
+    private var totalAdds: Int { sections.reduce(0) { $0 + $1.diff.additions } }
+    private var totalDels: Int { sections.reduce(0) { $0 + $1.diff.deletions } }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    header
+                    if sections.count > 1 { jumpBar(proxy: proxy) }
+                    ForEach(sections) { section in
+                        fileSection(section)
+                            .id(section.id)
+                    }
+                    if sections.isEmpty {
+                        Text("No file changes in this commit")
+                            .font(DSFont.label).foregroundColor(.secondary)
+                            .padding(DSSpace.lg)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: DSSpace.xs) {
+            Text(commit.subject).font(DSFont.title)
+            HStack(spacing: DSSpace.sm) {
+                Text(commit.shortSha).font(DSFont.mono(.caption2)).foregroundColor(DSColor.gitMeta)
+                Text("\(commit.author) · \(commit.relativeDate)")
+                    .font(DSFont.micro).foregroundColor(.secondary)
+                Text("\(sections.count) file\(sections.count == 1 ? "" : "s")")
+                    .font(DSFont.micro).foregroundColor(.secondary)
+                Text("+\(totalAdds)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.success)
+                Text("−\(totalDels)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.danger)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DSSpace.md)
+        .background(DSColor.cardBg)
+    }
+
+    private func jumpBar(proxy: ScrollViewProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DSSpace.xs) {
+                ForEach(sections) { section in
+                    Button {
+                        withAnimation { proxy.scrollTo(section.id, anchor: .top) }
+                    } label: {
+                        Text(basename(section.path))
+                            .font(DSFont.micro)
+                            .lineLimit(1)
+                            .padding(.horizontal, DSSpace.sm).padding(.vertical, 3)
+                            .background(DSColor.hairline, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+        }
+    }
+
+    @ViewBuilder
+    private func fileSection(_ section: FileDiffSection) -> some View {
+        let isCollapsed = collapsed.contains(section.path)
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                if isCollapsed { collapsed.remove(section.path) } else { collapsed.insert(section.path) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 9)).foregroundColor(.secondary)
+                    Text(statusBadge(section.diff)).font(DSFont.monoDigits(.caption2))
+                        .foregroundColor(badgeColor(section.diff)).frame(width: 12)
+                    Text(section.path).font(DSFont.mono(.caption2)).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Text("+\(section.diff.additions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.success)
+                    Text("−\(section.diff.deletions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.danger)
+                }
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(DSColor.cardBg.opacity(0.5))
+
+            if !isCollapsed {
+                SideBySideDiffView(diff: section.diff, language: language(for: section.path))
+            }
+            Divider()
+        }
+    }
+
+    private func language(for file: String) -> SyntaxHighlighter.Language {
+        SyntaxHighlighter.Language.detect(from: (file as NSString).pathExtension)
+    }
+
+    private func basename(_ path: String) -> String { (path as NSString).lastPathComponent }
+
+    private func statusBadge(_ diff: FileDiff) -> String {
+        if diff.isBinary { return "B" }
+        if diff.deletions == 0 && diff.additions > 0 { return "A" }
+        if diff.additions == 0 && diff.deletions > 0 { return "D" }
+        return "M"
+    }
+
+    private func badgeColor(_ diff: FileDiff) -> Color {
+        switch statusBadge(diff) {
+        case "A": return DSColor.success
+        case "D": return DSColor.danger
+        default:  return DSColor.warning
+        }
     }
 }

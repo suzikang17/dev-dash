@@ -62,6 +62,14 @@ enum GitDiffScanner {
         return files
     }
 
+    /// The full multi-file diff for a commit (vs its first parent), in one call.
+    /// Split with `UnifiedDiffParser.parseMultiFile`.
+    static func commitFullDiff(path: String, sha: String) async -> String? {
+        await ShellRunner.run("/usr/bin/git",
+            args: ["-c", "core.quotepath=false", "show", "--format=", sha],
+            cwd: path, timeout: 20)
+    }
+
     /// Raw unified diff for one file from the requested source. `untracked` files
     /// have no tracked diff, so use --no-index against /dev/null to show them as added.
     static func fileDiff(path: String, file: String, source: FileDiffSource,
