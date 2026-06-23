@@ -90,12 +90,26 @@ struct OutlinerView: View {
         DayOutline.flatten(nodes, includeCollapsedChildren: true).first { $0.node.id == id }?.node
     }
 
-    /// Resolve a `[[title]]` backlink to its lore doc and ask the host to open it.
+    /// Resolve a `[[title]]` backlink to its lore doc and open it. If no page with
+    /// that title exists yet, create one (a note) and open it — Roam-style.
     private func openLink(_ title: String) {
         let docs = LoreLinkIndex.allDocs(projectPath: projectPath, dirs: LoreLinkIndex.allDirs)
         if let hit = docs.first(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) {
             onOpenDoc("\(projectPath)/docs/\(hit.path)")
+            return
         }
+        // Missing page → create a note titled `title` and open it.
+        let dir = "\(projectPath)/docs/notes"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let slug = LoreRunner.slug(from: title)
+        let file = slug.isEmpty ? "untitled.md" : "\(slug).md"
+        let path = "\(dir)/\(file)"
+        if !FileManager.default.fileExists(atPath: path) {
+            let safe = title.replacingOccurrences(of: "\"", with: "'")
+            let content = "---\ntitle: \"\(safe)\"\ncreated: \"\(DailyPageStore.todayString())\"\n---\n\n"
+            guard (try? content.write(toFile: path, atomically: true, encoding: .utf8)) != nil else { return }
+        }
+        onOpenDoc(path)
     }
 
     private func startFirstBullet() {
