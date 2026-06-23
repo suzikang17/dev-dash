@@ -6,10 +6,18 @@ struct OutlinerView: View {
     @Binding var nodes: [DayNode]
     let projectPath: String
     var onOpenDoc: (String) -> Void = { _ in }
+    /// When true, focus the first bullet as soon as content is available (used by the
+    /// doc pane so clicking a page drops you straight into editing).
+    var autofocus: Bool = false
     @State private var pickerNodeId: UUID?
 
     @State private var focusedId: UUID?
     @State private var caretToEnd = false
+    @State private var didAutofocus = false
+
+    private var firstVisibleID: UUID? {
+        DayOutline.flatten(nodes, includeCollapsedChildren: false).first?.node.id
+    }
 
     var body: some View {
         let rows = DayOutline.flatten(nodes, includeCollapsedChildren: false)
@@ -54,6 +62,16 @@ struct OutlinerView: View {
             }
         }
         .animation(.default, value: rows.count)
+        .onAppear { autofocusIfNeeded() }
+        .onChange(of: firstVisibleID) { _, _ in autofocusIfNeeded() }
+    }
+
+    /// Focus the first bullet once, when autofocus is requested and content exists.
+    private func autofocusIfNeeded() {
+        guard autofocus, !didAutofocus, let id = firstVisibleID else { return }
+        focusedId = id
+        caretToEnd = true
+        didAutofocus = true
     }
 
     private func binding(for id: UUID) -> Binding<String> {

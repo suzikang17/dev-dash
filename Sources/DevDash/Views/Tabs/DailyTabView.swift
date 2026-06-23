@@ -1018,6 +1018,7 @@ private struct BacklinkDocPanel: View {
 
     @State private var nodes: [DayNode] = []
     @State private var loadedPath: String? = nil
+    @State private var loadedBody: String = ""
     @State private var saveWork: DispatchWorkItem? = nil
 
     private var title: String {
@@ -1043,7 +1044,7 @@ private struct BacklinkDocPanel: View {
             .padding(.vertical, DSSpace.sm)
             Divider()
             ScrollView {
-                OutlinerView(nodes: $nodes, projectPath: projectPath, onOpenDoc: onOpenDoc)
+                OutlinerView(nodes: $nodes, projectPath: projectPath, onOpenDoc: onOpenDoc, autofocus: true)
                     .padding(DSSpace.md)
             }
             .onChange(of: nodes) { _, _ in scheduleSave() }
@@ -1058,14 +1059,20 @@ private struct BacklinkDocPanel: View {
         let raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         let parts = Self.splitFrontmatter(raw)
         frontmatter = parts.fm
-        nodes = Self.parseBody(parts.body)
+        var parsed = Self.parseBody(parts.body)
+        if parsed.isEmpty { parsed = [DayNode(text: "")] }   // ready to type immediately
+        nodes = parsed
+        loadedBody = DayOutline.serialize(parsed)             // baseline — opening must not write
         loadedPath = path
     }
 
     private func scheduleSave() {
         guard loadedPath == path else { return }   // ignore the change from load()
+        let body = DayOutline.serialize(nodes)
+        guard body != loadedBody else { return }   // nothing actually changed (e.g. open/autofocus)
+        loadedBody = body
         saveWork?.cancel()
-        let fm = frontmatter, body = DayOutline.serialize(nodes), target = path
+        let fm = frontmatter, target = path
         let item = DispatchWorkItem {
             let text = fm.isEmpty ? body : fm + "\n\n" + body
             try? text.write(toFile: target, atomically: true, encoding: .utf8)
