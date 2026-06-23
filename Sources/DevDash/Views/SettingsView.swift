@@ -6,6 +6,10 @@ import AppKit
 struct SettingsView: View {
     @EnvironmentObject var store: DashboardStore
 
+    // MARK: - Claude integration section state
+    @State private var installed: Set<String> = []
+    @State private var hookError: String? = nil
+
     var body: some View {
         ZStack {
             // Dimmed backdrop — tapping anywhere outside the card dismisses.
@@ -32,6 +36,8 @@ struct SettingsView: View {
                     appearanceSection
                     Divider()
                     foldersSection
+                    Divider()
+                    claudeIntegrationSection
                     Divider()
                     documentSection
                     Divider()
@@ -381,6 +387,162 @@ struct SettingsView: View {
                 if !value.isEmpty { store.docFontPreset = .custom }
             }
         )
+    }
+
+    // MARK: - Claude Code integration
+
+    private var claudeIntegrationSection: some View {
+        section(title: "Claude Code integration") {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
+                Text("Wire Claude Code into dev-dash. Install hooks for a project so any `claude` session there reports activity, refreshes git on commits, and receives your current tasks as context.")
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Server status
+                HStack(spacing: DSSpace.sm) {
+                    let port = store.eventServerPort
+                    Circle()
+                        .fill(port > 0 ? Color.green : Color.secondary)
+                        .frame(width: 7, height: 7)
+                    if port > 0 {
+                        Text("Listening on ")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                        + Text("127.0.0.1:\(port)")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Starting…")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 2)
+
+                // Behavior toggles
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Inject project context into sessions", isOn: $store.injectProjectContext)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        Text("Adds your open tasks and latest devlog to each Claude prompt in installed projects.")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Auto-write a devlog when a session ends", isOn: $store.autoDevlogOnSessionEnd)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        Text("Runs Claude to summarize meaningful sessions. Off by default — this spawns a `claude` process on session end.")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, 4)
+
+                // Per-project hook list
+                VStack(alignment: .leading, spacing: DSSpace.sm) {
+                    Text("Hooks are installed per project in its .claude/settings.json.")
+                        .font(DSFont.micro)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+
+                    if store.projects.isEmpty {
+                        Text("No projects — add a project folder above.")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach(store.projects, id: \.path) { project in
+                            hookProjectRow(project)
+                        }
+                    }
+
+                    if !store.projects.isEmpty {
+                        HStack(spacing: DSSpace.sm) {
+                            Button {
+                                hookError = nil
+                                var errors: [String] = []
+                                for project in store.projects {
+                                    guard !installed.contains(project.path) else { continue }
+                                    do {
+                                        try store.installHooks(for: project.path)
+                                        installed.insert(project.path)
+                                    } catch {
+                                        errors.append(project.name)
+                                    }
+                                }
+                                if !errors.isEmpty {
+                                    hookError = "Failed to install for: \(errors.joined(separator: ", "))"
+                                }
+                            } label: {
+                                Label("Install for all", systemImage: "arrow.down.circle")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            Spacer()
+                        }
+                        .padding(.top, 2)
+                    }
+
+                    if let err = hookError {
+                        Text(err)
+                            .font(DSFont.micro)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .onAppear {
+                installed = Set(store.projects.filter { store.hooksInstalled(for: $0.path) }.map { $0.path })
+            }
+        }
+    }
+
+    private func hookProjectRow(_ project: Project) -> some View {
+        HStack(spacing: DSSpace.sm) {
+            Image(systemName: "terminal")
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text(project.name)
+                .font(DSFont.label)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(project.path)
+            Text(DevRoots.shortenPath(project.path))
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(project.path)
+            Spacer(minLength: DSSpace.sm)
+            if installed.contains(project.path) {
+                Button("Remove") {
+                    store.uninstallHooks(for: project.path)
+                    installed.remove(project.path)
+                    hookError = nil
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .foregroundStyle(.secondary)
+            } else {
+                Button("Install") {
+                    do {
+                        hookError = nil
+                        try store.installHooks(for: project.path)
+                        installed.insert(project.path)
+                    } catch {
+                        hookError = error.localizedDescription
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: - Helpers

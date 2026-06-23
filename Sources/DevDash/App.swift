@@ -55,6 +55,7 @@ struct DevDashApp: App {
                 .task {
                     let hasSavedSelection = UserDefaults.standard.string(forKey: "devdash.lastSelection") != nil
                     if store.selection == nil && !hasSavedSelection { store.selection = .home }
+                    store.startEventServer()
                     await store.reattachManagedServers()
                     await store.refreshAll()
                     store.restoreLastSelection()

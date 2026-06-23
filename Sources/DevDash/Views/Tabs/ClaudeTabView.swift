@@ -27,11 +27,25 @@ struct ClaudeTabView: View {
             $0.projectPath == project.path || $0.projectPath.hasPrefix("\(project.path)/")
         }
         let tasks = store.tasks(forClaudeProject: project.path)
+        let hookSessions = store.liveSessions.values
+            .filter { s in
+                s.projectPath == project.path
+                || s.cwd == project.path
+                || s.cwd.hasPrefix("\(project.path)/")
+            }
+            .sorted { $0.lastEventAt > $1.lastEventAt }
 
         ScrollView {
             LazyVStack(spacing: DSSpace.lg, pinnedViews: []) {
                 GStackSpecialistsSection(project: project)
                     .environmentObject(store)
+
+                if !hookSessions.isEmpty {
+                    InlineSectionHeader(label: "Live Claude Sessions", count: hookSessions.count, systemImage: "waveform")
+                    ForEach(hookSessions) { session in
+                        LiveSessionCard(session: session)
+                    }
+                }
 
                 if !tasks.isEmpty {
                     InlineSectionHeader(label: "Tasks", count: tasks.count, systemImage: "sparkles")
@@ -49,7 +63,7 @@ struct ClaudeTabView: View {
                     }
                     .cardSurface()
                 }
-                if tasks.isEmpty && projectSessions.isEmpty {
+                if tasks.isEmpty && projectSessions.isEmpty && hookSessions.isEmpty {
                     EmptyStateClaude()
                 }
             }
@@ -383,6 +397,148 @@ private struct ClaudeSessionRow: View {
         }
         .padding(.horizontal, DSSpace.lg)
         .padding(.vertical, DSSpace.sm)
+    }
+}
+
+// MARK: - Live session card (external terminal sessions via hook events)
+
+private struct LiveSessionCard: View {
+    let session: LiveSession
+    @State private var expanded = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            // Header row
+            HStack(alignment: .center, spacing: DSSpace.sm) {
+                LiveStatusDot(active: session.status == .active)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: DSSpace.xs) {
+                        Text(session.projectName)
+                            .font(DSFont.bodyEmphasized)
+                            .lineLimit(1)
+                        Text(verbatim: "·")
+                            .foregroundColor(.secondary)
+                        Text(verbatim: String(session.id.prefix(8)))
+                            .font(DSFont.mono(.caption2))
+                            .foregroundColor(.secondary)
+                    }
+                    HStack(spacing: DSSpace.xs) {
+                        Text(session.status == .active ? "active" : "ended")
+                            .font(DSFont.micro)
+                            .foregroundColor(session.status == .active ? DSColor.success : .secondary)
+                        if let tool = session.currentTool {
+                            Text("·").foregroundColor(.secondary).font(DSFont.micro)
+                            Text(tool)
+                                .font(DSFont.mono(.caption2))
+                                .foregroundColor(DSColor.info)
+                        }
+                        Text("·").foregroundColor(.secondary).font(DSFont.micro)
+                        Text(timeAgo(session.lastEventAt))
+                            .font(DSFont.micro)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                } label: {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Collapse" : "Expand")
+            }
+
+            if expanded {
+                // Last prompt
+                if let prompt = session.lastPrompt, !prompt.isEmpty {
+                    Text(prompt)
+                        .font(DSFont.label)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .padding(.horizontal, DSSpace.sm)
+                        .padding(.vertical, DSSpace.xs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+                        .overlay(RoundedRectangle(cornerRadius: DSRadius.small)
+                            .stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+                }
+
+                // Recent file activity (last 8)
+                let recentFiles = session.liveFiles.suffix(8)
+                if !recentFiles.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(recentFiles)) { event in
+                            LiveFileRow(event: event)
+                        }
+                    }
+                }
+
+                // Recent commands (last 4)
+                let recentCmds = session.liveCommands.suffix(4)
+                if !recentCmds.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(recentCmds.enumerated()), id: \.offset) { _, cmd in
+                            HStack(spacing: DSSpace.xs) {
+                                Image(systemName: "terminal")
+                                    .font(DSFont.micro)
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 12)
+                                Text(cmd)
+                                    .font(DSFont.mono(.caption2))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(DSSpace.md)
+        .cardSurface()
+    }
+}
+
+/// Shared live-file row used by LiveSessionCard (and factored out for reuse).
+private struct LiveFileRow: View {
+    let event: LiveFileEvent
+
+    var body: some View {
+        HStack(spacing: DSSpace.xs) {
+            Image(systemName: event.operation.systemImage)
+                .font(DSFont.micro)
+                .foregroundColor(operationColor)
+                .frame(width: 12)
+            Text(event.path)
+                .font(DSFont.mono(.caption2))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    private var operationColor: Color {
+        switch event.operation {
+        case .read:  return .secondary
+        case .write: return DSColor.success
+        case .edit:  return DSColor.info
+        }
+    }
+}
+
+/// Animated pulsing dot for active sessions; static for ended.
+private struct LiveStatusDot: View {
+    let active: Bool
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(active ? DSColor.success : Color.secondary)
+            .frame(width: 8, height: 8)
+            .opacity(active ? (pulse ? 0.4 : 1.0) : 0.5)
+            .animation(active ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default, value: pulse)
+            .onAppear { if active { pulse = true } }
     }
 }
 

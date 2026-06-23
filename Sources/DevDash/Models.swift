@@ -320,6 +320,25 @@ struct LiveFileEvent: Identifiable, Hashable {
     }
 }
 
+/// Represents an external (terminal/IDE) Claude Code session tracked via hook events.
+/// Mirrors the live-activity model used by app-spawned `ClaudeTask`s.
+struct LiveSession: Identifiable, Hashable {
+    let id: String            // Claude session_id
+    let cwd: String
+    let projectPath: String?  // matched known project path, nil if unknown
+    let projectName: String
+    var startedAt: Date
+    var lastEventAt: Date
+    var status: Status
+    var liveFiles: [LiveFileEvent] = []
+    var liveCommands: [String] = []
+    var currentTool: String? = nil
+    var lastPrompt: String? = nil   // from UserPromptSubmit
+    var linkedTaskId: String? = nil  // set when exactly one in-progress task found at SessionStart/UserPromptSubmit
+
+    enum Status: String { case active, ended }
+}
+
 /// Per-project metadata persisted to `.devdash/project.json`. Drives stage
 /// gating and template application in the Tasks tab.
 struct ProjectMeta: Codable, Hashable {

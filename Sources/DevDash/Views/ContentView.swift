@@ -37,6 +37,21 @@ struct ContentView: View {
                 }
             }
             .animation(.spring(response: 0.28, dampingFraction: 0.85), value: cmd.isActive)
+            // Hook event banner: appears at top-center when a Claude SessionStart arrives.
+            .overlay(alignment: .top) {
+                if let banner = store.lastHookBanner {
+                    Text(banner)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, DSSpace.lg)
+                        .padding(.vertical, DSSpace.sm)
+                        .background(.thinMaterial, in: Capsule())
+                        .padding(.top, DSSpace.sm)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .id(banner)
+                }
+            }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: store.lastHookBanner)
 
             // Side terminal lives BESIDE the split view (not inside the detail), so it
             // can't starve the toolbar/detail and collapse the sidebar.

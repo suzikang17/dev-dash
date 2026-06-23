@@ -1,0 +1,176 @@
+import Foundation
+
+/// Installs/uninstalls dev-dash hook entries in a Claude Code project's
+/// `.claude/settings.json`, and writes the helper bridge script to `~/.devdash/bin/`.
+enum HookInstaller {
+
+    enum InstallError: Error, LocalizedError {
+        case settingsCorrupted(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .settingsCorrupted(let path):
+                return "settings.json at \(path) exists but could not be parsed — aborting to avoid data loss. Fix or remove the file and retry."
+            }
+        }
+    }
+
+    private static let hookEvents = [
+        "SessionStart", "SessionEnd", "Stop",
+        "UserPromptSubmit", "PreToolUse", "PostToolUse"
+    ]
+
+    /// Absolute path to the installed helper script. (#8 — no $HOME variable expansion)
+    private static let helperPath = "\(NSHomeDirectory())/.devdash/bin/devdash-hook"
+
+    // MARK: - Helper script
+
+    /// Writes the bridge script that forwards hook payloads to the running app.
+    /// Idempotent; always overwrites with the canonical content.
+    static func installHelperScript() {
+        let binDir = "\(NSHomeDirectory())/.devdash/bin"
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: binDir, withIntermediateDirectories: true)
+
+        // Pure-shell JSON extraction — no python3 dependency (#7)
+        let script = #"""
+        #!/bin/bash
+        # dev-dash hook bridge: forwards a Claude Code hook event to the running app.
+        ep="$HOME/.devdash/event-endpoint.json"
+        [ -f "$ep" ] || exit 0
+        port=$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$ep")
+        token=$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ep")
+        [ -z "$port" ] && exit 0
+        payload=$(cat)
+        curl -s -m 5 -X POST \
+          -H "Content-Type: application/json" \
+          -H "X-DevDash-Token: $token" \
+          --data-binary "$payload" \
+          "http://127.0.0.1:$port/hook" 2>/dev/null
+        exit 0
+        """#
+
+        let url = URL(fileURLWithPath: helperPath)
+        try? script.write(to: url, atomically: true, encoding: .utf8)
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helperPath)
+    }
+
+    // MARK: - Project hook installation
+
+    /// Merges dev-dash hook entries into `<projectPath>/.claude/settings.json`.
+    /// Calls `installHelperScript()` first. Preserves all non-devdash keys/hooks.
+    /// Throws `InstallError.settingsCorrupted` if the file exists but can't be parsed,
+    /// to prevent overwriting settings we don't understand. (#1)
+    static func installProjectHooks(projectPath: String) throws {
+        installHelperScript()
+
+        let settingsPath = "\(projectPath)/.claude/settings.json"
+        let fm = FileManager.default
+
+        try fm.createDirectory(atPath: "\(projectPath)/.claude",
+                               withIntermediateDirectories: true)
+
+        // Distinguish "absent" from "present but corrupt" (#1)
+        var root: [String: Any] = [:]
+        if fm.fileExists(atPath: settingsPath) {
+            guard
+                let data = fm.contents(atPath: settingsPath),
+                let obj = try? JSONSerialization.jsonObject(with: data),
+                let dict = obj as? [String: Any]
+            else {
+                throw InstallError.settingsCorrupted(settingsPath)
+            }
+            root = dict
+
+            // Backup before mutating (#1)
+            let bakPath = settingsPath + ".bak"
+            try? fm.removeItem(atPath: bakPath)
+            try? fm.copyItem(atPath: settingsPath, toPath: bakPath)
+        }
+
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+
+        // Absolute path in command — no $HOME shell expansion assumption (#8)
+        let commandPath = helperPath
+
+        for event in hookEvents {
+            var entries = hooks[event] as? [[String: Any]] ?? []
+
+            let alreadyInstalled = entries.contains { entry in
+                guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return innerHooks.contains { ($0["command"] as? String)?.hasSuffix("devdash-hook") == true }
+            }
+            if alreadyInstalled { continue }
+
+            let entry: [String: Any] = [
+                "hooks": [["type": "command", "command": commandPath]]
+            ]
+            entries.append(entry)
+            hooks[event] = entries
+        }
+
+        root["hooks"] = hooks
+
+        if let data = try? JSONSerialization.data(withJSONObject: root,
+                                                  options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
+        }
+    }
+
+    // MARK: - Hook install check
+
+    /// Returns true if dev-dash hooks are already installed in the project's
+    /// `.claude/settings.json`. Never throws — any parse failure or missing
+    /// file returns false.
+    static func isInstalled(projectPath: String) -> Bool {
+        let settingsPath = "\(projectPath)/.claude/settings.json"
+        guard let data = FileManager.default.contents(atPath: settingsPath),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let root = obj as? [String: Any],
+              let hooks = root["hooks"] as? [String: Any]
+        else { return false }
+
+        return hooks.values.contains { value in
+            guard let entries = value as? [[String: Any]] else { return false }
+            return entries.contains { entry in
+                guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return innerHooks.contains { ($0["command"] as? String)?.hasSuffix("devdash-hook") == true }
+            }
+        }
+    }
+
+    // MARK: - Project hook removal
+
+    /// Removes only dev-dash hook entries from `.claude/settings.json`;
+    /// leaves all other hooks and settings intact.
+    static func uninstallProjectHooks(projectPath: String) {
+        let settingsPath = "\(projectPath)/.claude/settings.json"
+        let fm = FileManager.default
+
+        guard let data = fm.contents(atPath: settingsPath),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              var root = obj as? [String: Any],
+              var hooks = root["hooks"] as? [String: Any]
+        else { return }
+
+        for event in hookEvents {
+            guard var entries = hooks[event] as? [[String: Any]] else { continue }
+            entries = entries.filter { entry in
+                guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return true }
+                return !innerHooks.contains { ($0["command"] as? String)?.hasSuffix("devdash-hook") == true }
+            }
+            if entries.isEmpty {
+                hooks.removeValue(forKey: event)
+            } else {
+                hooks[event] = entries
+            }
+        }
+
+        root["hooks"] = hooks
+
+        if let data = try? JSONSerialization.data(withJSONObject: root,
+                                                  options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: settingsPath), options: .atomic)
+        }
+    }
+}

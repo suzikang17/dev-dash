@@ -438,6 +438,17 @@ private struct SidebarProjectRow: View {
     let runningPort: Int?
     @EnvironmentObject var store: DashboardStore
 
+    /// True when an external Claude Code session is actively working in this project.
+    private var hasLiveSession: Bool {
+        store.liveSessions.values.contains {
+            $0.status == .active && (
+                $0.projectPath == project.path
+                || $0.cwd == project.path
+                || $0.cwd.hasPrefix("\(project.path)/")
+            )
+        }
+    }
+
     var body: some View {
         HStack(spacing: DSSpace.sm) {
             if runningPort != nil {
@@ -456,6 +467,13 @@ private struct SidebarProjectRow: View {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
+                    }
+                    // Subtle live-session indicator
+                    if hasLiveSession {
+                        Circle()
+                            .fill(DSColor.success)
+                            .frame(width: 6, height: 6)
+                            .help("Active Claude session")
                     }
                 }
                 HStack(spacing: DSSpace.xs) {

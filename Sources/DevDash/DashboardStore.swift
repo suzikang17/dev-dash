@@ -331,6 +331,447 @@ final class DashboardStore: ObservableObject {
     /// (`startServer`/`stopServer`) stay here and write through to it.
     let serverStore = ServerStore()
 
+    // MARK: - Hook event server
+
+    let eventServer = EventServer()
+    /// Resolved port the event server is listening on; 0 until the listener binds.
+    /// @Published so SettingsView reacts when the server becomes ready.
+    @Published var eventServerPort: Int = 0
+    /// Live external Claude Code sessions keyed by sessionId.
+    @Published var liveSessions: [String: LiveSession] = [:]
+    /// Transient banner shown when a SessionStart event arrives; auto-clears after ~6 s.
+    @Published var lastHookBanner: String? = nil
+    /// Auto-generate a devlog when a session ends (default off — spawns Claude).
+    @Published var autoDevlogOnSessionEnd: Bool =
+        UserDefaults.standard.bool(forKey: "devdash.autoDevlogOnSessionEnd") {
+        didSet { UserDefaults.standard.set(autoDevlogOnSessionEnd, forKey: "devdash.autoDevlogOnSessionEnd") }
+    }
+    /// Inject open tasks + latest devlog into Claude sessions via hook stdout (default on — no AI spawn, fast).
+    /// Uses register(defaults:) so an unset key still reads true on first launch.
+    @Published var injectProjectContext: Bool = {
+        UserDefaults.standard.register(defaults: ["devdash.injectProjectContext": true])
+        return UserDefaults.standard.bool(forKey: "devdash.injectProjectContext")
+    }() {
+        didSet { UserDefaults.standard.set(injectProjectContext, forKey: "devdash.injectProjectContext") }
+    }
+    /// Session IDs that have already had a devlog generated; prevents dupes.
+    private var devloggedSessions: Set<String> = []
+    /// Per-project debounce tasks for git refresh after detected git/gh commands.
+    private var gitRefreshTasks: [String: Task<Void, Never>] = [:]
+
+    func startEventServer() {
+        eventServer.onEvent = { [weak self] ev, reply in
+            DispatchQueue.main.async {
+                let body = self?.handleHookEvent(ev)
+                reply(body)
+            }
+        }
+        eventServer.onReady = { [weak self] port in
+            DispatchQueue.main.async { self?.eventServerPort = port }
+        }
+        eventServer.start()
+        // Single periodic sweep: removes ended sessions (>5 min) and abandoned
+        // active sessions (>15 min idle). Handles crashes/kills that never fire Stop.
+        Task { @MainActor [weak self] in
+            while true {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                self?.pruneLiveSessions()
+            }
+        }
+    }
+
+    /// Remove stale sessions. Called once per minute from the event-server sweep task.
+    @MainActor private func pruneLiveSessions() {
+        let now = Date()
+        liveSessions = liveSessions.filter { _, s in
+            if s.status == .ended  { return now.timeIntervalSince(s.lastEventAt) < 300  }
+            if s.status == .active { return now.timeIntervalSince(s.lastEventAt) < 900  }
+            return true
+        }
+        // Drop devlog dedupe entries for sessions that have been pruned away.
+        devloggedSessions = devloggedSessions.filter { liveSessions[$0] != nil }
+    }
+
+    @discardableResult
+    func handleHookEvent(_ ev: ClaudeHookEvent) -> String? {
+        guard let sid = ev.sessionId, !sid.isEmpty else { return nil }
+        let now = Date()
+
+        switch ev.event {
+        case "SessionStart":
+            let (name, path) = projectInfo(for: ev.cwd)
+            liveSessions[sid] = LiveSession(
+                id: sid, cwd: ev.cwd ?? "",
+                projectPath: path, projectName: name,
+                startedAt: now, lastEventAt: now, status: .active
+            )
+            let banner = "Claude session started in \(name)"
+            lastHookBanner = banner
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                // Clear only the exact banner we set; a newer banner is left alone.
+                if self.lastHookBanner == banner { self.lastHookBanner = nil }
+            }
+            // Context injection: only for known projects.
+            if injectProjectContext, let projPath = path {
+                var ctx = buildInjectedContext(forProjectPath: projPath, projectName: name) ?? ""
+                // Unambiguous task link: exactly one in-progress task → set link + annotate context.
+                let active = (projectTasks[projPath] ?? []).filter {
+                    ($0.status == .open && $0.owner == .ai) || $0.status == .inProgress
+                }
+                if active.count == 1 {
+                    let t = active[0]
+                    liveSessions[sid]?.linkedTaskId = t.id
+                    if !ctx.isEmpty { ctx += "\n" }
+                    ctx += "Active task (will be marked AI-touched on session end): \(t.title) (id: \(t.id))"
+                }
+                if !ctx.isEmpty, let json = injectionJSON(event: ev.event, context: ctx) {
+                    return json
+                }
+            }
+
+        case "UserPromptSubmit":
+            ensureSession(sid: sid, cwd: ev.cwd, now: now)
+            // A new turn began — ensure the session stays (or returns to) active.
+            liveSessions[sid]?.status = .active
+            liveSessions[sid]?.lastPrompt = ev.prompt
+            liveSessions[sid]?.lastEventAt = now
+            // Context injection: only for known projects.
+            if injectProjectContext, let projPath = liveSessions[sid]?.projectPath {
+                let projName = liveSessions[sid]?.projectName ?? ""
+                var ctx = buildInjectedContext(forProjectPath: projPath, projectName: projName) ?? ""
+                // Unambiguous task link: exactly one in-progress task → set link + annotate context.
+                let active = (projectTasks[projPath] ?? []).filter {
+                    ($0.status == .open && $0.owner == .ai) || $0.status == .inProgress
+                }
+                if active.count == 1 {
+                    let t = active[0]
+                    liveSessions[sid]?.linkedTaskId = t.id
+                    if !ctx.isEmpty { ctx += "\n" }
+                    ctx += "Active task (will be marked AI-touched on session end): \(t.title) (id: \(t.id))"
+                }
+                if !ctx.isEmpty, let json = injectionJSON(event: ev.event, context: ctx) {
+                    return json
+                }
+            }
+
+        case "PreToolUse":
+            ensureSession(sid: sid, cwd: ev.cwd, now: now)
+            let input = ev.raw["tool_input"] as? [String: Any] ?? [:]
+            let activity = Self.liveActivity(toolName: ev.toolName ?? "", input: input)
+            if let file = activity.file {
+                liveSessions[sid]?.liveFiles.append(file)
+                // Cap to last 50 entries to bound memory on long sessions
+                if let count = liveSessions[sid]?.liveFiles.count, count > 50 {
+                    liveSessions[sid]?.liveFiles.removeFirst(count - 50)
+                }
+            }
+            if let cmd = activity.command {
+                liveSessions[sid]?.liveCommands.append(cmd)
+                if let count = liveSessions[sid]?.liveCommands.count, count > 50 {
+                    liveSessions[sid]?.liveCommands.removeFirst(count - 50)
+                }
+            }
+            liveSessions[sid]?.currentTool = ev.toolName
+            liveSessions[sid]?.lastEventAt = now
+
+        case "PostToolUse":
+            ensureSession(sid: sid, cwd: ev.cwd, now: now)
+            liveSessions[sid]?.currentTool = nil
+            liveSessions[sid]?.lastEventAt = now
+            // Debounced git/PR refresh when a Bash command mutates git state.
+            if ev.toolName == "Bash",
+               let input = ev.raw["tool_input"] as? [String: Any],
+               let cmd = input["command"] as? String,
+               Self.isGitMutation(cmd),
+               let path = liveSessions[sid]?.projectPath {
+                scheduleGitRefresh(for: path)
+            }
+
+        case "Stop":
+            // Stop fires at end of each assistant turn — the session is idle/waiting, NOT ended.
+            ensureSession(sid: sid, cwd: ev.cwd, now: now)
+            liveSessions[sid]?.currentTool = nil
+            liveSessions[sid]?.lastEventAt = now
+
+        case "SessionEnd":
+            ensureSession(sid: sid, cwd: ev.cwd, now: now)
+            liveSessions[sid]?.status = .ended
+            liveSessions[sid]?.lastEventAt = now
+            // Removal is handled by the periodic pruneLiveSessions() sweep.
+            if let session = liveSessions[sid] {
+                maybeAutoDevlog(for: session)
+                // Advance linked task when: unambiguous link was set AND session was meaningful.
+                if let taskId = session.linkedTaskId,
+                   let projPath = session.projectPath {
+                    let hasWrite = session.liveFiles.contains { $0.operation == .write || $0.operation == .edit }
+                    let hasGit   = session.liveCommands.contains { Self.isGitMutation($0) }
+                    if hasWrite || hasGit {
+                        // Re-read current task state — user may have completed/dropped it mid-session.
+                        let current = TaskStore.read(projPath).first { $0.id == taskId }
+                        if let current, current.status != .done && current.status != .skipped {
+                            try? TaskStore.setHasAIRun(projectPath: projPath, id: taskId)
+                            try? TaskStore.setOwner(projectPath: projPath, id: taskId, owner: .human)
+                            reloadTasks(for: projPath)
+                        }
+                    }
+                }
+            }
+
+        default:
+            liveSessions[sid]?.lastEventAt = now
+        }
+
+        return nil
+    }
+
+    /// Lazily create a session for any event that arrives before SessionStart
+    /// (e.g. hooks installed mid-session).
+    private func ensureSession(sid: String, cwd: String?, now: Date) {
+        guard liveSessions[sid] == nil else { return }
+        let (name, path) = projectInfo(for: cwd)
+        liveSessions[sid] = LiveSession(
+            id: sid, cwd: cwd ?? "",
+            projectPath: path, projectName: name,
+            startedAt: now, lastEventAt: now, status: .active
+        )
+    }
+
+    /// Returns true if `cmd` contains a segment whose leading token is a git/gh mutation.
+    /// Splits on `&&`, `;`, `|` so `grep 'git commit' file` does NOT match.
+    private static func isGitMutation(_ cmd: String) -> Bool {
+        let gitSubcmds: Set<String> = ["commit","push","merge","checkout","pull",
+                                       "rebase","add","stash","reset","rm"]
+        let ghSubcmds:  Set<String> = ["pr","repo"]
+        let separators = CharacterSet(charactersIn: ";&|")
+        return cmd.components(separatedBy: separators).contains { segment in
+            let words = segment
+                .trimmingCharacters(in: .whitespaces)
+                .components(separatedBy: .whitespaces)
+                .filter { !$0.isEmpty }
+            guard words.count >= 2 else { return false }
+            switch words[0] {
+            case "git": return gitSubcmds.contains(words[1])
+            case "gh":  return ghSubcmds.contains(words[1])
+            default:    return false
+            }
+        }
+    }
+
+    /// Cancel any pending refresh for `path` and schedule a new one ~1.5 s out.
+    private func scheduleGitRefresh(for path: String) {
+        gitRefreshTasks[path]?.cancel()
+        gitRefreshTasks[path] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.refreshGitStatus(for: path)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.refreshRecentCommits() }
+            await MainActor.run { self?.gitRefreshTasks[path] = nil }
+        }
+    }
+
+    /// Cached date formatter for devlog filenames/frontmatter. Fixed locale/calendar
+    /// so the output is always Gregorian yyyy-MM-dd regardless of system calendar.
+    private static let devlogDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        return f
+    }()
+
+    /// Build a compact plain-text context block for a known project.
+    /// Returns nil if there are no tasks AND no devlog to surface.
+    private func buildInjectedContext(forProjectPath path: String, projectName: String) -> String? {
+        // Gather tasks: in_progress (owner==.ai) first, then open, cap to 10.
+        let all = projectTasks[path] ?? []
+        let active = all.filter { $0.status == .open && $0.owner == .ai }
+        let open   = all.filter { $0.status == .open && $0.owner != .ai }
+        let top = Array((active + open).prefix(10))
+
+        // Latest devlog by filename (yyyy-MM-dd-... prefix → lexicographic sort).
+        var devlogTitle: String? = nil
+        let devlogDir = "\(path)/docs/devlog"
+        if let files = try? FileManager.default.contentsOfDirectory(atPath: devlogDir) {
+            let mdFiles = files.filter { $0.hasSuffix(".md") }.sorted()
+            if let last = mdFiles.last,
+               let handle = FileHandle(forReadingAtPath: "\(devlogDir)/\(last)") {
+                // Read only the first 4 KB — title is always near the top.
+                let prefix = handle.readData(ofLength: 4096)
+                handle.closeFile()
+                if let head = String(data: prefix, encoding: .utf8) {
+                    // Extract title: frontmatter `title:` or first `#` heading.
+                    for line in head.components(separatedBy: "\n") {
+                        let t = line.trimmingCharacters(in: .whitespaces)
+                        if t.hasPrefix("title:") {
+                            devlogTitle = t.dropFirst("title:".count)
+                                .trimmingCharacters(in: .init(charactersIn: " \""))
+                            break
+                        }
+                        if t.hasPrefix("#") {
+                            devlogTitle = t.drop(while: { $0 == "#" || $0 == " " })
+                                .trimmingCharacters(in: .whitespaces)
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        guard !top.isEmpty || devlogTitle != nil else { return nil }
+
+        var lines: [String] = ["[dev-dash] Project: \(projectName)"]
+        if !top.isEmpty {
+            lines.append("Open tasks:")
+            for t in top {
+                let tag = (t.owner == .ai) ? "in_progress" : t.status.rawValue
+                lines.append("- [\(tag)] \(t.title) (id: \(t.id))")
+            }
+        }
+        if let dt = devlogTitle {
+            lines.append("Most recent devlog: \(dt)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Serialize the hookSpecificOutput injection envelope as valid JSON.
+    /// Uses JSONSerialization so task titles with quotes/newlines are correctly escaped.
+    private func injectionJSON(event: String, context: String) -> String? {
+        let obj: [String: Any] = [
+            "hookSpecificOutput": [
+                "hookEventName": event,
+                "additionalContext": context
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj),
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        return str
+    }
+
+    /// Generate a devlog for a just-ended session if the setting is on and the
+    /// session was meaningful (wrote/edited files or ran git commands).
+    private func maybeAutoDevlog(for session: LiveSession) {
+        guard autoDevlogOnSessionEnd,
+              let projectPath = session.projectPath,
+              LoreRunner.isInitialized(projectPath: projectPath),
+              !devloggedSessions.contains(session.id) else { return }
+
+        // Meaningful = at least one write/edit (primary) OR a git mutation command (secondary).
+        let hasWrite = session.liveFiles.contains { $0.operation == .write || $0.operation == .edit }
+        let hasGit = session.liveCommands.contains { Self.isGitMutation($0) }
+        guard hasWrite || hasGit else { return }
+
+        // Mark deduped before async work to prevent races.
+        devloggedSessions.insert(session.id)
+
+        // Capture value types only — LiveSession is a struct so it copies cleanly.
+        let sid = session.id
+        let projectName = session.projectName
+        let lastPrompt = session.lastPrompt ?? "(unknown)"
+        let changedPaths = session.liveFiles
+            .filter { $0.operation == .write || $0.operation == .edit }
+            .map { $0.path }
+        let commands = session.liveCommands
+
+        // Detached: all work below is I/O — no @Published state touched until the
+        // file write, which is fine off-main (atomically:true is thread-safe).
+        Task.detached {
+            let commits = await RecapStore.recentCommits(in: projectPath, limit: 10)
+            let dateStr = Self.devlogDateFormatter.string(from: Date())
+
+            let filesLine = changedPaths.isEmpty ? "(none)" : changedPaths.joined(separator: "\n  ")
+            let cmdsLine = commands.isEmpty ? "(none)" : commands.suffix(20).joined(separator: "\n  ")
+            let commitsLine = commits.isEmpty ? "(none)" : commits.joined(separator: "\n  ")
+            let userMsg = """
+                A Claude Code session just ended in \(projectName).
+                Prompt: \(lastPrompt)
+                Files changed:
+                  \(filesLine)
+                Commands:
+                  \(cmdsLine)
+                Recent commits:
+                  \(commitsLine)
+                Summarize what was accomplished in this session as a devlog entry.
+                """
+
+            let sysPrompt = LoreRunner.schemaPrompt(type: "devlog", projectPath: projectPath) ?? ""
+            guard let body = await LoreRunner.generate(
+                systemPrompt: sysPrompt,
+                userMessage: userMsg,
+                projectPath: projectPath,
+                timeout: 180
+            ), !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+            let devlogDir = "\(projectPath)/docs/devlog"
+            let shortId = String(sid.prefix(8))
+            var filename = "\(dateStr)-session-\(shortId).md"
+            // Guard against overwrite: if file already exists, append a sequential id.
+            if FileManager.default.fileExists(atPath: "\(devlogDir)/\(filename)") {
+                filename = "\(dateStr)-session-\(shortId)-\(LoreRunner.nextId(in: devlogDir)).md"
+            }
+            let content = """
+                ---
+                title: "\(dateStr) — session summary"
+                date: "\(dateStr)"
+                sessions: \(sid)
+                ---
+
+                # \(dateStr) — session summary
+
+                \(body.trimmingCharacters(in: .whitespacesAndNewlines))
+                """
+            try? content.write(toFile: "\(devlogDir)/\(filename)", atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Map a cwd path to the nearest known project name and path.
+    private func projectInfo(for cwd: String?) -> (name: String, path: String?) {
+        guard let cwd else { return ("unknown", nil) }
+        if let proj = projects.first(where: { $0.path == cwd || cwd.hasPrefix("\($0.path)/") }) {
+            return (proj.name, proj.path)
+        }
+        return (URL(fileURLWithPath: cwd).lastPathComponent, nil)
+    }
+
+    /// Shared helper: convert a tool call into live-activity events.
+    /// Used by both the stream-JSON path (app-spawned tasks) and the hook path (external sessions).
+    static func liveActivity(toolName: String, input: [String: Any]) -> (file: LiveFileEvent?, command: String?) {
+        let now = Date()
+        switch toolName {
+        case "Read", "Glob", "LS":
+            let p = (input["file_path"] ?? input["pattern"] ?? input["path"]) as? String ?? "unknown"
+            return (LiveFileEvent(path: p, operation: .read, timestamp: now), nil)
+        case "Write":
+            let p = input["file_path"] as? String ?? "unknown"
+            return (LiveFileEvent(path: p, operation: .write, timestamp: now), nil)
+        case "Edit", "MultiEdit":
+            let p = input["file_path"] as? String ?? "unknown"
+            return (LiveFileEvent(path: p, operation: .edit, timestamp: now), nil)
+        case "Bash":
+            let cmd = input["command"] as? String ?? "unknown"
+            return (nil, cmd)
+        default:
+            return (nil, nil)
+        }
+    }
+
+    /// Installs dev-dash hooks for a project. Safe to call multiple times (idempotent).
+    /// Throws `HookInstaller.InstallError` if existing settings.json is unparseable.
+    func installHooks(for projectPath: String) throws {
+        try HookInstaller.installProjectHooks(projectPath: projectPath)
+    }
+
+    /// Removes dev-dash hooks from a project's `.claude/settings.json`.
+    func uninstallHooks(for projectPath: String) {
+        HookInstaller.uninstallProjectHooks(projectPath: projectPath)
+    }
+
+    /// Returns true if dev-dash hooks are installed in the project's `.claude/settings.json`.
+    func hooksInstalled(for projectPath: String) -> Bool {
+        HookInstaller.isInstalled(projectPath: projectPath)
+    }
+
     enum HealthFilter: Hashable {
         case all
         case status(HealthStatus)
@@ -1427,22 +1868,12 @@ final class DashboardStore: ObservableObject {
     private func handleToolUse(_ item: [String: Any], taskId: UUID, path: String) {
         guard let name = item["name"] as? String,
               let input = item["input"] as? [String: Any] else { return }
-        let now = Date()
-        switch name {
-        case "Read", "Glob", "LS":
-            let p = (input["file_path"] ?? input["pattern"] ?? input["path"]) as? String ?? "unknown"
-            appendLiveFile(LiveFileEvent(path: p, operation: .read, timestamp: now), taskId: taskId, projectPath: path)
-        case "Write":
-            let p = input["file_path"] as? String ?? "unknown"
-            appendLiveFile(LiveFileEvent(path: p, operation: .write, timestamp: now), taskId: taskId, projectPath: path)
-        case "Edit", "MultiEdit":
-            let p = input["file_path"] as? String ?? "unknown"
-            appendLiveFile(LiveFileEvent(path: p, operation: .edit, timestamp: now), taskId: taskId, projectPath: path)
-        case "Bash":
-            let cmd = input["command"] as? String ?? "unknown"
+        let activity = Self.liveActivity(toolName: name, input: input)
+        if let file = activity.file {
+            appendLiveFile(file, taskId: taskId, projectPath: path)
+        }
+        if let cmd = activity.command {
             appendLiveCommand(cmd, taskId: taskId, projectPath: path)
-        default:
-            break
         }
     }
 
