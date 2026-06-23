@@ -15,10 +15,6 @@ struct OutlinerView: View {
     @State private var caretToEnd = false
     @State private var didAutofocus = false
 
-    private var firstVisibleID: UUID? {
-        DayOutline.flatten(nodes, includeCollapsedChildren: false).first?.node.id
-    }
-
     var body: some View {
         let rows = DayOutline.flatten(nodes, includeCollapsedChildren: false)
         VStack(alignment: .leading, spacing: 2) {
@@ -34,7 +30,7 @@ struct OutlinerView: View {
                         .padding(.top, 7)
                     if focusedId == row.node.id {
                         BulletRow(
-                            text: binding(for: row.node.id),
+                            text: binding(text: row.node.text, for: row.node.id),
                             isFocused: true,
                             caretToEnd: caretToEnd,
                             onKey: { handle($0, on: row.node.id) },
@@ -62,21 +58,24 @@ struct OutlinerView: View {
             }
         }
         .animation(.default, value: rows.count)
-        .onAppear { autofocusIfNeeded() }
-        .onChange(of: firstVisibleID) { _, _ in autofocusIfNeeded() }
+        .onAppear { autofocusIfNeeded(firstID: rows.first?.node.id) }
+        .onChange(of: rows.first?.node.id) { _, id in autofocusIfNeeded(firstID: id) }
     }
 
     /// Focus the first bullet once, when autofocus is requested and content exists.
-    private func autofocusIfNeeded() {
-        guard autofocus, !didAutofocus, let id = firstVisibleID else { return }
+    private func autofocusIfNeeded(firstID: UUID?) {
+        guard autofocus, !didAutofocus, let id = firstID else { return }
         focusedId = id
         caretToEnd = true
         didAutofocus = true
     }
 
-    private func binding(for id: UUID) -> Binding<String> {
+    /// `text` is the row's current value captured during this render — SwiftUI
+    /// re-renders (and re-creates this binding) whenever `nodes` changes, so it
+    /// stays current without an O(n) tree walk per row on every get.
+    private func binding(text: String, for id: UUID) -> Binding<String> {
         Binding(
-            get: { DayOutline.flatten(nodes, includeCollapsedChildren: true).first { $0.node.id == id }?.node.text ?? "" },
+            get: { text },
             set: { newText in
                 nodes = DayOutline.update(id, text: newText, in: nodes)
                 // Inline supertag: typing "title #task " (trailing space) commits the tag.

@@ -88,6 +88,7 @@ struct LoreTasksView: View {
     @State private var generatingIdeaFile: String? = nil
     @State private var loreInitialized = true
     @State private var graph: LoreLinkIndex.Graph? = nil
+    @State private var graphWork: DispatchWorkItem? = nil
 
     private var filtered: [LoreTaskItem] {
         guard !search.isEmpty else { return tasks }
@@ -645,7 +646,7 @@ struct LoreTasksView: View {
         }
 
         try? result.write(toFile: task.path, atomically: true, encoding: .utf8)
-        reload()
+        updateInPlace(file: task.file)
     }
 
     // MARK: - Data
@@ -676,42 +677,72 @@ struct LoreTasksView: View {
         selected = tasks.first { $0.file == file }
     }
 
+    /// Full reload — re-reads every task file. Use only for structural changes
+    /// (appear, project switch, create/delete). The graph rebuild is deferred
+    /// off-main; per-edit saves use `updateInPlace` instead.
     func reload() {
         let dir = "\(projectPath)/docs/tasks"
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return }
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-        let todayStr = df.string(from: Date())
         let loaded = files
             .filter { $0.hasSuffix(".md") && $0 != "index.md" && $0 != "INDEX.md" }
             .sorted()
-            .compactMap { file -> LoreTaskItem? in
-                let path = "\(dir)/\(file)"
-                guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-                let fm = parseLoreFM(raw)
-                let body = loreMDBody(raw)
-                let completedToday = body.range(
-                    of: "- \(todayStr)T[^\\n]*→ done", options: .regularExpression
-                ) != nil
-                return LoreTaskItem(
-                    id: UUID(),
-                    file: file,
-                    path: path,
-                    title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
-                    status: fm["status"] ?? "open",
-                    owner: fm["owner"] ?? "none",
-                    aiRun: fm["ai_run"] == "true",
-                    category: fm["category"] ?? fm["type"] ?? "",
-                    priority: fm["priority"] ?? "",
-                    effort: fm["effort"] ?? "",
-                    notes: fm["notes"] ?? "",
-                    completed: fm["completed"] ?? "",
-                    body: body,
-                    completedToday: completedToday
-                )
-            }
+            .compactMap { loadTask(file: $0) }
         tasks = loaded
         if let sel = selected { selected = tasks.first { $0.file == sel.file } }
-        graph = LoreLinkIndex.build(projectPath: projectPath, dirs: LoreLinkIndex.allDirs)
+        scheduleGraphRefresh()
+    }
+
+    /// Re-read a single task file and swap it into `tasks`/`selected` in place,
+    /// preserving its list identity. Cheap — no directory scan, no synchronous
+    /// graph rebuild. This is what edit-saves call so typing stays smooth.
+    private func updateInPlace(file: String) {
+        let reuseId = tasks.first { $0.file == file }?.id
+        guard let item = loadTask(file: file, reusingId: reuseId) else { return }
+        if let idx = tasks.firstIndex(where: { $0.file == file }) { tasks[idx] = item }
+        else { tasks.append(item) }
+        if selected?.file == file { selected = item }
+        scheduleGraphRefresh()
+    }
+
+    private func loadTask(file: String, reusingId: UUID? = nil) -> LoreTaskItem? {
+        let path = "\(projectPath)/docs/tasks/\(file)"
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        let todayStr = df.string(from: Date())
+        let fm = parseLoreFM(raw)
+        let body = loreMDBody(raw)
+        let completedToday = body.range(
+            of: "- \(todayStr)T[^\\n]*→ done", options: .regularExpression
+        ) != nil
+        return LoreTaskItem(
+            id: reusingId ?? UUID(),
+            file: file,
+            path: path,
+            title: fm["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
+            status: fm["status"] ?? "open",
+            owner: fm["owner"] ?? "none",
+            aiRun: fm["ai_run"] == "true",
+            category: fm["category"] ?? fm["type"] ?? "",
+            priority: fm["priority"] ?? "",
+            effort: fm["effort"] ?? "",
+            notes: fm["notes"] ?? "",
+            completed: fm["completed"] ?? "",
+            body: body,
+            completedToday: completedToday
+        )
+    }
+
+    /// Rebuild the backlink graph off the main thread, coalesced — it walks every
+    /// doc in every lore dir twice, far too heavy to run synchronously on each save.
+    private func scheduleGraphRefresh() {
+        graphWork?.cancel()
+        let p = projectPath
+        let item = DispatchWorkItem {
+            let g = LoreLinkIndex.build(projectPath: p, dirs: LoreLinkIndex.allDirs)
+            DispatchQueue.main.async { graph = g }
+        }
+        graphWork = item
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.4, execute: item)
     }
 
     /// Backlinks pointing at a task ([[wikilinks]] + `parent:` references).
@@ -735,7 +766,7 @@ struct LoreTasksView: View {
             withHistory = statusUpdated.trimmingCharacters(in: .newlines) + historyHeader + entry + "\n"
         }
         try? withHistory.write(toFile: task.path, atomically: true, encoding: .utf8)
-        reload()
+        updateInPlace(file: task.file)
     }
 
     private func setField(_ task: LoreTaskItem, key: String, value: String) {
@@ -753,7 +784,7 @@ struct LoreTasksView: View {
             }
         }
         try? lines.joined(separator: "\n").write(toFile: task.path, atomically: true, encoding: .utf8)
-        reload()
+        updateInPlace(file: task.file)
     }
 
     /// Replace the markdown body (everything after the frontmatter), preserving
@@ -770,7 +801,7 @@ struct LoreTasksView: View {
         let newBody = body.hasSuffix("\n") ? body : body + "\n"
         let content = header.isEmpty ? newBody : header + "\n" + newBody
         try? content.write(toFile: task.path, atomically: true, encoding: .utf8)
-        reload()
+        updateInPlace(file: task.file)
     }
 }
 
@@ -995,10 +1026,6 @@ private struct LoreTaskDetailPane: View {
                         ))
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                     }
-                    Spacer()
-                }
-
-                HStack(spacing: DSSpace.lg) {
                     field("Category") {
                         Picker("", selection: Binding(get: { task.category }, set: { onFieldChange("category", $0) })) {
                             ForEach(categories, id: \.self) { Text($0).tag($0) }
