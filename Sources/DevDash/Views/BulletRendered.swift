@@ -22,15 +22,27 @@ struct BulletRendered: View {
     }
 
     var body: some View {
-        Button {
-            if let title = pureLinkTitle { onOpenLink(title) } else { onEdit() }
-        } label: {
-            rendered
-                .font(DSFont.body)
-                .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
-                .contentShape(Rectangle())
+        HStack(spacing: DSSpace.xs) {
+            // Clicking the bullet always enters edit mode (reliable, no link-eats-tap).
+            Button(action: onEdit) {
+                rendered
+                    .font(DSFont.body)
+                    .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // A pure [[page]] backlink gets an explicit open affordance.
+            if let title = pureLinkTitle {
+                Button { onOpenLink(title) } label: {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Open page")
+            }
         }
-        .buttonStyle(.plain)
     }
 
     // Inline markdown, in priority order (earliest match wins; ties break by order).
