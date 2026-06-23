@@ -30,10 +30,11 @@ struct ChangesTabView: View {
 
     var body: some View {
         if let project = store.project(for: store.selection) {
-            HSplitView {
+            HStack(spacing: 0) {
                 sidebar(projectPath: project.path)
-                    .frame(minWidth: 200, idealWidth: 280, maxWidth: 460)
+                    .frame(width: 300)
                     .background(DSColor.cardBg)
+                Divider()
                 diffPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
