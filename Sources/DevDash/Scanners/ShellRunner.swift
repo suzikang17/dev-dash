@@ -70,6 +70,76 @@ enum ShellRunner {
         }
     }
 
+    /// Outcome of a one-shot command where success/failure matters.
+    struct CommandResult {
+        let output: String   // combined stdout + stderr, for display
+        let exitCode: Int32
+        var ok: Bool { exitCode == 0 }
+    }
+
+    /// Like `run`, but captures combined stdout+stderr and the process exit code.
+    /// Use for mutating commands (e.g. `gh pr merge`) where the caller must know
+    /// whether it actually succeeded — many tools report status on stderr.
+    static func runResult(_ binary: String, args: [String], cwd: String? = nil, timeout: Double = 60) async -> CommandResult {
+        await withCheckedContinuation { (cont: CheckedContinuation<CommandResult, Never>) in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: binary)
+            process.arguments = args
+            if let cwd = cwd {
+                process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            }
+
+            let outPipe = Pipe()
+            let errPipe = Pipe()
+            process.standardOutput = outPipe
+            process.standardError = errPipe
+
+            let lock = NSLock()
+            var collected = Data()
+            var resumed = false
+
+            let drain: (FileHandle) -> Void = { handle in
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { handle.readabilityHandler = nil; return }
+                lock.lock(); collected.append(chunk); lock.unlock()
+            }
+            outPipe.fileHandleForReading.readabilityHandler = drain
+            errPipe.fileHandleForReading.readabilityHandler = drain
+
+            process.terminationHandler = { proc in
+                outPipe.fileHandleForReading.readabilityHandler = nil
+                errPipe.fileHandleForReading.readabilityHandler = nil
+                // Final synchronous drain: the async readability handlers may not
+                // have appended the last chunk yet, and for short commands that
+                // chunk is often the entire message (e.g. gh's merge result/error).
+                let tailOut = outPipe.fileHandleForReading.readDataToEndOfFile()
+                let tailErr = errPipe.fileHandleForReading.readDataToEndOfFile()
+                lock.lock()
+                collected.append(tailOut)
+                collected.append(tailErr)
+                let final = collected
+                let already = resumed
+                resumed = true
+                lock.unlock()
+                if already { return }
+                let text = String(data: final, encoding: .utf8) ?? ""
+                cont.resume(returning: CommandResult(output: text, exitCode: proc.terminationStatus))
+            }
+
+            do {
+                try process.run()
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                    if process.isRunning { process.terminate() }
+                }
+            } catch {
+                lock.lock(); let already = resumed; resumed = true; lock.unlock()
+                if !already {
+                    cont.resume(returning: CommandResult(output: error.localizedDescription, exitCode: -1))
+                }
+            }
+        }
+    }
+
     // MARK: - Long-running with streaming output
 
     /// Start a long-running process. Returns a handle that exposes a line-by-line

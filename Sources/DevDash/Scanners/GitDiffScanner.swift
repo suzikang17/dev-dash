@@ -166,6 +166,34 @@ enum GitDiffScanner {
         await ShellRunner.run("/bin/zsh", args: ["-lc", "gh pr diff \(number)"], cwd: path, timeout: 30)
     }
 
+    /// How to integrate a PR — mirrors GitHub's merge-button options.
+    enum PRMergeMethod: String, CaseIterable, Identifiable {
+        case squash, merge, rebase
+        var id: String { rawValue }
+        var flag: String { "--\(rawValue)" }
+        var label: String {
+            switch self {
+            case .squash: return "Squash and merge"
+            case .merge:  return "Create a merge commit"
+            case .rebase: return "Rebase and merge"
+            }
+        }
+    }
+
+    /// Merge a PR via `gh pr merge`. Returns whether it succeeded plus the
+    /// combined gh output (shown to the user on success or failure).
+    /// No `--auto`: a 0 exit means the merge actually happened (with `--auto`,
+    /// gh exits 0 after merely *queuing* the merge, so this check would lie).
+    static func mergePR(path: String, number: Int, method: PRMergeMethod) async -> (ok: Bool, message: String) {
+        let cmd = "gh pr merge \(number) \(method.flag)"
+        let res = await ShellRunner.runResult("/bin/zsh", args: ["-lc", cmd], cwd: path, timeout: 90)
+        let msg = res.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if msg.isEmpty {
+            return (res.ok, res.ok ? "Merged PR #\(number)." : "Merge failed (exit \(res.exitCode)).")
+        }
+        return (res.ok, msg)
+    }
+
     static func openPRWeb(path: String, number: Int) async {
         _ = await ShellRunner.run("/bin/zsh", args: ["-lc", "gh pr view \(number) --web"], cwd: path, timeout: 15)
     }

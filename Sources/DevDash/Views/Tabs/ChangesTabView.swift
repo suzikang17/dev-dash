@@ -40,6 +40,9 @@ struct ChangesTabView: View {
     @State private var stacked: StackedSelection? = nil
     @State private var stackedSections: [FileDiffSection] = []
     @State private var prDetail: PRDetail? = nil   // metadata for the selected PR
+    @State private var mergeTarget: PRDetail? = nil  // PR awaiting merge confirmation
+    @State private var merging = false
+    @State private var mergeMessage: String? = nil   // merge result to surface
     @State private var loadingStacked = false
 
     @State private var revertTarget: ChangedFile? = nil
@@ -170,6 +173,32 @@ struct ChangesTabView: View {
                 Button("Cancel", role: .cancel) { revertTarget = nil }
             } message: {
                 Text("This permanently discards the file's uncommitted changes.")
+            }
+            .confirmationDialog(
+                "Merge PR #\(mergeTarget?.number ?? 0)?",
+                isPresented: Binding(get: { mergeTarget != nil },
+                                     set: { if !$0 { mergeTarget = nil } }),
+                titleVisibility: .visible
+            ) {
+                ForEach(GitDiffScanner.PRMergeMethod.allCases) { method in
+                    Button(method.label) {
+                        if let t = mergeTarget {
+                            merging = true   // close the double-trigger window synchronously
+                            Task { await runMerge(t, method, project.path) }
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) { mergeTarget = nil }
+            } message: {
+                if let t = mergeTarget {
+                    Text("Merges #\(t.number) “\(t.title)” into \(t.baseRefName) on GitHub. This can't be undone from here.")
+                }
+            }
+            .alert("Merge", isPresented: Binding(get: { mergeMessage != nil },
+                                                 set: { if !$0 { mergeMessage = nil } })) {
+                Button("OK", role: .cancel) { mergeMessage = nil }
+            } message: {
+                Text(mergeMessage ?? "")
             }
         } else {
             Text("Select a project to view changes")
@@ -478,6 +507,25 @@ struct ChangesTabView: View {
                 Spacer(minLength: 0)
                 Text("+\(d.additions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.success)
                 Text("−\(d.deletions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.danger)
+                Button { openPR(d) } label: {
+                    Image(systemName: "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderless)
+                .help("Open PR #\(d.number) in browser")
+                .accessibilityLabel("Open PR #\(d.number) in browser")
+                if d.state.uppercased() == "OPEN" {
+                    Button { mergeTarget = d } label: {
+                        if merging {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.triangle.merge")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(merging)
+                    .help("Merge PR #\(d.number)")
+                    .accessibilityLabel("Merge PR #\(d.number)")
+                }
             }
             HStack(spacing: 5) {
                 Text(d.baseRefName).font(DSFont.mono(.caption2))
@@ -545,6 +593,28 @@ struct ChangesTabView: View {
 
     private func revealInFinder(_ absolutePath: String) {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: absolutePath)])
+    }
+
+    /// Open the PR's GitHub page. Uses the URL from `gh pr view`; no subprocess.
+    private func openPR(_ d: PRDetail) {
+        guard let url = URL(string: d.url) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Merge a PR via `gh`, then refresh its state. Result (success or error
+    /// output) is surfaced in the Merge alert.
+    private func runMerge(_ pr: PRDetail, _ method: GitDiffScanner.PRMergeMethod, _ projectPath: String) async {
+        await MainActor.run { merging = true; mergeTarget = nil }
+        let result = await GitDiffScanner.mergePR(path: projectPath, number: pr.number, method: method)
+        // Refresh regardless of the reported result: a client-side timeout may
+        // have merged server-side anyway, so always reconcile the shown state.
+        await loadList(for: .prs, projectPath: projectPath)
+        let updated = await GitDiffScanner.prDetail(path: projectPath, number: pr.number)
+        await MainActor.run {
+            if stacked?.key == "pr:\(pr.number)" { prDetail = updated }
+            merging = false
+            mergeMessage = result.message
+        }
     }
 
     private func prStateColor(_ s: String) -> Color {
