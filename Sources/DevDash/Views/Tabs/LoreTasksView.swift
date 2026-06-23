@@ -81,6 +81,7 @@ struct LoreTasksView: View {
     @State private var viewMode: LoreViewMode = .kanban
     @State private var activeCommand: LoreCommandMode? = nil
     @State private var showNewTask = false
+    @State private var newTaskTitle = ""
     @FocusState private var listFocused: Bool
     @State private var ideas: [LoreIdeaItem] = []
     @State private var selectedIdea: LoreIdeaItem? = nil
@@ -146,6 +147,18 @@ struct LoreTasksView: View {
                 .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                 .background(Color(NSColor.windowBackgroundColor))
                 Divider()
+
+                if viewMode != .ideas {
+                    HStack(spacing: DSSpace.sm) {
+                        Image(systemName: "plus.circle.fill").foregroundColor(.accentColor)
+                        TextField("New task — type a title, press ↩", text: $newTaskTitle)
+                            .textFieldStyle(.plain)
+                            .onSubmit { quickCreateTask() }
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+                    .background(Color(NSColor.windowBackgroundColor))
+                    Divider()
+                }
 
                 HStack(spacing: DSSpace.sm) {
                     Image(systemName: "magnifyingglass").foregroundColor(.secondary)
@@ -636,6 +649,32 @@ struct LoreTasksView: View {
     }
 
     // MARK: - Data
+
+    /// Inline quick-add: write a minimal task doc, reload, and select it so you drop
+    /// straight into editing its body. Mirrors how reload() reads files directly, so
+    /// no reindex is needed for it to appear.
+    private func quickCreateTask() {
+        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let dir = "\(projectPath)/docs/tasks"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let id = LoreRunner.nextId(in: dir)
+        let slug = LoreRunner.slug(from: title)
+        let file = "\(id)-\(slug).md"
+        let content = """
+        ---
+        title: "\(title.replacingOccurrences(of: "\"", with: "'"))"
+        status: open
+        owner: human
+        category: engineering
+        ---
+
+        """
+        guard (try? content.write(toFile: "\(dir)/\(file)", atomically: true, encoding: .utf8)) != nil else { return }
+        newTaskTitle = ""
+        reload()
+        selected = tasks.first { $0.file == file }
+    }
 
     func reload() {
         let dir = "\(projectPath)/docs/tasks"
