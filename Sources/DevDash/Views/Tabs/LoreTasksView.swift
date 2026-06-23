@@ -202,11 +202,13 @@ struct LoreTasksView: View {
                 } else if let task = selected {
                     LoreTaskDetailPane(
                         task: task,
+                        projectPath: projectPath,
                         backlinks: backlinks(for: task),
                         onStatusChange: { setStatus(task, to: $0) },
                         onFieldChange: { setField(task, key: $0, value: $1) },
                         onBodyChange: { setBody(task, body: $0) }
                     )
+                    .id(task.id)   // fresh editor state per task
                 } else {
                     VStack(spacing: DSSpace.sm) {
                         Text("Select a task").font(.caption).foregroundColor(.secondary)
@@ -907,13 +909,15 @@ private struct LoreTaskRow: View {
 
 private struct LoreTaskDetailPane: View {
     let task: LoreTaskItem
+    let projectPath: String
     var backlinks: [LoreLinkIndex.Backlink] = []
     let onStatusChange: (String) -> Void
     let onFieldChange: (String, String) -> Void
     var onBodyChange: (String) -> Void = { _ in }
 
-    @State private var editingBody = false
-    @State private var draft = ""
+    @State private var nodes: [DayNode] = []
+    @State private var loadedBody = ""
+    @State private var saveWork: DispatchWorkItem? = nil
 
     private let statuses   = ["open", "in_progress", "blocked", "done", "skipped"]
     private let owners     = ["none", "human", "ai"]
@@ -996,29 +1000,48 @@ private struct LoreTaskDetailPane: View {
             HStack {
                 Text("CONTENT").font(DSFont.micro).foregroundColor(.secondary).tracking(1)
                 Spacer()
-                Button(editingBody ? "Done" : "Edit") {
-                    if editingBody { onBodyChange(draft) } else { draft = task.body }
-                    editingBody.toggle()
-                }
-                .buttonStyle(.borderless).controlSize(.small)
             }
             .padding(.horizontal, 14).padding(.vertical, 6)
             Divider()
 
-            if editingBody {
-                TextEditor(text: $draft)
-                    .font(DSFont.mono(.body))
-                    .padding(10)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if task.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("No content yet — click Edit.").font(.caption).foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                MarkdownWebView(markdown: task.body)
+            ScrollView {
+                OutlinerView(nodes: $nodes, projectPath: projectPath, autofocus: true)
+                    .padding(DSSpace.md)
             }
+            .onChange(of: nodes) { _, _ in scheduleBodySave() }
         }
-        // Reset edit state when a different task is selected.
-        .onChange(of: task.id) { _, _ in editingBody = false; draft = "" }
+        .onAppear { loadBody() }
+    }
+
+    private func loadBody() {
+        var parsed = Self.parseBody(task.body)
+        if parsed.isEmpty { parsed = [DayNode(text: "")] }   // ready to type immediately
+        nodes = parsed
+        loadedBody = DayOutline.serialize(parsed)             // baseline — opening must not write
+    }
+
+    private func scheduleBodySave() {
+        let body = DayOutline.serialize(nodes)
+        guard body != loadedBody else { return }   // ignore the change from load/autofocus
+        loadedBody = body
+        saveWork?.cancel()
+        let item = DispatchWorkItem { onBodyChange(body) }
+        saveWork = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
+    }
+
+    /// Everything is bullets: bulletize any non-list body line so a task's content
+    /// edits as an outline and round-trips.
+    private static func parseBody(_ body: String) -> [DayNode] {
+        var lines: [String] = []
+        for line in body.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+            let leading = line.prefix { $0 == " " }
+            let rest = line.drop { $0 == " " }
+            if rest.hasPrefix("- ") || rest == "-" { lines.append(line) }
+            else { lines.append("\(leading)- \(rest)") }
+        }
+        return DayOutline.parse(lines.joined(separator: "\n"))
     }
 
     @ViewBuilder
