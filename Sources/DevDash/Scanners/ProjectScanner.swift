@@ -8,11 +8,16 @@ enum ProjectScanner {
             }
             var all: [Project] = []
             for await projects in group { all.append(contentsOf: projects) }
-            return all.sorted {
-                let a = $0.lastCommitAt ?? .distantPast
-                let b = $1.lastCommitAt ?? .distantPast
-                return a > b
-            }
+            // Dedup by path: a folder can be both a configured project and a
+            // child of another configured folder.
+            var seen = Set<String>()
+            return all
+                .filter { seen.insert($0.path).inserted }
+                .sorted {
+                    let a = $0.lastCommitAt ?? .distantPast
+                    let b = $1.lastCommitAt ?? .distantPast
+                    return a > b
+                }
         }
     }
 
@@ -23,7 +28,7 @@ enum ProjectScanner {
         guard let entries = try? fm.contentsOfDirectory(atPath: root) else { return [] }
 
         // Filter to directories with a detectable stack first (cheap, sync).
-        let candidates: [(path: String, stack: String, framework: String)] = entries
+        var candidates: [(path: String, stack: String, framework: String)] = entries
             .filter { !$0.hasPrefix(".") }
             .compactMap { entry in
                 let full = root + entry
@@ -33,6 +38,15 @@ enum ProjectScanner {
                 let framework = FrameworkDetector.detectFromFiles(at: full)
                 return (full, stack, framework)
             }
+
+        // Also treat the configured folder ITSELF as a project when it has a
+        // detectable stack — so a single repo (e.g. dev-dash with a top-level
+        // Package.swift) added directly shows up, not just folders-of-repos.
+        // Use the path without the trailing slash so it matches session cwds.
+        let rootPath = root.hasSuffix("/") ? String(root.dropLast()) : root
+        if let stack = FrameworkDetector.detectStack(at: rootPath) {
+            candidates.append((rootPath, stack, FrameworkDetector.detectFromFiles(at: rootPath)))
+        }
 
         // Now run git scans in bounded batches.
         var projects: [Project] = []
