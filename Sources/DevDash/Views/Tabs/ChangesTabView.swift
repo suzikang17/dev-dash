@@ -6,12 +6,13 @@ struct ChangesTabView: View {
     @EnvironmentObject var store: DashboardStore
 
     enum ViewMode: String, CaseIterable, Identifiable {
-        case changes, prs, sessions, files
+        case changes, prs, sessions, files, deploys
         var id: String { rawValue }
         var label: String {
             switch self {
             case .changes: return "Changes"; case .prs: return "PRs"
             case .sessions: return "Sessions"; case .files: return "Files"
+            case .deploys: return "Deploys"
             }
         }
     }
@@ -40,9 +41,15 @@ struct ChangesTabView: View {
     @State private var stacked: StackedSelection? = nil
     @State private var stackedSections: [FileDiffSection] = []
     @State private var prDetail: PRDetail? = nil   // metadata for the selected PR
+    @State private var prPreview: VercelDeployment? = nil  // Vercel preview for the PR's branch
     @State private var mergeTarget: PRDetail? = nil  // PR awaiting merge confirmation
     @State private var merging = false
     @State private var mergeMessage: String? = nil   // merge result to surface
+
+    // Deploys (Vercel) mode
+    @State private var deploysResult: VercelScanner.FetchResult? = nil
+    @State private var deployments: [VercelDeployment] = []
+    @State private var selectedDeploymentId: String? = nil
     @State private var loadingStacked = false
 
     @State private var revertTarget: ChangedFile? = nil
@@ -87,6 +94,8 @@ struct ChangesTabView: View {
             return sessions.map { .session($0) }
         case .files:
             return []   // Files mode uses tree selection, not flat keyboard nav
+        case .deploys:
+            return []   // Deploys mode uses its own row selection
         }
     }
 
@@ -123,6 +132,7 @@ struct ChangesTabView: View {
                 resizeHandle
                 Group {
                     if viewMode == .files { filesContentPane }
+                    else if viewMode == .deploys { deploysDetailPane }
                     else { diffPane }
                 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -157,11 +167,13 @@ struct ChangesTabView: View {
             }
             .animation(.easeOut(duration: 0.2), value: errorMessage)
             .task(id: project.path) {
-                // Reset Files-mode state so a project switch never shows a stale tree/file.
+                // Reset Files/Deploys state so a project switch never shows stale data.
                 selectedFilePath = nil; fileContent = nil
                 fileTreeRoot = nil; fileTreeLoadedPath = nil
+                deploysResult = nil; deployments = []; selectedDeploymentId = nil
                 await refresh(project.path)
                 if viewMode == .files { await loadFileTree(project.path) }
+                if viewMode == .deploys { await loadDeployments(project.path) }
                 focus = .sidebar
             }
             .alert("Discard changes to \(revertTarget?.name ?? "")?",
@@ -343,6 +355,14 @@ struct ChangesTabView: View {
                     prDetail = d
                 }
             }
+            // Vercel preview deployment for this PR's branch (best-effort).
+            Task {
+                let preview = await VercelScanner.latestPreview(projectPath: projectPath, branch: pr.headRefName)
+                await MainActor.run {
+                    guard stacked?.key == "pr:\(pr.number)" else { return }
+                    prPreview = preview
+                }
+            }
         case let .session(s):
             let written = s.filesTouched.filter { $0.writes > 0 }
                 .map { rel($0.path, projectPath) }
@@ -365,7 +385,7 @@ struct ChangesTabView: View {
                              _ load: @escaping () async -> [FileDiffSection]) {
         selection = nil
         diff = nil
-        prDetail = nil
+        prDetail = nil; prPreview = nil
         commitSectionID = nil; sectionCursor = 0
         stacked = StackedSelection(key: key, title: title, subtitle: subtitle)
         stackedSections = []
@@ -428,6 +448,8 @@ struct ChangesTabView: View {
                         sessionsGroup(projectPath: projectPath)
                     case .files:
                         fileTreeGroup(projectPath: projectPath)
+                    case .deploys:
+                        deploysGroup()
                     }
                 }
                 .padding(DSSpace.sm)
@@ -507,25 +529,6 @@ struct ChangesTabView: View {
                 Spacer(minLength: 0)
                 Text("+\(d.additions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.success)
                 Text("−\(d.deletions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.danger)
-                Button { openPR(d) } label: {
-                    Image(systemName: "arrow.up.forward.app")
-                }
-                .buttonStyle(.borderless)
-                .help("Open PR #\(d.number) in browser")
-                .accessibilityLabel("Open PR #\(d.number) in browser")
-                if d.state.uppercased() == "OPEN" {
-                    Button { mergeTarget = d } label: {
-                        if merging {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.triangle.merge")
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(merging)
-                    .help("Merge PR #\(d.number)")
-                    .accessibilityLabel("Merge PR #\(d.number)")
-                }
             }
             HStack(spacing: 5) {
                 Text(d.baseRefName).font(DSFont.mono(.caption2))
@@ -536,6 +539,50 @@ struct ChangesTabView: View {
                         .font(DSFont.micro).foregroundColor(.secondary).lineLimit(1).truncationMode(.tail)
                 }
             }
+            // Vercel preview deployment for this PR's branch, when available.
+            if let preview = prPreview {
+                HStack(spacing: 5) {
+                    Image(systemName: "triangle.fill").font(.system(size: 8)).foregroundColor(.secondary)
+                    Text("Preview").font(DSFont.micro).foregroundColor(.secondary)
+                    VercelStateBadge(state: preview.state)
+                    if let url = preview.deploymentURL {
+                        Button { NSWorkspace.shared.open(url) } label: {
+                            Text(url.host ?? "open")
+                                .font(DSFont.mono(.caption2)).foregroundColor(.accentColor)
+                                .lineLimit(1).truncationMode(.middle)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open preview deployment")
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            // Prominent action row: secondary Open, primary green Merge (open PRs).
+            HStack(spacing: DSSpace.sm) {
+                Spacer(minLength: 0)
+                Button { openPR(d) } label: {
+                    Label("Open", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open PR #\(d.number) in browser")
+                if d.state.uppercased() == "OPEN" {
+                    Button { mergeTarget = d } label: {
+                        if merging {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("Merge", systemImage: "arrow.triangle.merge")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DSColor.success)
+                    .controlSize(.small)
+                    .disabled(merging)
+                    .help("Merge PR #\(d.number)")
+                    .accessibilityLabel("Merge PR #\(d.number)")
+                }
+            }
+            .padding(.top, 2)
             if !d.body.isEmpty {
                 ScrollView {
                     Text(d.body)
@@ -636,7 +683,7 @@ struct ChangesTabView: View {
     private func clearSelection() {
         selection = nil; diff = nil
         stacked = nil; stackedSections = []
-        prDetail = nil
+        prDetail = nil; prPreview = nil
     }
 
     private func loadList(for mode: ViewMode, projectPath: String) async {
@@ -657,7 +704,28 @@ struct ChangesTabView: View {
             }
         case .files:
             await loadFileTree(projectPath)
+        case .deploys:
+            await loadDeployments(projectPath)
         }
+    }
+
+    // MARK: - Deploys (Vercel) mode
+
+    private func loadDeployments(_ projectPath: String) async {
+        await MainActor.run { deploysResult = nil; loadingList = true }
+        let result = await VercelScanner.deployments(projectPath: projectPath, limit: 30)
+        await MainActor.run {
+            // The fetch is slow (network); ignore it if the user switched projects.
+            guard store.project(for: store.selection)?.path == projectPath else { return }
+            deploysResult = result
+            if case let .ok(list) = result { deployments = list } else { deployments = [] }
+            selectedDeploymentId = deployments.first?.id
+            loadingList = false
+        }
+    }
+
+    private var selectedDeployment: VercelDeployment? {
+        deployments.first { $0.id == selectedDeploymentId }
     }
 
     // MARK: - Files (Filetree) mode
@@ -901,6 +969,128 @@ struct ChangesTabView: View {
             if !detail.isEmpty { Text(detail).font(DSFont.micro).foregroundColor(.secondary) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Deploys (Vercel) pane
+
+    @ViewBuilder
+    private func deploysGroup() -> some View {
+        switch deploysResult {
+        case nil:
+            ProgressView().padding(DSSpace.md).frame(maxWidth: .infinity)
+        case .notAuthenticated:
+            deploysHint("Not connected", "Run vercel login in a terminal, then switch tabs to refresh.")
+        case .notLinked:
+            deploysHint("Project not linked", "Run vercel link in this project, then switch tabs to refresh.")
+        case .failed(let msg):
+            deploysHint("Couldn’t load", msg)
+        case .ok:
+            if deployments.isEmpty {
+                deploysHint("No deployments", "This project has no Vercel deployments yet.")
+            } else {
+                ForEach(deployments) { deployRow($0) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func deployRow(_ d: VercelDeployment) -> some View {
+        let isSel = selectedDeploymentId == d.id
+        HStack(spacing: 6) {
+            Circle().fill(vercelStateColor(d.state)).frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(d.branch ?? (d.isProduction ? "production" : d.url))
+                    .font(DSFont.label).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 4) {
+                    Text(d.state.lowercased()).font(DSFont.micro).foregroundColor(vercelStateColor(d.state))
+                    Text("· \(d.isProduction ? "prod" : "preview")").font(DSFont.micro).foregroundColor(.secondary)
+                    if let at = d.createdAt {
+                        Text("· \(relTime(at))").font(DSFont.micro).foregroundColor(.secondary)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 3).padding(.horizontal, 6)
+        .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+        .contentShape(Rectangle())
+        .onTapGesture { selectedDeploymentId = d.id }
+        .contextMenu {
+            if let url = d.deploymentURL { Button("Visit Deployment") { NSWorkspace.shared.open(url) } }
+            if let inspector = d.inspectorUrl, let iu = URL(string: inspector) {
+                Button("Open in Vercel") { NSWorkspace.shared.open(iu) }
+            }
+        }
+    }
+
+    private func deploysHint(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(DSFont.label).foregroundColor(.secondary)
+            Text(detail).font(DSFont.micro).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DSSpace.md)
+    }
+
+    @ViewBuilder
+    private var deploysDetailPane: some View {
+        if let d = selectedDeployment {
+            VStack(alignment: .leading, spacing: DSSpace.md) {
+                HStack(spacing: 8) {
+                    VercelStateBadge(state: d.state)
+                    VercelTargetTag(isProduction: d.isProduction)
+                    if let at = d.createdAt {
+                        Text(relTime(at)).font(DSFont.micro).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                if let branch = d.branch {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.branch").font(.system(size: 10)).foregroundColor(.secondary)
+                        Text(branch).font(DSFont.mono(.caption))
+                    }
+                }
+                if let msg = d.commitMessage, !msg.isEmpty {
+                    Text(msg).font(DSFont.label).foregroundColor(.secondary)
+                        .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                }
+                if let url = d.deploymentURL {
+                    Text(url.absoluteString).font(DSFont.mono(.caption)).foregroundColor(.accentColor)
+                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                }
+                HStack(spacing: DSSpace.sm) {
+                    if let url = d.deploymentURL {
+                        Button { NSWorkspace.shared.open(url) } label: {
+                            Label("Visit", systemImage: "arrow.up.forward.app")
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                    }
+                    if let inspector = d.inspectorUrl, let iu = URL(string: inspector) {
+                        Button { NSWorkspace.shared.open(iu) } label: {
+                            Label("Open in Vercel", systemImage: "magnifyingglass")
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    }
+                    if let sha = d.commitSha {
+                        Button { copyText(sha) } label: {
+                            Label("Copy SHA", systemImage: "doc.on.doc")
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+                Spacer()
+            }
+            .padding(DSSpace.lg)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            VStack(spacing: DSSpace.sm) {
+                Image(systemName: "triangle").font(.system(size: 32)).foregroundColor(.secondary)
+                Text("Select a deployment").foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     // MARK: Diff pane

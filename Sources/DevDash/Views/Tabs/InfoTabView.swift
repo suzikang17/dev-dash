@@ -49,6 +49,8 @@ struct InfoTabView: View {
 
                     GitCard(project: project)
 
+                    VercelCard(project: project)
+
                     NotesCard(project: project)
 
                     HStack(spacing: DSSpace.md) {
@@ -799,6 +801,125 @@ private struct DevAddressBar: View {
         guard !effectiveURL.isEmpty, let url = URL(string: effectiveURL) else { return }
         NSWorkspace.shared.open(url)
         focused = false
+    }
+}
+
+private struct VercelCard: View {
+    let project: Project
+    @State private var result: VercelScanner.FetchResult? = nil
+    @State private var loading = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSSpace.md) {
+            HStack {
+                Label("VERCEL", systemImage: "triangle.fill")
+                    .font(DSFont.sectionHeader).tracking(1.2).foregroundColor(.secondary)
+                Spacer()
+                if loading { ProgressView().controlSize(.mini) }
+                Button { Task { await load() } } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.borderless).controlSize(.small)
+                .disabled(loading)
+                .help("Refresh Vercel deployments")
+                .accessibilityLabel("Refresh Vercel deployments")
+            }
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface()
+        .task(id: project.path) { await load() }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch result {
+        case .ok(let deps):
+            if let latest = deps.first(where: { $0.isProduction }) ?? deps.first {
+                deploymentSummary(latest)
+            } else {
+                Text("No deployments yet.").font(DSFont.label).foregroundColor(.secondary)
+            }
+        case .notAuthenticated:
+            hint(icon: "person.crop.circle.badge.exclamationmark", title: "Not connected",
+                 detail: "Run vercel login in a terminal, then refresh.")
+        case .notLinked:
+            hint(icon: "link.badge.plus", title: "Project not linked",
+                 detail: "Run vercel link in this project, then refresh.")
+        case .failed(let msg):
+            hint(icon: "exclamationmark.triangle", title: "Couldn’t load", detail: msg)
+        case nil:
+            Text("Loading…").font(DSFont.label).foregroundColor(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func deploymentSummary(_ d: VercelDeployment) -> some View {
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            HStack(spacing: 8) {
+                VercelStateBadge(state: d.state)
+                VercelTargetTag(isProduction: d.isProduction)
+                if let at = d.createdAt {
+                    Text(relativeTime(at)).font(DSFont.micro).foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+            if let branch = d.branch {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.triangle.branch").font(.system(size: 9)).foregroundColor(.secondary)
+                    Text(branch).font(DSFont.mono(.caption2)).foregroundColor(.secondary).lineLimit(1)
+                }
+            }
+            if let url = d.deploymentURL {
+                Button { NSWorkspace.shared.open(url) } label: {
+                    Text(url.host ?? url.absoluteString)
+                        .font(DSFont.mono(.caption)).foregroundColor(.accentColor)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                .buttonStyle(.plain)
+            }
+            HStack(spacing: DSSpace.sm) {
+                if let url = d.deploymentURL {
+                    Button { NSWorkspace.shared.open(url) } label: {
+                        Label("Visit", systemImage: "arrow.up.forward.app")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                }
+                if let inspector = d.inspectorUrl, let iu = URL(string: inspector) {
+                    Button { NSWorkspace.shared.open(iu) } label: {
+                        Label("Vercel", systemImage: "magnifyingglass")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func hint(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon).foregroundColor(.secondary).frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(DSFont.label.weight(.medium))
+                Text(detail).font(DSFont.micro).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated
+        return f.localizedString(for: date, relativeTo: Date())
+    }
+
+    @MainActor
+    private func load() async {
+        loading = true
+        let r = await VercelScanner.deployments(projectPath: project.path, limit: 10)
+        result = r
+        loading = false
     }
 }
 
