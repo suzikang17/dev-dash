@@ -82,12 +82,23 @@ enum GitDiffScanner {
             cwd: path, timeout: 20)
     }
 
-    /// Multi-file working-tree diff (vs HEAD) for a specific set of files. Used for
-    /// "what a Claude Code session changed". Empty list -> empty diff.
-    static func workingDiff(path: String, files: [String]) async -> String? {
+    /// Diff for "what a Claude Code session changed": compares the given files from
+    /// the commit just BEFORE the session started up to the current working tree, so
+    /// changes that were since committed still show. Falls back to vs-HEAD if no
+    /// `since` or no earlier commit. Empty list -> empty diff.
+    static func sessionDiff(path: String, files: [String], since: Date?) async -> String? {
         guard !files.isEmpty else { return "" }
+        var base = "HEAD"
+        if let since {
+            let iso = ISO8601DateFormatter().string(from: since)
+            if let sha = await ShellRunner.run("/usr/bin/git",
+                args: ["rev-list", "-1", "--before=\(iso)", "HEAD"], cwd: path, timeout: 10)?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !sha.isEmpty {
+                base = sha
+            }
+        }
         return await ShellRunner.run("/usr/bin/git",
-            args: ["-c", "core.quotepath=false", "diff", "HEAD", "--"] + files,
+            args: ["-c", "core.quotepath=false", "diff", base, "--"] + files,
             cwd: path, timeout: 20)
     }
 

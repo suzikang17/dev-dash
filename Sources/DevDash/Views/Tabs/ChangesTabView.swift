@@ -276,7 +276,7 @@ struct ChangesTabView: View {
             loadStacked(key: "session:\(s.id)", title: s.title ?? (s.firstUserMessage ?? "Session"),
                         subtitle: "\(written.count) file\(written.count == 1 ? "" : "s") written · \(s.id.prefix(8))",
                         projectPath: projectPath) {
-                let raw = await GitDiffScanner.workingDiff(path: projectPath, files: written) ?? ""
+                let raw = await GitDiffScanner.sessionDiff(path: projectPath, files: written, since: s.startedAt) ?? ""
                 return UnifiedDiffParser.parseMultiFile(raw)
             }
         }
