@@ -11,5 +11,9 @@ cp .build/debug/DevDash DevDash.app/Contents/MacOS/DevDash
 mkdir -p DevDash.app/Contents/Resources
 cp .build/debug/DevDash_DevDash.bundle/Resources/alpine.min.js DevDash.app/Contents/Resources/
 cp .build/debug/DevDash_DevDash.bundle/Resources/devdash-components.js DevDash.app/Contents/Resources/
-codesign --force --deep --sign "Apple Development: sukisoap@icloud.com (L5PTDF7GUW)" DevDash.app
+# Prefer the real Apple Development identity (needed for entitlements /
+# distribution); fall back to ad-hoc signing on machines without it so local
+# debug runs still work.
+codesign --force --deep --sign "Apple Development: sukisoap@icloud.com (L5PTDF7GUW)" DevDash.app 2>/dev/null \
+  || codesign --force --deep --sign - DevDash.app
 open DevDash.app
