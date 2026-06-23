@@ -60,6 +60,8 @@ struct DailyTabView: View {
                             typeName: type,
                             docs: allDocs.filter { $0.loreType == type }
                         )
+                    } else if let ref = openDoc {
+                        BacklinkDocPanel(path: ref.path, onClose: { openDoc = nil })
                     } else if let entry = selectedEntry {
                         NotePanel(entry: entry, onClose: { selectedEntry = nil })
                     } else if let session = selectedSession {
@@ -99,9 +101,6 @@ struct DailyTabView: View {
                 NewLoreTaskSheet(projectPath: project.path) {
                     reload(project: project)
                 }
-            }
-            .sheet(item: $openDoc) { ref in
-                BacklinkDocSheet(path: ref.path) { openDoc = nil }
             }
     }
 
@@ -251,7 +250,7 @@ struct DailyTabView: View {
                             label: session.title ?? session.firstUserMessage ?? "Session",
                             detail: session.durationSeconds > 0 ? formatDuration(session.durationSeconds) : nil,
                             isSelected: selectedSession?.id == session.id,
-                            action: { selectedEntry = nil; selectedSession = session }
+                            action: { selectedEntry = nil; openDoc = nil; selectedSession = session }
                         )
                     }
                 }
@@ -300,7 +299,7 @@ struct DailyTabView: View {
             OutlinerView(
                 nodes: outlineBinding(for: day.dateStr, project: project),
                 projectPath: project.path,
-                onOpenDoc: { openDoc = OpenDocRef(path: $0) }
+                onOpenDoc: { selectedEntry = nil; selectedSession = nil; openDoc = OpenDocRef(path: $0) }
             )
             .onAppear {
                 if outlineByDate[day.dateStr] == nil {
@@ -315,7 +314,7 @@ struct DailyTabView: View {
                             label: session.title ?? session.firstUserMessage ?? "Session",
                             detail: session.durationSeconds > 0 ? formatDuration(session.durationSeconds) : nil,
                             isSelected: selectedSession?.id == session.id,
-                            action: { selectedEntry = nil; selectedSession = session }
+                            action: { selectedEntry = nil; openDoc = nil; selectedSession = session }
                         )
                     }
                 } label: {
@@ -999,9 +998,9 @@ struct OpenDocRef: Identifiable {
     var id: String { path }
 }
 
-/// A lightweight read-only viewer for a lore doc opened by clicking a backlink in
-/// the outliner. Daily mode is full-width (no side panel), so the doc opens here.
-private struct BacklinkDocSheet: View {
+/// Read-only viewer for a lore doc opened by clicking a `[[backlink]]` in the
+/// outliner. Shown in the right-hand pane of the daily split (not a modal).
+private struct BacklinkDocPanel: View {
     let path: String
     let onClose: () -> Void
     @State private var raw: String = ""
@@ -1023,15 +1022,16 @@ private struct BacklinkDocSheet: View {
                     Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
-                .keyboardShortcut(.cancelAction)
                 .accessibilityLabel("Close")
             }
-            .padding(DSSpace.lg)
+            .padding(.horizontal, DSSpace.lg)
+            .padding(.vertical, DSSpace.sm)
             Divider()
             MarkdownWebView(markdown: Self.stripFrontmatter(raw))
         }
-        .frame(width: 640, height: 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "" }
+        .onChange(of: path) { _, _ in raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "" }
     }
 
     private static func stripFrontmatter(_ s: String) -> String {
