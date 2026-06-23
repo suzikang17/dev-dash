@@ -126,6 +126,14 @@ enum GitDiffScanner {
         await ShellRunner.run("/bin/zsh", args: ["-lc", "gh pr diff \(number)"], cwd: path, timeout: 30)
     }
 
+    static func openPRWeb(path: String, number: Int) async {
+        _ = await ShellRunner.run("/bin/zsh", args: ["-lc", "gh pr view \(number) --web"], cwd: path, timeout: 15)
+    }
+
+    static func browseCommit(path: String, sha: String) async {
+        _ = await ShellRunner.run("/bin/zsh", args: ["-lc", "gh browse \(sha)"], cwd: path, timeout: 15)
+    }
+
     /// Raw unified diff for one file from the requested source. `untracked` files
     /// have no tracked diff, so use --no-index against /dev/null to show them as added.
     static func fileDiff(path: String, file: String, source: FileDiffSource,

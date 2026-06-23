@@ -389,6 +389,11 @@ struct ChangesTabView: View {
                     if let i = navItems.firstIndex(of: .pr(pr)) { cursor = i }
                     activate(.pr(pr), projectPath)
                 }
+                .contextMenu {
+                    Button("Open in Browser") { Task { await GitDiffScanner.openPRWeb(path: projectPath, number: pr.number) } }
+                    Button("Copy Branch") { copyText(pr.headRefName) }
+                    Button("Copy #\(pr.number)") { copyText("#\(pr.number)") }
+                }
             }
         }
     }
@@ -421,8 +426,21 @@ struct ChangesTabView: View {
                     if let i = navItems.firstIndex(of: .session(s)) { cursor = i }
                     activate(.session(s), projectPath)
                 }
+                .contextMenu {
+                    Button("Copy Session ID") { copyText(s.id) }
+                    Button("Copy Title") { copyText(s.title ?? s.firstUserMessage ?? "Session") }
+                }
             }
         }
+    }
+
+    private func copyText(_ s: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
+    }
+
+    private func revealInFinder(_ absolutePath: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: absolutePath)])
     }
 
     private func prStateColor(_ s: String) -> Color {
@@ -516,6 +534,26 @@ struct ChangesTabView: View {
             if let i = navItems.firstIndex(of: item) { cursor = i }
             activate(item, projectPath)
         }
+        .contextMenu {
+            if isStaged {
+                Button("Unstage") {
+                    Task { await doMutation(projectPath, file, verb: "unstage") {
+                        await GitDiffScanner.unstage(path: projectPath, file: file.path)
+                    } }
+                }
+            } else {
+                Button("Stage") {
+                    Task { await doMutation(projectPath, file, verb: "stage") {
+                        await GitDiffScanner.stage(path: projectPath, file: file.path)
+                    } }
+                }
+                Button("Discard Changes…", role: .destructive) { revertTarget = file }
+            }
+            Divider()
+            Button("Reveal in Finder") { revealInFinder("\(projectPath)/\(file.path)") }
+            Button("Open File") { store.openFile("\(projectPath)/\(file.path)") }
+            Button("Copy Path") { copyText(file.path) }
+        }
     }
 
     @ViewBuilder
@@ -537,6 +575,11 @@ struct ChangesTabView: View {
                 focus = .sidebar
                 if let i = navItems.firstIndex(of: .commit(commit)) { cursor = i }
                 activate(.commit(commit), projectPath)
+            }
+            .contextMenu {
+                Button("Copy SHA") { copyText(commit.sha) }
+                Button("Copy Message") { copyText(commit.subject) }
+                Button("Open on GitHub") { Task { await GitDiffScanner.browseCommit(path: projectPath, sha: commit.sha) } }
             }
         }
     }
