@@ -31,6 +31,8 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: DSSpace.xl) {
                     appearanceSection
                     Divider()
+                    foldersSection
+                    Divider()
                     documentSection
                     Divider()
                     terminalSection
@@ -103,6 +105,81 @@ struct SettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Project folders (scan roots)
+
+    private var foldersSection: some View {
+        section(title: "Project folders") {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
+                Text("DevDash scans these folders for projects. Each immediate subfolder with a recognizable stack appears in the sidebar.")
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if store.devRoots.isEmpty {
+                    Text("No folders — DevDash won't find any projects.")
+                        .font(DSFont.micro)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach(store.devRoots, id: \.self) { root in
+                        rootRow(root)
+                    }
+                }
+
+                HStack(spacing: DSSpace.sm) {
+                    Button { addFolder() } label: {
+                        Label("Add folder…", systemImage: "plus")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    Spacer()
+                    Button("Reset to defaults") { store.resetDevRoots() }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private func rootRow(_ root: String) -> some View {
+        HStack(spacing: DSSpace.sm) {
+            Image(systemName: "folder")
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text(DevRoots.shortenPath(root))
+                .font(.system(.caption, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(root)
+            Spacer(minLength: DSSpace.sm)
+            Button { store.removeDevRoot(root) } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove folder \(DevRoots.shortenPath(root))")
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Native directory picker — adding via a panel avoids typo'd paths.
+    /// We store the raw path; that's fine because DevDash isn't sandboxed. Under
+    /// App Sandbox (e.g. Mac App Store) this would need a security-scoped bookmark
+    /// to keep scanning the folder across launches.
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Add"
+        panel.message = "Choose a folder that contains your projects"
+        panel.directoryURL = URL(fileURLWithPath: DevRoots.home)
+        if panel.runModal() == .OK, let url = panel.url {
+            store.addDevRoot(url.path)
+        }
     }
 
     // MARK: - Terminal

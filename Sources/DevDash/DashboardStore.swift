@@ -125,6 +125,10 @@ final class DashboardStore: ObservableObject {
     @Published var openTaskId: String? = nil
     @Published var openTaskProjectPath: String? = nil
     @Published var isSettingsVisible: Bool = false
+    /// Folders scanned for projects (Settings → Project folders). Mirrors the
+    /// persisted `DevRoots.roots`; mutate via `addDevRoot`/`removeDevRoot`/`resetDevRoots`
+    /// so the change is saved and a rescan is kicked off.
+    @Published var devRoots: [String] = DevRoots.roots
     @Published var appTheme: AppTheme =
         AppTheme(rawValue: UserDefaults.standard.string(forKey: "devdash.theme") ?? "") ?? .dark {
         didSet {
@@ -342,9 +346,43 @@ final class DashboardStore: ObservableObject {
     private var refreshTask: Task<Void, Never>?
 
     private var refreshing = false
+    /// Set when `refreshAll` is asked to run while one is already in flight, so
+    /// the current pass loops once more and the latest state (e.g. a just-added
+    /// scan root) is always reflected rather than silently dropped.
+    private var refreshPending = false
+
+    // MARK: - Project folders (scan roots)
+
+    /// Add a folder to the scan roots, persist, and rescan. No-op for blanks
+    /// or duplicates (after normalization).
+    func addDevRoot(_ raw: String) {
+        let norm = DevRoots.normalize(raw)
+        guard !norm.isEmpty, !devRoots.contains(norm) else { return }
+        DevRoots.setRoots(devRoots + [norm])
+        devRoots = DevRoots.roots   // re-read so in-memory matches persisted (normalized/de-duped)
+        Task { await refreshAll() }
+    }
+
+    /// Remove a folder from the scan roots, persist, and rescan.
+    func removeDevRoot(_ root: String) {
+        guard devRoots.contains(root) else { return }
+        DevRoots.setRoots(devRoots.filter { $0 != root })
+        devRoots = DevRoots.roots   // re-read so in-memory matches persisted source of truth
+        Task { await refreshAll() }
+    }
+
+    /// Forget customization, revert to the built-in defaults, and rescan.
+    func resetDevRoots() {
+        DevRoots.resetRoots()
+        devRoots = DevRoots.roots
+        Task { await refreshAll() }
+    }
 
     func refreshAll() async {
-        if refreshing { return }
+        // Coalesce: if a scan is in flight, flag it to loop once more on the
+        // current pass rather than spawning a concurrent scan or dropping the
+        // request — the latter would leave a just-changed root set unscanned.
+        if refreshing { refreshPending = true; return }
         refreshing = true
         isLoading = true
         defer {
@@ -352,38 +390,42 @@ final class DashboardStore: ObservableObject {
             isLoading = false
         }
 
-        // Stream results: each scan updates state as soon as it finishes,
-        // so the sidebar populates progressively rather than waiting for the slowest.
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { [weak self] in
-                let svcs = await ProcessScanner.scan()
-                await MainActor.run { self?.services = svcs }
-            }
-            group.addTask { [weak self] in
-                let projs = await ProjectScanner.scanAll()
-                await MainActor.run { self?.projects = projs }
-            }
-            group.addTask { [weak self] in
-                let sess = await SessionScanner.scan(limit: 30)
-                await MainActor.run { self?.sessions = sess }
-            }
-        }
-        self.lastUpdated = Date()
+        repeat {
+            refreshPending = false
 
-        // Background git status scan for all git projects — detached so it
-        // doesn't block the main refresh tick. Each result updates the sidebar
-        // as it arrives.
-        let gitPaths = projects.filter { $0.isGit }.map { $0.path }
-        Task.detached(priority: .utility) { [weak self] in
+            // Stream results: each scan updates state as soon as it finishes,
+            // so the sidebar populates progressively rather than waiting for the slowest.
             await withTaskGroup(of: Void.self) { group in
-                for path in gitPaths {
-                    group.addTask {
-                        guard let status = await GitStatusScanner.scan(path: path) else { return }
-                        await MainActor.run { self?.gitStatuses[path] = status }
+                group.addTask { [weak self] in
+                    let svcs = await ProcessScanner.scan()
+                    await MainActor.run { self?.services = svcs }
+                }
+                group.addTask { [weak self] in
+                    let projs = await ProjectScanner.scanAll()
+                    await MainActor.run { self?.projects = projs }
+                }
+                group.addTask { [weak self] in
+                    let sess = await SessionScanner.scan(limit: 30)
+                    await MainActor.run { self?.sessions = sess }
+                }
+            }
+            self.lastUpdated = Date()
+
+            // Background git status scan for all git projects — detached so it
+            // doesn't block the main refresh tick. Each result updates the sidebar
+            // as it arrives.
+            let gitPaths = projects.filter { $0.isGit }.map { $0.path }
+            Task.detached(priority: .utility) { [weak self] in
+                await withTaskGroup(of: Void.self) { group in
+                    for path in gitPaths {
+                        group.addTask {
+                            guard let status = await GitStatusScanner.scan(path: path) else { return }
+                            await MainActor.run { self?.gitStatuses[path] = status }
+                        }
                     }
                 }
             }
-        }
+        } while refreshPending
     }
 
     func startAutoRefresh(interval: TimeInterval = 15) {
