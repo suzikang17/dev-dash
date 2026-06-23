@@ -1033,11 +1033,7 @@ private struct BacklinkDocPanel: View {
             .padding(.horizontal, DSSpace.lg)
             .padding(.vertical, DSSpace.sm)
             Divider()
-            TextEditor(text: $docBody)
-                .font(.system(size: 13))
-                .lineSpacing(2)
-                .padding(.horizontal, DSSpace.md)
-                .padding(.vertical, DSSpace.sm)
+            MarkdownLiveEditor(text: $docBody)
                 .onChange(of: docBody) { _, _ in scheduleSave() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
