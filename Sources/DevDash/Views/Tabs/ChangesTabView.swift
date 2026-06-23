@@ -15,6 +15,7 @@ struct ChangesTabView: View {
     @State private var diff: FileDiff? = nil
     @State private var loadingDiff = false
     @State private var revertTarget: ChangedFile? = nil
+    @State private var errorMessage: String? = nil
 
     struct DiffSelection: Equatable {
         let file: String
@@ -32,6 +33,29 @@ struct ChangesTabView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
             }
+            .overlay(alignment: .top) {
+                if let errorMessage {
+                    HStack(spacing: DSSpace.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(DSColor.danger)
+                        Text(errorMessage)
+                            .font(DSFont.label)
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button {
+                            self.errorMessage = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .padding(DSSpace.sm)
+                    .background(DSColor.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: DSRadius.medium))
+                    .padding(DSSpace.sm)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: errorMessage)
             .task(id: project.path) { await refresh(project.path) }
             .alert("Discard changes to \(revertTarget?.name ?? "")?",
                    isPresented: Binding(get: { revertTarget != nil },
@@ -95,11 +119,15 @@ struct ChangesTabView: View {
             Spacer(minLength: 4)
             if isStaged {
                 rowButton("minus.circle", help: "Unstage") {
-                    Task { await GitDiffScanner.unstage(path: projectPath, file: file.path); await refresh(projectPath) }
+                    Task { await doMutation(projectPath, file, verb: "unstage") {
+                        await GitDiffScanner.unstage(path: projectPath, file: file.path)
+                    } }
                 }
             } else {
                 rowButton("plus.circle", help: "Stage") {
-                    Task { await GitDiffScanner.stage(path: projectPath, file: file.path); await refresh(projectPath) }
+                    Task { await doMutation(projectPath, file, verb: "stage") {
+                        await GitDiffScanner.stage(path: projectPath, file: file.path)
+                    } }
                 }
                 rowButton("arrow.uturn.backward", help: "Discard") { revertTarget = file }
             }
@@ -239,8 +267,19 @@ struct ChangesTabView: View {
     }
 
     private func doRevert(_ projectPath: String, _ file: ChangedFile) async {
-        _ = await GitDiffScanner.revert(path: projectPath, file: file.path, untracked: file.isUntracked)
         await MainActor.run { revertTarget = nil }
+        await doMutation(projectPath, file, verb: "discard changes to") {
+            await GitDiffScanner.revert(path: projectPath, file: file.path, untracked: file.isUntracked)
+        }
+    }
+
+    /// Run a git mutation, surface failures in the error banner, then refresh.
+    private func doMutation(_ projectPath: String, _ file: ChangedFile, verb: String,
+                            _ op: @escaping () async -> Bool) async {
+        let ok = await op()
+        await MainActor.run {
+            errorMessage = ok ? nil : "Failed to \(verb) \(file.name)."
+        }
         await refresh(projectPath)
     }
 }

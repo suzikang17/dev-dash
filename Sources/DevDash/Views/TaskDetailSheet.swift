@@ -218,8 +218,7 @@ struct TaskDetailSheet: View {
         VStack(alignment: .leading, spacing: DSSpace.xs) {
             SectionHeader("Referenced in")
             Button {
-                store.pendingFilePath = docPath
-                store.tabStore.detailTab = .changes
+                store.openFile(docPath)
             } label: {
                 HStack(spacing: DSSpace.xs) {
                     Image(systemName: "doc.text")
@@ -409,8 +408,7 @@ struct TaskDetailSheet: View {
             VStack(alignment: .leading, spacing: DSSpace.xs) {
                 SectionHeader("Manual tests")
                 Button {
-                    store.pendingFilePath = testsPath
-                    store.tabStore.detailTab = .changes
+                    store.openFile(testsPath)
                     dismiss()
                 } label: {
                     Label("Open test checklist", systemImage: "checklist")

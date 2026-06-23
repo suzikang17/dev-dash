@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 /// App-wide appearance. Persisted across launches under `devdash.theme`.
 enum AppTheme: String, CaseIterable {
@@ -114,8 +115,12 @@ final class DashboardStore: ObservableObject {
     )
     @Published var sessionDigests: [String: SessionDigest] = [:]
     @Published var openSessionId: String? = nil
-    /// Path the Changes tab should open when navigating from another tab.
-    @Published var pendingFilePath: String? = nil
+    /// Open a file in the user's default app. The Files tab that used to render
+    /// files in-app was replaced by the Changes (diff) tab, so cross-tab "open
+    /// this file" actions hand off to the OS instead.
+    func openFile(_ path: String) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
     /// Open a TaskDetailSheet for this task. Set to nil to dismiss.
     @Published var openTaskId: String? = nil
     @Published var openTaskProjectPath: String? = nil

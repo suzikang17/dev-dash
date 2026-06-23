@@ -138,9 +138,8 @@ struct VisualDiffSheet: View {
             .buttonStyle(.bordered)
             .help("Generate static HTML report and open in browser")
 
-            Button("View in Files") {
-                store.pendingFilePath = "\(result.runPath)/snapshot.png"
-                store.tabStore.detailTab = .changes
+            Button("Open Snapshot") {
+                store.openFile("\(result.runPath)/snapshot.png")
                 dismiss()
             }
             .buttonStyle(.bordered)
