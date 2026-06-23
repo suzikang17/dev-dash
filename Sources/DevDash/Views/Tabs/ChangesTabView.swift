@@ -26,6 +26,27 @@ struct ChangesTabView: View {
     @AppStorage("devdash.changesSidebarWidth") private var sidebarWidth: Double = 300
     @State private var dragStartWidth: Double? = nil
 
+    // Vim-style navigation
+    enum Pane: Hashable { case sidebar, diff }
+    @FocusState private var focus: Pane?
+    @State private var cursor: Int = 0          // index into navItems
+    @State private var pendingG = false         // first 'g' of a 'gg'
+    @State private var diffRowID: Int? = nil    // scroll position in single-file diff
+    @State private var diffLineCursor = 0
+    @State private var commitSectionID: String? = nil  // scroll position in commit detail
+    @State private var sectionCursor = 0
+
+    enum NavItem: Equatable {
+        case file(path: String, source: FileDiffSource, untracked: Bool, name: String)
+        case commit(GitCommit)
+    }
+
+    private var navItems: [NavItem] {
+        unstaged.map { .file(path: $0.path, source: .unstaged, untracked: $0.isUntracked, name: $0.name) }
+        + staged.map { .file(path: $0.path, source: .staged, untracked: $0.isUntracked, name: $0.name) }
+        + commits.map { .commit($0) }
+    }
+
     struct DiffSelection: Equatable {
         let file: String
         let source: FileDiffSource
@@ -38,11 +59,18 @@ struct ChangesTabView: View {
                 sidebar(projectPath: project.path)
                     .frame(width: sidebarWidth)
                     .background(DSColor.cardBg)
+                    .focusable()
+                    .focused($focus, equals: .sidebar)
+                    .onKeyPress { handleSidebarKey($0, project.path) }
                 resizeHandle
                 diffPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
+                    .focusable()
+                    .focused($focus, equals: .diff)
+                    .onKeyPress { handleDiffKey($0) }
             }
+            .overlay(alignment: .bottomTrailing) { focusHint }
             .overlay(alignment: .top) {
                 if let errorMessage {
                     HStack(spacing: DSSpace.sm) {
@@ -66,7 +94,10 @@ struct ChangesTabView: View {
                 }
             }
             .animation(.easeOut(duration: 0.2), value: errorMessage)
-            .task(id: project.path) { await refresh(project.path) }
+            .task(id: project.path) {
+                await refresh(project.path)
+                focus = .sidebar
+            }
             .alert("Discard changes to \(revertTarget?.name ?? "")?",
                    isPresented: Binding(get: { revertTarget != nil },
                                         set: { if !$0 { revertTarget = nil } })) {
@@ -104,6 +135,121 @@ struct ChangesTabView: View {
                     }
                     .onEnded { _ in dragStartWidth = nil }
             )
+    }
+
+    private var focusHint: some View {
+        Text(focus == .diff ? "diff · j/k scroll · h sidebar" : "list · j/k move · l/⏎ diff")
+            .font(DSFont.micro).foregroundColor(.secondary)
+            .padding(.horizontal, DSSpace.sm).padding(.vertical, 3)
+            .background(DSColor.cardBg.opacity(0.9), in: Capsule())
+            .padding(DSSpace.sm)
+    }
+
+    // MARK: Vim navigation
+
+    private func handleSidebarKey(_ press: KeyPress, _ projectPath: String) -> KeyPress.Result {
+        if press.modifiers.contains(.control) {
+            switch press.key.character {
+            case "d": moveCursor(10, projectPath); return .handled
+            case "u": moveCursor(-10, projectPath); return .handled
+            default: break
+            }
+        }
+        switch press.key.character {
+        case "\r", "\t": focus = .diff; return .handled
+        default: break
+        }
+        switch press.characters {
+        case "j": moveCursor(1, projectPath); pendingG = false; return .handled
+        case "k": moveCursor(-1, projectPath); pendingG = false; return .handled
+        case "l": focus = .diff; pendingG = false; return .handled
+        case "G": setCursor(navItems.count - 1, projectPath); pendingG = false; return .handled
+        case "g":
+            if pendingG { setCursor(0, projectPath); pendingG = false } else { pendingG = true }
+            return .handled
+        default:
+            pendingG = false
+            return .ignored
+        }
+    }
+
+    private func handleDiffKey(_ press: KeyPress) -> KeyPress.Result {
+        switch press.key.character {
+        case "\t", "\u{1b}": focus = .sidebar; pendingG = false; return .handled
+        default: break
+        }
+        if press.characters == "h" { focus = .sidebar; pendingG = false; return .handled }
+
+        let ctrl = press.modifiers.contains(.control)
+        if selectedCommit != nil {
+            let count = commitSections.count
+            guard count > 0 else { return .handled }
+            if ctrl, press.key.character == "d" { moveSection(1); return .handled }
+            if ctrl, press.key.character == "u" { moveSection(-1); return .handled }
+            switch press.characters {
+            case "j": moveSection(1); pendingG = false; return .handled
+            case "k": moveSection(-1); pendingG = false; return .handled
+            case "G": setSection(count - 1); pendingG = false; return .handled
+            case "g":
+                if pendingG { setSection(0); pendingG = false } else { pendingG = true }
+                return .handled
+            default: pendingG = false; return .ignored
+            }
+        } else {
+            let count = diff?.rows.count ?? 0
+            guard count > 0 else { return .handled }
+            if ctrl, press.key.character == "d" { moveLine(15); return .handled }
+            if ctrl, press.key.character == "u" { moveLine(-15); return .handled }
+            switch press.characters {
+            case "j": moveLine(1); pendingG = false; return .handled
+            case "k": moveLine(-1); pendingG = false; return .handled
+            case "G": setLine(count - 1); pendingG = false; return .handled
+            case "g":
+                if pendingG { setLine(0); pendingG = false } else { pendingG = true }
+                return .handled
+            default: pendingG = false; return .ignored
+            }
+        }
+    }
+
+    private func moveCursor(_ delta: Int, _ projectPath: String) {
+        setCursor(cursor + delta, projectPath)
+    }
+
+    private func setCursor(_ idx: Int, _ projectPath: String) {
+        let items = navItems
+        guard !items.isEmpty else { return }
+        let n = max(0, min(items.count - 1, idx))
+        cursor = n
+        activate(items[n], projectPath)
+    }
+
+    private func activate(_ item: NavItem, _ projectPath: String) {
+        switch item {
+        case let .file(path, source, untracked, _):
+            selectedCommit = nil
+            diffRowID = nil; diffLineCursor = 0
+            selection = DiffSelection(file: path, source: source, untracked: untracked)
+            Task { await loadDiff(projectPath) }
+        case let .commit(c):
+            commitSectionID = nil; sectionCursor = 0
+            Task { await selectCommit(c, projectPath: projectPath) }
+        }
+    }
+
+    private func moveLine(_ delta: Int) { setLine(diffLineCursor + delta) }
+    private func setLine(_ idx: Int) {
+        let count = diff?.rows.count ?? 0
+        guard count > 0 else { return }
+        diffLineCursor = max(0, min(count - 1, idx))
+        diffRowID = diffLineCursor
+    }
+
+    private func moveSection(_ delta: Int) { setSection(sectionCursor + delta) }
+    private func setSection(_ idx: Int) {
+        guard !commitSections.isEmpty else { return }
+        sectionCursor = max(0, min(commitSections.count - 1, idx))
+        commitSectionID = commitSections[sectionCursor].id
     }
 
     // MARK: Sidebar
@@ -169,9 +315,10 @@ struct ChangesTabView: View {
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
         .contentShape(Rectangle())
         .onTapGesture {
-            selectedCommit = nil
-            selection = DiffSelection(file: file.path, source: source, untracked: file.isUntracked)
-            Task { await loadDiff(projectPath) }
+            focus = .sidebar
+            let item = NavItem.file(path: file.path, source: source, untracked: file.isUntracked, name: file.name)
+            if let i = navItems.firstIndex(of: item) { cursor = i }
+            activate(item, projectPath)
         }
     }
 
@@ -190,7 +337,11 @@ struct ChangesTabView: View {
             .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
             .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
             .contentShape(Rectangle())
-            .onTapGesture { Task { await selectCommit(commit, projectPath: projectPath) } }
+            .onTapGesture {
+                focus = .sidebar
+                if let i = navItems.firstIndex(of: .commit(commit)) { cursor = i }
+                activate(.commit(commit), projectPath)
+            }
         }
     }
 
@@ -225,7 +376,8 @@ struct ChangesTabView: View {
         if loadingCommit || loadingDiff {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let selectedCommit {
-            CommitDetailView(commit: selectedCommit, sections: commitSections)
+            CommitDetailView(commit: selectedCommit, sections: commitSections,
+                             scrollID: $commitSectionID)
                 .id(selectedCommit.sha)
         } else if let diff, let selection {
             VStack(spacing: 0) {
@@ -235,7 +387,8 @@ struct ChangesTabView: View {
                 }
                 .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                 Divider()
-                SideBySideDiffView(diff: diff, language: language(for: selection.file))
+                SideBySideDiffView(diff: diff, language: language(for: selection.file),
+                                   scrollID: $diffRowID)
             }
         } else {
             Text("Select a file or commit to view its diff")
@@ -257,6 +410,7 @@ struct ChangesTabView: View {
             unstaged = all.filter { $0.unstagedStatus != nil || $0.isUntracked }
             staged = all.filter { $0.stagedStatus != nil }
             commits = log
+            cursor = max(0, min(cursor, navItems.count - 1))
         }
     }
 
@@ -313,6 +467,7 @@ struct ChangesTabView: View {
 private struct CommitDetailView: View {
     let commit: GitCommit
     let sections: [FileDiffSection]
+    var scrollID: Binding<String?> = .constant(nil)
 
     @State private var collapsed: Set<String> = []
 
@@ -320,24 +475,24 @@ private struct CommitDetailView: View {
     private var totalDels: Int { sections.reduce(0) { $0 + $1.diff.deletions } }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    header
-                    if sections.count > 1 { jumpBar(proxy: proxy) }
-                    ForEach(sections) { section in
-                        fileSection(section)
-                            .id(section.id)
-                    }
-                    if sections.isEmpty {
-                        Text("No file changes in this commit")
-                            .font(DSFont.label).foregroundColor(.secondary)
-                            .padding(DSSpace.lg)
-                    }
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                header
+                if sections.count > 1 { jumpBar }
+                ForEach(sections) { section in
+                    fileSection(section)
+                        .id(section.id)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                if sections.isEmpty {
+                    Text("No file changes in this commit")
+                        .font(DSFont.label).foregroundColor(.secondary)
+                        .padding(DSSpace.lg)
+                }
             }
+            .scrollTargetLayout()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollPosition(id: scrollID, anchor: .top)
         .onAppear {
             // Big files start collapsed so opening a large commit stays snappy.
             collapsed = Set(sections.filter { $0.diff.rows.count > 600 }.map(\.path))
@@ -362,12 +517,12 @@ private struct CommitDetailView: View {
         .background(DSColor.cardBg)
     }
 
-    private func jumpBar(proxy: ScrollViewProxy) -> some View {
+    private var jumpBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: DSSpace.xs) {
                 ForEach(sections) { section in
                     Button {
-                        withAnimation { proxy.scrollTo(section.id, anchor: .top) }
+                        withAnimation { scrollID.wrappedValue = section.id }
                     } label: {
                         Text(basename(section.path))
                             .font(DSFont.micro)

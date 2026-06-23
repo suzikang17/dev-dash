@@ -7,12 +7,14 @@ import DevDashCore
 struct SideBySideDiffView: View {
     let diff: FileDiff
     let language: SyntaxHighlighter.Language
+    var scrollID: Binding<Int?> = .constant(nil)
 
     var body: some View {
         ScrollView(.vertical) {
-            DiffRowsView(diff: diff, language: language)
+            DiffRowsView(diff: diff, language: language, scrollTarget: true)
                 .padding(.vertical, DSSpace.xs)
         }
+        .scrollPosition(id: scrollID, anchor: .center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(NSColor.textBackgroundColor))
     }
@@ -24,6 +26,7 @@ struct SideBySideDiffView: View {
 struct DiffRowsView: View {
     let diff: FileDiff
     let language: SyntaxHighlighter.Language
+    var scrollTarget: Bool = false
 
     var body: some View {
         if diff.isBinary {
@@ -33,12 +36,22 @@ struct DiffRowsView: View {
         } else if diff.rows.isEmpty {
             placeholder("No changes")
         } else {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(diff.rows.enumerated()), id: \.offset) { _, row in
-                    DiffRowView(row: row, language: language)
-                }
+            rows
+        }
+    }
+
+    @ViewBuilder
+    private var rows: some View {
+        let stack = LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(diff.rows.enumerated()), id: \.offset) { idx, row in
+                DiffRowView(row: row, language: language).id(idx)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        if scrollTarget {
+            stack.scrollTargetLayout()
+        } else {
+            stack
         }
     }
 
