@@ -108,18 +108,58 @@ enum GitDiffScanner {
     private struct GHPR: Decodable {
         let number: Int; let title: String; let state: String
         let author: GHAuthor?; let headRefName: String?
+        let updatedAt: String?
+    }
+
+    /// Parse a GitHub ISO-8601 timestamp, tolerating the fractional-seconds
+    /// variant `gh` may emit. Formatters are local (not shared) to stay safe
+    /// across overlapping async loads.
+    private static func parseGHDate(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = withFractional.date(from: raw) { return d }
+        return ISO8601DateFormatter().date(from: raw)
     }
 
     /// List PRs (open + merged/closed) via `gh`. Returns [] if gh is missing/unauthed.
     static func pullRequests(path: String) async -> [PRSummary] {
-        let cmd = "gh pr list --state all --limit 50 --json number,title,state,author,headRefName"
+        let cmd = "gh pr list --state all --limit 50 --json number,title,state,author,headRefName,updatedAt"
         guard let raw = await ShellRunner.run("/bin/zsh", args: ["-lc", cmd], cwd: path, timeout: 25),
               let data = raw.data(using: .utf8),
               let prs = try? JSONDecoder().decode([GHPR].self, from: data) else { return [] }
         return prs.map {
             PRSummary(number: $0.number, title: $0.title, state: $0.state,
-                      author: $0.author?.login ?? "?", headRefName: $0.headRefName ?? "")
+                      author: $0.author?.login ?? "?", headRefName: $0.headRefName ?? "",
+                      updatedAt: parseGHDate($0.updatedAt))
         }
+    }
+
+    private struct GHLabel: Decodable { let name: String }
+    private struct GHPRDetail: Decodable {
+        let number: Int; let title: String; let state: String
+        let author: GHAuthor?; let body: String?
+        let baseRefName: String?; let headRefName: String?
+        let additions: Int?; let deletions: Int?
+        let labels: [GHLabel]?
+        let updatedAt: String?; let mergedAt: String?; let url: String?
+    }
+
+    /// Full metadata for one PR via `gh pr view`. Returns nil if gh fails.
+    static func prDetail(path: String, number: Int) async -> PRDetail? {
+        let fields = "number,title,state,author,body,baseRefName,headRefName,additions,deletions,labels,updatedAt,mergedAt,url"
+        let cmd = "gh pr view \(number) --json \(fields)"
+        guard let raw = await ShellRunner.run("/bin/zsh", args: ["-lc", cmd], cwd: path, timeout: 25),
+              let data = raw.data(using: .utf8),
+              let p = try? JSONDecoder().decode(GHPRDetail.self, from: data) else { return nil }
+        return PRDetail(
+            number: p.number, title: p.title, state: p.state,
+            author: p.author?.login ?? "?", body: (p.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+            baseRefName: p.baseRefName ?? "", headRefName: p.headRefName ?? "",
+            additions: p.additions ?? 0, deletions: p.deletions ?? 0,
+            labels: (p.labels ?? []).map { $0.name },
+            updatedAt: parseGHDate(p.updatedAt), mergedAt: parseGHDate(p.mergedAt),
+            url: p.url ?? "")
     }
 
     static func prDiff(path: String, number: Int) async -> String? {

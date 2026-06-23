@@ -6,11 +6,15 @@ import AppKit
 struct CodeEditor: NSViewRepresentable {
     @Binding var text: String
     let language: SyntaxHighlighter.Language
+    /// When false the view is a read-only, still-selectable code viewer.
+    var isEditable: Bool = true
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         guard let textView = scroll.documentView as? NSTextView else { return scroll }
 
+        textView.isEditable = isEditable
+        textView.isSelectable = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -49,6 +53,7 @@ struct CodeEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let tv = scroll.documentView as? NSTextView else { return }
+        context.coordinator.parent = self   // keep binding/language current for the change handler
         if tv.string != text {
             tv.string = text
             context.coordinator.applyHighlighting(to: tv, language: language)

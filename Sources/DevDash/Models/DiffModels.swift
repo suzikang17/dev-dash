@@ -30,5 +30,27 @@ struct PRSummary: Identifiable, Hashable {
     let state: String          // OPEN / MERGED / CLOSED
     let author: String
     let headRefName: String
+    let updatedAt: Date?       // last-activity time; drives recency ordering
+    var id: Int { number }
+
+    /// Open PRs are grouped/listed ahead of merged + closed ones.
+    var isOpen: Bool { state.uppercased() == "OPEN" }
+}
+
+/// Richer PR metadata, loaded lazily via `gh pr view` when a PR is selected.
+struct PRDetail: Identifiable, Hashable {
+    let number: Int
+    let title: String
+    let state: String
+    let author: String
+    let body: String
+    let baseRefName: String
+    let headRefName: String
+    let additions: Int
+    let deletions: Int
+    let labels: [String]
+    let updatedAt: Date?
+    let mergedAt: Date?
+    let url: String
     var id: Int { number }
 }

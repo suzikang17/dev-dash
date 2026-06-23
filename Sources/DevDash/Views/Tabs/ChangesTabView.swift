@@ -6,10 +6,13 @@ struct ChangesTabView: View {
     @EnvironmentObject var store: DashboardStore
 
     enum ViewMode: String, CaseIterable, Identifiable {
-        case changes, prs, sessions
+        case changes, prs, sessions, files
         var id: String { rawValue }
         var label: String {
-            switch self { case .changes: return "Changes"; case .prs: return "PRs"; case .sessions: return "Sessions" }
+            switch self {
+            case .changes: return "Changes"; case .prs: return "PRs"
+            case .sessions: return "Sessions"; case .files: return "Files"
+            }
         }
     }
     @State private var viewMode: ViewMode = .changes
@@ -19,6 +22,13 @@ struct ChangesTabView: View {
     @State private var commits: [GitCommit] = []
     @State private var prs: [PRSummary] = []
     @State private var sessions: [SessionDigest] = []
+
+    // Files (Filetree) mode — browse + view any file in the project.
+    @State private var fileTreeRoot: FileNode? = nil
+    @State private var fileTreeLoadedPath: String? = nil
+    @State private var selectedFilePath: String? = nil
+    @State private var fileContent: FileTreeScanner.FileContent? = nil
+    @State private var fileViewerText: String = ""
     @State private var loadingList = false
 
     // Working-tree single-file selection
@@ -29,6 +39,7 @@ struct ChangesTabView: View {
     // Stacked all-files view (commit / PR / session)
     @State private var stacked: StackedSelection? = nil
     @State private var stackedSections: [FileDiffSection] = []
+    @State private var prDetail: PRDetail? = nil   // metadata for the selected PR
     @State private var loadingStacked = false
 
     @State private var revertTarget: ChangedFile? = nil
@@ -68,10 +79,26 @@ struct ChangesTabView: View {
                 + staged.map { .file(path: $0.path, source: .staged, untracked: $0.isUntracked, name: $0.name) }
                 + commits.map { .commit($0) }
         case .prs:
-            return prs.map { .pr($0) }
+            return sortedPRs.map { .pr($0) }
         case .sessions:
             return sessions.map { .session($0) }
+        case .files:
+            return []   // Files mode uses tree selection, not flat keyboard nav
         }
+    }
+
+    /// Open PRs first, then merged/closed — each group ordered by recency
+    /// (most recent activity first; missing timestamps fall back to PR number).
+    private var sortedPRs: [PRSummary] {
+        func byRecency(_ a: PRSummary, _ b: PRSummary) -> Bool {
+            switch (a.updatedAt, b.updatedAt) {
+            case let (x?, y?) where x != y: return x > y
+            default: return a.number > b.number
+            }
+        }
+        let open = prs.filter { $0.isOpen }.sorted(by: byRecency)
+        let closed = prs.filter { !$0.isOpen }.sorted(by: byRecency)
+        return open + closed
     }
 
     struct DiffSelection: Equatable {
@@ -91,7 +118,10 @@ struct ChangesTabView: View {
                     .focused($focus, equals: .sidebar)
                     .onKeyPress { handleSidebarKey($0, project.path) }
                 resizeHandle
-                diffPane
+                Group {
+                    if viewMode == .files { filesContentPane }
+                    else { diffPane }
+                }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
                     .focusable()
@@ -124,7 +154,11 @@ struct ChangesTabView: View {
             }
             .animation(.easeOut(duration: 0.2), value: errorMessage)
             .task(id: project.path) {
+                // Reset Files-mode state so a project switch never shows a stale tree/file.
+                selectedFilePath = nil; fileContent = nil
+                fileTreeRoot = nil; fileTreeLoadedPath = nil
                 await refresh(project.path)
+                if viewMode == .files { await loadFileTree(project.path) }
                 focus = .sidebar
             }
             .alert("Discard changes to \(revertTarget?.name ?? "")?",
@@ -272,6 +306,14 @@ struct ChangesTabView: View {
                 let raw = await GitDiffScanner.prDiff(path: projectPath, number: pr.number) ?? ""
                 return UnifiedDiffParser.parseMultiFile(raw)
             }
+            // Load richer metadata in parallel; ignore if the user moved on.
+            Task {
+                let d = await GitDiffScanner.prDetail(path: projectPath, number: pr.number)
+                await MainActor.run {
+                    guard stacked?.key == "pr:\(pr.number)" else { return }
+                    prDetail = d
+                }
+            }
         case let .session(s):
             let written = s.filesTouched.filter { $0.writes > 0 }
                 .map { rel($0.path, projectPath) }
@@ -294,6 +336,7 @@ struct ChangesTabView: View {
                              _ load: @escaping () async -> [FileDiffSection]) {
         selection = nil
         diff = nil
+        prDetail = nil
         commitSectionID = nil; sectionCursor = 0
         stacked = StackedSelection(key: key, title: title, subtitle: subtitle)
         stackedSections = []
@@ -354,6 +397,8 @@ struct ChangesTabView: View {
                         prsGroup(projectPath: projectPath)
                     case .sessions:
                         sessionsGroup(projectPath: projectPath)
+                    case .files:
+                        fileTreeGroup(projectPath: projectPath)
                     }
                 }
                 .padding(DSSpace.sm)
@@ -369,33 +414,92 @@ struct ChangesTabView: View {
             Text("No PRs (or gh not authenticated)")
                 .font(DSFont.label).foregroundColor(.secondary).padding(DSSpace.md)
         } else {
-            ForEach(prs) { pr in
-                let isSel = stacked?.key == "pr:\(pr.number)"
-                HStack(spacing: 6) {
-                    Text("#\(pr.number)").font(DSFont.monoDigits(.caption2)).foregroundColor(prStateColor(pr.state))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(pr.title).font(DSFont.label).lineLimit(1).truncationMode(.tail)
-                        Text("\(pr.state.lowercased()) · \(pr.author)")
-                            .font(DSFont.micro).foregroundColor(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 3).padding(.horizontal, 6)
-                .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    focus = .sidebar
-                    if let i = navItems.firstIndex(of: .pr(pr)) { cursor = i }
-                    activate(.pr(pr), projectPath)
-                }
-                .contextMenu {
-                    Button("Open in Browser") { Task { await GitDiffScanner.openPRWeb(path: projectPath, number: pr.number) } }
-                    Button("Copy Branch") { copyText(pr.headRefName) }
-                    Button("Copy #\(pr.number)") { copyText("#\(pr.number)") }
-                }
+            let open = sortedPRs.filter { $0.isOpen }
+            let closed = sortedPRs.filter { !$0.isOpen }
+            if !open.isEmpty {
+                prSectionHeader("Open", count: open.count)
+                ForEach(open) { prRow($0, projectPath: projectPath) }
+            }
+            if !closed.isEmpty {
+                prSectionHeader("Closed", count: closed.count)
+                ForEach(closed) { prRow($0, projectPath: projectPath) }
             }
         }
+    }
+
+    private func prSectionHeader(_ title: String, count: Int) -> some View {
+        Text("\(title) · \(count)")
+            .font(DSFont.micro).foregroundColor(.secondary)
+            .padding(.horizontal, 6).padding(.top, 8).padding(.bottom, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func prRow(_ pr: PRSummary, projectPath: String) -> some View {
+        let isSel = stacked?.key == "pr:\(pr.number)"
+        let rel = relTime(pr.updatedAt)
+        HStack(spacing: 6) {
+            Text("#\(pr.number)").font(DSFont.monoDigits(.caption2)).foregroundColor(prStateColor(pr.state))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(pr.title).font(DSFont.label).lineLimit(1).truncationMode(.tail)
+                Text("\(pr.state.lowercased()) · \(pr.author)\(rel.isEmpty ? "" : " · \(rel)")")
+                    .font(DSFont.micro).foregroundColor(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 3).padding(.horizontal, 6)
+        .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            focus = .sidebar
+            if let i = navItems.firstIndex(of: .pr(pr)) { cursor = i }
+            activate(.pr(pr), projectPath)
+        }
+        .contextMenu {
+            Button("Open in Browser") { Task { await GitDiffScanner.openPRWeb(path: projectPath, number: pr.number) } }
+            Button("Copy Branch") { copyText(pr.headRefName) }
+            Button("Copy #\(pr.number)") { copyText("#\(pr.number)") }
+        }
+    }
+
+    /// Metadata card shown above a selected PR's diff: state, author, recency,
+    /// base ← head, line counts, labels, and the description body.
+    @ViewBuilder
+    private func prDetailHeader(_ d: PRDetail) -> some View {
+        let rel = relTime(d.mergedAt ?? d.updatedAt)
+        let relLabel = d.mergedAt != nil ? "merged \(rel)" : "updated \(rel)"
+        VStack(alignment: .leading, spacing: DSSpace.sm) {
+            HStack(spacing: 6) {
+                Circle().fill(prStateColor(d.state)).frame(width: 7, height: 7)
+                Text(d.state.lowercased()).font(DSFont.label).foregroundColor(prStateColor(d.state))
+                Text("· \(d.author)").font(DSFont.micro).foregroundColor(.secondary)
+                if !rel.isEmpty { Text("· \(relLabel)").font(DSFont.micro).foregroundColor(.secondary) }
+                Spacer(minLength: 0)
+                Text("+\(d.additions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.success)
+                Text("−\(d.deletions)").font(DSFont.monoDigits(.caption2)).foregroundColor(DSColor.danger)
+            }
+            HStack(spacing: 5) {
+                Text(d.baseRefName).font(DSFont.mono(.caption2))
+                Image(systemName: "arrow.left").font(.system(size: 9)).foregroundColor(.secondary)
+                Text(d.headRefName).font(DSFont.mono(.caption2)).foregroundColor(.secondary)
+                if !d.labels.isEmpty {
+                    Text("· \(d.labels.joined(separator: ", "))")
+                        .font(DSFont.micro).foregroundColor(.secondary).lineLimit(1).truncationMode(.tail)
+                }
+            }
+            if !d.body.isEmpty {
+                ScrollView {
+                    Text(d.body)
+                        .font(DSFont.label).foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 160)
+            }
+        }
+        .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -462,6 +566,7 @@ struct ChangesTabView: View {
     private func clearSelection() {
         selection = nil; diff = nil
         stacked = nil; stackedSections = []
+        prDetail = nil
     }
 
     private func loadList(for mode: ViewMode, projectPath: String) async {
@@ -480,7 +585,69 @@ struct ChangesTabView: View {
                     .sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
                 cursor = 0
             }
+        case .files:
+            await loadFileTree(projectPath)
         }
+    }
+
+    // MARK: - Files (Filetree) mode
+
+    /// Build the project's file tree once per project; cheap to re-enter the tab.
+    private func loadFileTree(_ projectPath: String) async {
+        if fileTreeLoadedPath == projectPath, fileTreeRoot != nil { return }
+        await MainActor.run { fileTreeRoot = nil }
+        let root = await Task.detached { FileTreeScanner.loadTree(root: projectPath) }.value
+        await MainActor.run {
+            fileTreeRoot = root
+            fileTreeLoadedPath = projectPath
+        }
+    }
+
+    /// Read a file's contents for the viewer pane.
+    private func selectFile(_ path: String) {
+        selectedFilePath = path
+        fileContent = nil
+        Task {
+            let content = await Task.detached { FileTreeScanner.readFile(at: path) }.value
+            await MainActor.run {
+                guard selectedFilePath == path else { return }   // user moved on
+                fileContent = content
+                if case let .text(t) = content { fileViewerText = t } else { fileViewerText = "" }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fileTreeGroup(projectPath: String) -> some View {
+        if let root = fileTreeRoot, let kids = root.children {
+            if kids.isEmpty {
+                Text("No files").font(DSFont.label).foregroundColor(.secondary).padding(DSSpace.md)
+            } else {
+                OutlineGroup(kids, children: \.children) { node in
+                    fileTreeRow(node)
+                }
+            }
+        } else {
+            ProgressView().padding(DSSpace.md).frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func fileTreeRow(_ node: FileNode) -> some View {
+        let isSel = !node.isDirectory && selectedFilePath == node.path
+        HStack(spacing: 6) {
+            Image(systemName: FileTreeScanner.icon(for: node.name, isDirectory: node.isDirectory))
+                .font(DSFont.label)
+                .foregroundColor(node.isDirectory ? .accentColor : .secondary)
+                .frame(width: 16)
+            Text(node.name).font(DSFont.label).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2).padding(.horizontal, 4)
+        .background(isSel ? Color.accentColor.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small))
+        .contentShape(Rectangle())
+        .onTapGesture { if !node.isDirectory { selectFile(node.path) } }
     }
 
     @ViewBuilder
@@ -608,6 +775,64 @@ struct ChangesTabView: View {
         }
     }
 
+    // MARK: Files content pane
+
+    @ViewBuilder
+    private var filesContentPane: some View {
+        if let path = selectedFilePath {
+            VStack(spacing: 0) {
+                HStack(spacing: DSSpace.sm) {
+                    Image(systemName: FileTreeScanner.icon(for: URL(fileURLWithPath: path).lastPathComponent, isDirectory: false))
+                        .foregroundColor(.secondary)
+                    Text(URL(fileURLWithPath: path).lastPathComponent).font(DSFont.label.weight(.medium))
+                    Text(DevRoots.shortenPath(path)).font(DSFont.mono(.caption))
+                        .foregroundColor(.secondary).lineLimit(1).truncationMode(.head)
+                    Spacer()
+                    Button { store.openFile(path) } label: { Image(systemName: "arrow.up.forward.app") }
+                        .buttonStyle(.borderless).help("Open in default app")
+                    Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) } label: {
+                        Image(systemName: "folder")
+                    }
+                    .buttonStyle(.borderless).help("Reveal in Finder")
+                }
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+                Divider()
+                fileBody(path: path)
+            }
+        } else {
+            VStack(spacing: DSSpace.sm) {
+                Image(systemName: "doc.text.magnifyingglass").font(.system(size: 32)).foregroundColor(.secondary)
+                Text("Select a file to view").foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func fileBody(path: String) -> some View {
+        switch fileContent {
+        case .text:
+            CodeEditor(text: $fileViewerText, language: language(for: path), isEditable: false)
+        case let .binary(size):
+            fileMessage("Binary file", detail: ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+        case let .tooLarge(size):
+            fileMessage("File too large to preview", detail: ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+        case let .unreadable(msg):
+            fileMessage("Can't read file", detail: msg)
+        case nil:
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func fileMessage(_ title: String, detail: String) -> some View {
+        VStack(spacing: DSSpace.sm) {
+            Image(systemName: "doc").font(.system(size: 32)).foregroundColor(.secondary)
+            Text(title).font(DSFont.label)
+            if !detail.isEmpty { Text(detail).font(DSFont.micro).foregroundColor(.secondary) }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: Diff pane
 
     @ViewBuilder
@@ -615,9 +840,15 @@ struct ChangesTabView: View {
         if loadingStacked || loadingDiff {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let stacked {
-            StackedDiffView(title: stacked.title, subtitle: stacked.subtitle,
-                            sections: stackedSections, scrollID: $commitSectionID)
-                .id(stacked.key)
+            VStack(spacing: 0) {
+                if let d = prDetail, "pr:\(d.number)" == stacked.key {
+                    prDetailHeader(d)
+                    Divider()
+                }
+                StackedDiffView(title: stacked.title, subtitle: stacked.subtitle,
+                                sections: stackedSections, scrollID: $commitSectionID)
+            }
+            .id(stacked.key)
         } else if let diff, let selection {
             VStack(spacing: 0) {
                 HStack {
