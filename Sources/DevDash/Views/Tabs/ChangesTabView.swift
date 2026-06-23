@@ -87,6 +87,7 @@ struct ChangesTabView: View {
                     .frame(width: sidebarWidth)
                     .background(DSColor.cardBg)
                     .focusable()
+                    .focusEffectDisabled()
                     .focused($focus, equals: .sidebar)
                     .onKeyPress { handleSidebarKey($0, project.path) }
                 resizeHandle
@@ -94,6 +95,7 @@ struct ChangesTabView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
                     .focusable()
+                    .focusEffectDisabled()
                     .focused($focus, equals: .diff)
                     .onKeyPress { handleDiffKey($0) }
             }
