@@ -11,10 +11,15 @@ let package = Package(
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0")
     ],
     targets: [
+        .target(
+            name: "DevDashCore",
+            path: "Sources/DevDashCore"
+        ),
         .executableTarget(
             name: "DevDash",
             dependencies: [
-                .product(name: "SwiftTerm", package: "SwiftTerm")
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
+                "DevDashCore"
             ],
             path: "Sources/DevDash",
             resources: [
@@ -28,6 +33,11 @@ let package = Package(
                     "-Xlinker", "Info.plist"
                 ])
             ]
+        ),
+        .testTarget(
+            name: "DevDashCoreTests",
+            dependencies: ["DevDashCore"],
+            path: "Tests/DevDashCoreTests"
         )
     ]
 )
