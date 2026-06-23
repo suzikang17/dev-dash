@@ -15,9 +15,39 @@ enum HookInstaller {
         }
     }
 
-    private static let hookEvents = [
-        "SessionStart", "SessionEnd", "Stop",
-        "UserPromptSubmit", "PreToolUse", "PostToolUse"
+    struct HookEventSpec: Identifiable {
+        let event: String       // hook_event_name registered in settings.json
+        let firesWhen: String   // when Claude fires it
+        let reaction: String    // what dev-dash does in response
+        let gatedBy: String?    // name of the setting that gates the behavior, or nil if always-on
+        var id: String { event }
+    }
+
+    static let hookSpecs: [HookEventSpec] = [
+        .init(event: "SessionStart",
+              firesWhen: "A Claude session begins (start, resume, clear, or compact).",
+              reaction: "Shows the start banner, opens a live session card, and injects your open tasks + latest devlog into the session.",
+              gatedBy: "Inject project context into sessions"),
+        .init(event: "UserPromptSubmit",
+              firesWhen: "You submit a prompt, before Claude processes it.",
+              reaction: "Injects your current tasks + latest devlog as context, and links a single in-progress task to the session.",
+              gatedBy: "Inject project context into sessions"),
+        .init(event: "PreToolUse",
+              firesWhen: "Before Claude runs each tool (Read, Edit, Bash, …).",
+              reaction: "Records the tool activity (file reads/writes/edits, commands) onto the live session card and the events feed.",
+              gatedBy: nil),
+        .init(event: "PostToolUse",
+              firesWhen: "After each tool call completes.",
+              reaction: "Clears the current-tool indicator; if it was a git/gh command, refreshes git status and PRs.",
+              gatedBy: nil),
+        .init(event: "Stop",
+              firesWhen: "Claude finishes a turn and is waiting for you (fires every turn, not session end).",
+              reaction: "Marks the session idle — still active, just waiting.",
+              gatedBy: nil),
+        .init(event: "SessionEnd",
+              firesWhen: "The session truly ends.",
+              reaction: "Marks the session ended; if enabled, writes a devlog summarizing meaningful sessions; advances the linked task to AI-touched (handed back to you).",
+              gatedBy: "Auto-write a devlog when a session ends"),
     ]
 
     /// Absolute path to the installed helper script. (#8 — no $HOME variable expansion)
@@ -93,7 +123,8 @@ enum HookInstaller {
         // Absolute path in command — no $HOME shell expansion assumption (#8)
         let commandPath = helperPath
 
-        for event in hookEvents {
+        for spec in hookSpecs {
+            let event = spec.event
             var entries = hooks[event] as? [[String: Any]] ?? []
 
             let alreadyInstalled = entries.contains { entry in
@@ -153,7 +184,8 @@ enum HookInstaller {
               var hooks = root["hooks"] as? [String: Any]
         else { return }
 
-        for event in hookEvents {
+        for spec in hookSpecs {
+            let event = spec.event
             guard var entries = hooks[event] as? [[String: Any]] else { continue }
             entries = entries.filter { entry in
                 guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return true }

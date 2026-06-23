@@ -391,6 +391,8 @@ struct SettingsView: View {
 
     // MARK: - Claude Code integration
 
+    @State private var showHowItWorks = false
+
     private var claudeIntegrationSection: some View {
         section(title: "Claude Code integration") {
             VStack(alignment: .leading, spacing: DSSpace.sm) {
@@ -495,11 +497,79 @@ struct SettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                // "How it works" transparency panel
+                howItWorksDisclosure
             }
             .onAppear {
                 installed = Set(store.projects.filter { store.hooksInstalled(for: $0.path) }.map { $0.path })
             }
         }
+    }
+
+    private var howItWorksDisclosure: some View {
+        DisclosureGroup(isExpanded: $showHowItWorks) {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
+                Text("When a session runs in an installed project, Claude fires these hooks back to dev-dash:")
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, DSSpace.sm)
+
+                ForEach(HookInstaller.hookSpecs) { spec in
+                    hookSpecRow(spec)
+                }
+
+                // Files installed subsection
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Files installed")
+                        .font(DSFont.micro)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, DSSpace.sm)
+                    Group {
+                        Text("~/.devdash/bin/devdash-hook")
+                        Text("<project>/.claude/settings.json")
+                        Text("~/.devdash/event-endpoint.json")
+                    }
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                }
+            }
+        } label: {
+            Text("How it works — events & what they trigger")
+                .font(DSFont.micro)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, DSSpace.sm)
+    }
+
+    private func hookSpecRow(_ spec: HookInstaller.HookEventSpec) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(spec.event)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.primary)
+            Text(spec.firesWhen)
+                .font(DSFont.micro)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(spec.reaction)
+                .font(DSFont.micro)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let gatedBy = spec.gatedBy {
+                Text("Only when '\(gatedBy)' is on")
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+                    .italic()
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, DSSpace.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous)
+                .fill(Color.primary.opacity(0.03))
+        )
     }
 
     private func hookProjectRow(_ project: Project) -> some View {
