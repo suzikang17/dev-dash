@@ -176,7 +176,7 @@ struct SidebarView: View {
                     }
                 }
             }
-            .listStyle(.sidebar)
+            .listStyle(.plain)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     Divider()

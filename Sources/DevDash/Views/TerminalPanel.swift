@@ -342,66 +342,97 @@ struct SideTerminalContainer: View {
 
 // MARK: - Floating
 
-/// Drop-down terminal (Quake/iTerm style): a wide strip docked at the top edge
-/// that slides down on open. Resizable by height via its bottom edge; tap the
-/// dimmed backdrop to close. The `initialFrame`/`containerSize` signature is kept
-/// so the call site doesn't change — only the height is used.
+/// Minimal floating terminal: a compact card overlaid on the content (no backdrop,
+/// so the content behind stays visible and usable). Slides in from the top on open,
+/// draggable by its header, resizable from the bottom-right corner. Close via ✕.
 struct FloatingTerminalPanel: View {
     @EnvironmentObject var store: DashboardStore
     let project: Project
     let containerSize: CGSize
-    @State private var height: CGFloat
-    @State private var dragStart: CGFloat?
-
-    private let margin: CGFloat = 8
+    @State private var frame: CGRect
+    @State private var moveStart: CGPoint?
+    @State private var resizeStart: CGSize?
 
     init(project: Project, initialFrame: CGRect, containerSize: CGSize) {
         self.project = project
         self.containerSize = containerSize
-        _height = State(initialValue: max(160, initialFrame.height))
+        _frame = State(initialValue: initialFrame)
     }
 
-    private var maxHeight: CGFloat { max(160, containerSize.height - margin * 2) }
-    private var dockHeight: CGFloat { min(max(160, height), maxHeight) }
-    private var dockWidth: CGFloat { max(320, containerSize.width - margin * 2) }
+    /// True while dragging/resizing — drop the blur shadow (it recomputes per frame).
+    private var isInteracting: Bool { moveStart != nil || resizeStart != nil }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            // Subtle blurred backdrop; tap outside the panel to close.
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(Color.black.opacity(0.05))
-                .contentShape(Rectangle())
-                .onTapGesture { store.terminalOpen = false }
-                .transition(.opacity)
-
-            VStack(spacing: 0) {
-                if dragStart != nil {
-                    TerminalResizePlaceholder(label: "\(Int(dockHeight)) pt")
-                } else {
-                    TerminalPanel(project: project)
-                }
-                ResizeHandle(edge: .bottom) { delta in
-                    let start = dragStart ?? height
-                    if dragStart == nil { dragStart = start }
-                    height = min(maxHeight, max(160, start + delta))
-                } onEnded: {
-                    dragStart = nil
-                    store.terminalFloatingFrame = CGRect(x: 0, y: 0, width: dockWidth, height: height)
-                }
+        Group {
+            if resizeStart != nil {
+                TerminalResizePlaceholder(label: "\(Int(frame.width))×\(Int(frame.height))")
+            } else {
+                TerminalPanel(project: project, moveHandler: TerminalMoveHandler(
+                    onChanged: { t in
+                        let start = moveStart ?? frame.origin
+                        if moveStart == nil { moveStart = start }
+                        frame.origin = clampOrigin(CGPoint(x: start.x + t.width, y: start.y + t.height),
+                                                   size: frame.size)
+                    },
+                    onEnded: { moveStart = nil; store.terminalFloatingFrame = frame }
+                ))
             }
-            .frame(width: dockWidth, height: dockHeight)
-            .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous)
-                    .stroke(DSColor.hairline, lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.25), radius: dragStart != nil ? 0 : 24, y: 10)
-            .padding(.top, margin)
-            // Slides down from above the top edge when it appears.
-            .transition(.move(edge: .top).combined(with: .opacity))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onDisappear { store.terminalFloatingFrame = CGRect(x: 0, y: 0, width: dockWidth, height: height) }
+        .frame(width: frame.width, height: frame.height)
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous)
+                .stroke(DSColor.hairline, lineWidth: 1)
+        )
+        .overlay(alignment: .bottomTrailing) { resizeCorner }
+        .shadow(color: .black.opacity(0.22), radius: isInteracting ? 0 : 16, y: isInteracting ? 0 : 8)
+        .offset(x: frame.origin.x, y: frame.origin.y)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Slides in from the top on open; no backdrop, so content stays usable.
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .onAppear { frame = clamped(frame) }
+        .onChange(of: containerSize) { _, _ in frame = clamped(frame) }
+        .onDisappear { store.terminalFloatingFrame = frame }
+    }
+
+    private var resizeCorner: some View {
+        Image(systemName: "arrow.down.right")
+            .font(DSFont.micro)
+            .foregroundColor(.secondary)
+            .padding(DSSpace.xs)
+            .contentShape(Rectangle())
+            .hoverCursor(.crosshair)
+            .gesture(
+                DragGesture(coordinateSpace: .global)
+                    .onChanged { v in
+                        let start = resizeStart ?? frame.size
+                        if resizeStart == nil { resizeStart = start }
+                        frame.size = clampSize(CGSize(width: start.width + v.translation.width,
+                                                      height: start.height + v.translation.height))
+                    }
+                    .onEnded { _ in resizeStart = nil; store.terminalFloatingFrame = frame }
+            )
+    }
+
+    // Keep the card on-screen so it can't be stranded off the edge.
+    private func clamped(_ f: CGRect) -> CGRect {
+        guard containerSize.width > 0, containerSize.height > 0 else { return f }
+        var r = f
+        r.size = clampSize(r.size)
+        r.origin = clampOrigin(r.origin, size: r.size)
+        return r
+    }
+    private func clampSize(_ s: CGSize) -> CGSize {
+        let maxW = containerSize.width > 0 ? max(320, containerSize.width - 24) : 1000
+        let maxH = containerSize.height > 0 ? max(180, containerSize.height - 24) : 800
+        return CGSize(width: min(max(320, s.width), maxW), height: min(max(180, s.height), maxH))
+    }
+    private func clampOrigin(_ p: CGPoint, size: CGSize) -> CGPoint {
+        guard containerSize.width > 0, containerSize.height > 0 else {
+            return CGPoint(x: max(8, p.x), y: max(8, p.y))
+        }
+        let maxX = max(8, containerSize.width - size.width - 12)
+        let maxY = max(8, containerSize.height - size.height - 12)
+        return CGPoint(x: min(max(8, p.x), maxX), y: min(max(8, p.y), maxY))
     }
 }

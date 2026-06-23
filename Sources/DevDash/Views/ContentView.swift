@@ -12,7 +12,13 @@ struct ContentView: View {
         HStack(spacing: 0) {
             NavigationSplitView(columnVisibility: $columnVisibility) {
                 SidebarView()
-                    .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+                    // Fixed (not flexible) width so detail tabs with large minimum
+                    // widths can't squeeze the sidebar — it stays identical on every tab.
+                    .navigationSplitViewColumnWidth(260)
+                    // NavigationSplitView auto-adds its own sidebar-toggle button; we
+                    // ship our own in the toolbar group below, so drop the built-in one
+                    // to avoid showing two toggles.
+                    .toolbar(removing: .sidebarToggle)
             } detail: {
                 DetailPaneView()
             }

@@ -3,21 +3,21 @@
 # dev-dash — Roadmap
 
 > **Methodology:** Personal Tool  
-> **Current stage:** Identify the itch
+> **Current stage:** Refine the parts that hurt
 
 _You are the user. Build for yourself, use it daily, fix what actually annoys you (not what you imagine will annoy other people). Resist polishing for an audience that doesn't exist. If it ends up useful to others, that's a bonus — not the goal._
 
 ## Progress
 
-- ▶︎ **Identify the itch** — 0/3 exit criteria
-- ◯ **Sketch the smallest version** — 0/3 exit criteria
-- ◯ **Live with it** — 0/3 exit criteria
-- ◯ **Refine the parts that hurt** — 0/3 exit criteria
+- ✅ **Identify the itch** — 0/3 exit criteria
+- ✅ **Sketch the smallest version** — 0/3 exit criteria
+- ✅ **Live with it** — 0/3 exit criteria
+- ▶︎ **Refine the parts that hurt** — 0/3 exit criteria
 - ◯ **Maybe share it** — 0/3 exit criteria
 
 ---
 
-## Identify the itch — _in progress_
+## Identify the itch — _done_
 
 **Purpose:** Pin down the recurring annoyance. Personal tools work when they fix something real for you, not something speculative.
 
@@ -48,7 +48,7 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 
 ---
 
-## Sketch the smallest version — _pending_
+## Sketch the smallest version — _done_
 
 **Purpose:** Build the crappiest possible version that solves the itch. No polish. No edge cases. No options. Make it work for you, today, in your one workflow.
 
@@ -79,7 +79,7 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 
 ---
 
-## Live with it — _pending_
+## Live with it — _done_
 
 **Purpose:** Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.
 
@@ -107,7 +107,7 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 
 ---
 
-## Refine the parts that hurt — _pending_
+## Refine the parts that hurt — _in progress_
 
 **Purpose:** Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.
 
@@ -173,4 +173,4 @@ _You are the user. Build for yourself, use it daily, fix what actually annoys yo
 
 ---
 
-_Last updated: 2026-06-20T19:52:32Z_
+_Last updated: 2026-06-23T04:45:30Z_

@@ -6,7 +6,7 @@
 <title>dev-dash — Product</title>
 <style>
   :root {
-    --h: 85; --ca: 0.12;
+    --h: 75; --ca: 0.13;
     --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
@@ -80,6 +80,23 @@
                       border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px;
                       cursor: pointer; }
   .lore-edit-toggle:hover { color: var(--fg); border-color: var(--accent); }
+  /* Knowledge-graph links + backlinks */
+  a.lore-link { color: var(--accent); text-decoration: none; cursor: pointer;
+                border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  a.lore-link:hover { border-bottom-color: var(--accent); }
+  .lore-link.broken { color: var(--muted); border-bottom: 1px dotted var(--muted); cursor: help; }
+  .lore-backlinks { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border);
+                    font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .lore-backlinks-label { color: var(--muted); font-size: 11px; }
+  .lore-card-flash { animation: loreFlash 1.2s ease; }
+  @keyframes loreFlash { 0%, 30% { box-shadow: inset 0 0 0 2px var(--accent); } 100% { box-shadow: none; } }
+  /* [[ autocomplete dropdown (appended to body) */
+  .lore-ac { position: absolute; z-index: 9999; background: var(--card); border: 1px solid var(--border);
+             border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); padding: 4px; max-height: 260px; overflow: auto; }
+  .lore-ac-item { display: flex; justify-content: space-between; gap: 14px; align-items: baseline;
+                  padding: 5px 9px; border-radius: 5px; font-size: 13px; cursor: pointer; }
+  .lore-ac-item.sel, .lore-ac-item:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .lore-ac-type { color: var(--muted); font-size: 11px; }
   .lore-src { display: block; box-sizing: border-box; width: 100%; min-height: 120px;
               white-space: pre-wrap; font: 12px/1.55 var(--font-mono); color: var(--fg);
               background: var(--code); border: none; border-radius: 8px; padding: 12px;
@@ -94,6 +111,21 @@
   .lore-new:hover { border-color: var(--accent); }
   .lore-del { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 2px 4px; }
   .lore-del:hover { color: var(--red); }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .kpi-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--card); }
+  .kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .kpi-title { font-weight: 600; font-size: 13px; }
+  .kpi-values { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; }
+  .kpi-field { font: 13px var(--font-mono); color: var(--fg); background: var(--code); border: 1px solid var(--border);
+               border-radius: 6px; padding: 4px 6px; width: 64px; text-align: right; }
+  .kpi-field.kpi-unit { width: 48px; text-align: left; }
+  .kpi-field:focus { outline: none; border-color: var(--accent); }
+  .kpi-arrow { color: var(--muted); }
+  .kpi-progress { height: 6px; background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 3px; overflow: hidden; }
+  .kpi-bar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .kpi-delta { font-size: 11px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .kpi-delta.good { color: var(--green); }
+  .kpi-delta.bad { color: var(--orange); }
   nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border);
              margin-bottom: 22px; position: sticky; top: 0; background: var(--bg);
              z-index: 5; padding-top: 4px; }
@@ -319,7 +351,7 @@
 <body x-data="{}">
   <div class="wrap">
     <h1>dev-dash</h1>
-    <div class="crumbs">Methodology: <strong>Personal Tool</strong> · Stage: <strong>Identify the itch</strong></div>
+    <div class="crumbs">Methodology: <strong>Personal Tool</strong> · Stage: <strong>Refine the parts that hurt</strong></div>
     <nav class="tabs" role="tablist" aria-label="Document sections">
       <button class="tab active" data-tab="overview" role="tab" id="tab-btn-overview" aria-controls="tab-overview" aria-selected="true" tabindex="0">Overview</button>
       <button class="tab" data-tab="notes" role="tab" id="tab-btn-notes" aria-controls="tab-notes" aria-selected="false" tabindex="-1">Notes</button>
@@ -328,6 +360,8 @@
       <button class="tab" data-tab="initiatives" role="tab" id="tab-btn-initiatives" aria-controls="tab-initiatives" aria-selected="false" tabindex="-1">Initiatives</button>
       <button class="tab" data-tab="lore-decisions" role="tab" id="tab-btn-lore-decisions" aria-controls="tab-lore-decisions" aria-selected="false" tabindex="-1">Decisions</button>
       <button class="tab" data-tab="lore-ideas" role="tab" id="tab-btn-lore-ideas" aria-controls="tab-lore-ideas" aria-selected="false" tabindex="-1">Ideas</button>
+      <button class="tab" data-tab="lore-notes" role="tab" id="tab-btn-lore-notes" aria-controls="tab-lore-notes" aria-selected="false" tabindex="-1">Knowledge</button>
+      <button class="tab" data-tab="lore-kpis" role="tab" id="tab-btn-lore-kpis" aria-controls="tab-lore-kpis" aria-selected="false" tabindex="-1">KPIs</button>
       <button class="tab" data-tab="goals" role="tab" id="tab-btn-goals" aria-controls="tab-goals" aria-selected="false" tabindex="-1">Goals &amp; KPIs</button>
       <button class="tab" data-tab="artifacts" role="tab" id="tab-btn-artifacts" aria-controls="tab-artifacts" aria-selected="false" tabindex="-1">Artifacts</button>
     </nav>
@@ -337,58 +371,132 @@
     <span class="status-title">Snapshot</span>
     <span class="status-tag">swift</span>
   </div>
-  <div class="status-row"><span class="status-k">Last session</span><span class="status-v">Jun 19 Terminal v2: placement, theming, perf, quick-run</span></div>
+  <div class="status-row"><span class="status-k">Last session</span><span class="status-v">Jun 21 Outliner everywhere: editable backlinks, tasks pane, delete, perf</span></div>
   <div class="status-row"><span class="status-k">Tasks</span><span class="status-v">2 active</span></div>
-  <div class="status-row"><span class="status-k">Recent decision</span><span class="status-v">—</span></div>
-  <div class="status-row"><span class="status-k">Commits / 7d</span><span class="status-v">41</span></div>
+  <div class="status-row"><span class="status-k">Recent decision</span><span class="status-v">One StackedDiffView for commits, PRs, and Claude Code sessions</span></div>
+  <div class="status-row"><span class="status-k">Commits / 7d</span><span class="status-v">110</span></div>
   <div class="status-row"><span class="status-k">Running</span><span class="status-v">none</span></div>
   <div class="status-row"><span class="status-k">Health</span><span class="status-v">Active</span></div>
-</div><div data-section-file="sections/overview.html"><div class="doc-head">
-  <h2>dev-dash</h2>
-  <span class="doc-status">One-pager · <code>sections/overview.html</code></span>
-</div>
-
-<div class="callout tldr">
-  <h4 style="margin-top:0">TL;DR</h4>
-  <p><em>One sentence the rest of the page is justifying.</em></p>
-</div>
-
-<div class="grid-2">
-  <div class="card">
-    <h3>What is it?</h3>
-    <p><em>One sentence — what does this do?</em></p>
+</div><p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="overview" type="button">+ new Overview</button> &nbsp; ⚙ Engine: <code>lore</code> · 7 overview read live from <code>docs/overview/*.md</code></p>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0001-tldr.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0001-tldr.md" title="Delete" type="button">✕</button>
+    </span>
   </div>
-  <div class="card">
-    <h3>Who's it for?</h3>
-    <p><em>Specific. Role + situation, not a persona poster.</em></p>
-  </div>
-  <div class="card">
-    <h3>Why now?</h3>
-    <p><em>What changed that makes this the right time?</em></p>
-  </div>
-  <div class="card">
-    <h3>What it is <em>not</em></h3>
-    <p><em>Out-of-scope. The features you're consciously skipping.</em></p>
-  </div>
-</div>
+  <div class="lore-body"><h2>TL;DR</h2>
+<p>_One sentence the rest of the page is justifying._</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## TL;DR
 
-<div class="card">
-  <h3>How will we know it's working?</h3>
-  <p><em>Pick 1–3 signals. Activation, retention, revenue, qualitative.</em></p>
-  <ul>
-    <li><span class="tag">activation</span> <em>e.g. % of new users completing core flow</em></li>
-    <li><span class="tag">retention</span> <em>e.g. WAU/MAU or day-7 return</em></li>
-    <li><span class="tag">qualitative</span> <em>e.g. 3 unprompted "thank you"s in a week</em></li>
-  </ul>
+_One sentence the rest of the page is justifying._</textarea>
 </div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0002-what-is-it.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0002-what-is-it.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>What is it?</h2>
+<p>_One sentence — what does this do?_</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## What is it?
 
-<h3>Risks &amp; assumptions</h3>
-<table>
-  <thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Mitigation</th></tr></thead>
-  <tbody>
-    <tr><td><em>e.g. nobody wants this</em></td><td><span class="pill warn">Med</span></td><td><span class="pill risk">High</span></td><td><em>5 customer interviews before MVP</em></td></tr>
-  </tbody>
-</table></div>
+_One sentence — what does this do?_</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0003-who-is-it-for.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0003-who-is-it-for.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Who's it for?</h2>
+<p>_Specific. Role + situation, not a persona poster._</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## Who's it for?
+
+_Specific. Role + situation, not a persona poster._</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0004-why-now.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0004-why-now.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why now?</h2>
+<p>_What changed that makes this the right time?_</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## Why now?
+
+_What changed that makes this the right time?_</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0005-what-its-not.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0005-what-its-not.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>What it's not</h2>
+<p>_Out-of-scope — the features you're consciously skipping._</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## What it's not
+
+_Out-of-scope — the features you're consciously skipping._</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0006-how-well-know.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0006-how-well-know.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>How we'll know it's working</h2>
+<p>_Pick 1–3 signals: activation, retention, revenue, qualitative._</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## How we'll know it's working
+
+_Pick 1–3 signals: activation, retention, revenue, qualitative._</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0007-risks.md" data-lore-type="overview">
+  <div class="lore-card-head">
+    <span class="lore-card-meta"></span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/overview/0007-risks.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Risks &amp; assumptions</h2>
+<p>_Key risks — likelihood, impact, mitigation._</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+## Risks &amp; assumptions
+
+_Key risks — likelihood, impact, mitigation._</textarea>
+</div>
   </section>
   <section id="tab-notes" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-notes" tabindex="0">
     <div data-section-file="sections/notes.html"><div class="doc-head">
@@ -417,14 +525,14 @@
 <blockquote>You are the user. Build for yourself, use it daily, fix what actually annoys you (not what you imagine will annoy other people). Resist polishing for an audience that doesn't exist. If it ends up useful to others, that's a bonus — not the goal.</blockquote>
 <h3>Progress</h3>
 <ul class="progress">
-<li><span class="pill current">Current</span> <strong>Identify the itch</strong> <span class="meta">0/3 exit criteria</span></li>
-<li><span class="pill pending">Pending</span> <strong>Sketch the smallest version</strong> <span class="meta">0/3 exit criteria</span></li>
-<li><span class="pill pending">Pending</span> <strong>Live with it</strong> <span class="meta">0/3 exit criteria</span></li>
-<li><span class="pill pending">Pending</span> <strong>Refine the parts that hurt</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill done">Done</span> <strong>Identify the itch</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill done">Done</span> <strong>Sketch the smallest version</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill done">Done</span> <strong>Live with it</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill current">Current</span> <strong>Refine the parts that hurt</strong> <span class="meta">0/3 exit criteria</span></li>
 <li><span class="pill pending">Pending</span> <strong>Maybe share it</strong> <span class="meta">0/3 exit criteria</span></li>
 </ul>
 <div class="card">
-<h3>Identify the itch <span class="pill current">Current</span></h3>
+<h3>Identify the itch <span class="pill done">Done</span></h3>
 <p>Pin down the recurring annoyance. Personal tools work when they fix something real for you, not something speculative.</p>
 <blockquote>If you can't name the moment of annoyance, you don't have an itch yet — you have a curiosity. Wait for the itch.</blockquote>
 <h4>Questions <span class="meta">(4/5 answered)</span></h4>
@@ -446,7 +554,7 @@
 </ul>
 </div>
 <div class="card">
-<h3>Sketch the smallest version <span class="pill pending">Pending</span></h3>
+<h3>Sketch the smallest version <span class="pill done">Done</span></h3>
 <p>Build the crappiest possible version that solves the itch. No polish. No edge cases. No options. Make it work for you, today, in your one workflow.</p>
 <blockquote>Hardcode everything. Skip auth. Skip config. Skip UI niceties. The goal is to use it, not to ship it.</blockquote>
 <h4>Questions <span class="meta">(2/5 answered)</span></h4>
@@ -468,7 +576,7 @@
 </ul>
 </div>
 <div class="card">
-<h3>Live with it <span class="pill pending">Pending</span></h3>
+<h3>Live with it <span class="pill done">Done</span></h3>
 <p>Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.</p>
 <blockquote>Don't open the editor for 1-2 weeks. Just use it. Take notes when something annoys you. The notes become the refine list.</blockquote>
 <h4>Questions <span class="meta">(0/4 answered)</span></h4>
@@ -488,7 +596,7 @@
 </ul>
 </div>
 <div class="card">
-<h3>Refine the parts that hurt <span class="pill pending">Pending</span></h3>
+<h3>Refine the parts that hurt <span class="pill current">Current</span></h3>
 <p>Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.</p>
 <blockquote>Sort the friction list by frequency × pain. Fix the top 3. Stop. Use it again.</blockquote>
 <h4>Questions <span class="meta">(0/4 answered)</span></h4>
@@ -534,10 +642,272 @@
     <p class="empty">No initiatives yet. Top-level tasks with children become initiatives — group related tasks under a parent in the Tasks tab.</p>
   </section>
   <section id="tab-lore-decisions" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-lore-decisions" tabindex="0">
-    <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="decision" type="button">+ new Decisions</button> &nbsp; No decisions at <code>docs/decisions/</code> yet — click + new.</p>
+    <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="decision" type="button">+ new Decisions</button> &nbsp; ⚙ Engine: <code>lore</code> · 3 decisions read live from <code>docs/decisions/*.md</code></p>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0003-unified-stacked-diff-view.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-22 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0003-unified-stacked-diff-view.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>The Changes tab grew three "view modes" that all answer the same question — "show me<br>everything this thing changed": a commit, a GitHub PR, and a Claude Code session. Each<br>produces a multi-file diff. Rather than build three bespoke detail views, they all<br>funnel into one <code>StackedDiffView(title:subtitle:sections:)</code> that renders a header plus<br>every file as a collapsible side-by-side section in one scroll, with a jump bar and<br>shared vim scroll/keyboard plumbing. Each source just supplies <code>[FileDiffSection]</code><br>(via <code>UnifiedDiffParser.parseMultiFile</code>) through a generic <code>loadStacked(key:...)</code>.</p>
+<p>A sub-decision: a session's diff is computed against the **commit just before the<br>session started** (<code>git rev-list -1 --before=&lt;startedAt&gt;</code>) diffed to the working tree,<br>not against HEAD. Session-written files are usually already committed, so vs-HEAD<br>showed nothing.</p>
+<h2>Options considered</h2>
+<ul>
+<li>One generalized <code>StackedDiffView</code> + a <code>NavItem</code>/<code>activate</code> switch per source (chosen).</li>
+<li>Three separate detail views (commit/PR/session), each re-implementing scroll, jump</li>
+</ul>
+<p>  bar, collapse, and vim handling.</p>
+<ul>
+<li>Session diff vs HEAD (rejected: empty once changes are committed) vs. vs</li>
+</ul>
+<p>  pre-session commit (chosen) vs. reconstructing per-tool-call snapshots (no such data).</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: adding a new stacked source is a list + one <code>NavItem</code> case + one <code>activate</code></li>
+</ul>
+<p>  branch; all interaction behavior is shared and consistent.</p>
+<ul>
+<li>Give up: the header is generic (title/subtitle strings) rather than source-specific</li>
+</ul>
+<p>  rich metadata. The session diff folds in any later edits to the same files (no<br>  per-session snapshots exist), and depends on <code>gh</code> auth for PRs.</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+The Changes tab grew three &quot;view modes&quot; that all answer the same question — &quot;show me
+everything this thing changed&quot;: a commit, a GitHub PR, and a Claude Code session. Each
+produces a multi-file diff. Rather than build three bespoke detail views, they all
+funnel into one `StackedDiffView(title:subtitle:sections:)` that renders a header plus
+every file as a collapsible side-by-side section in one scroll, with a jump bar and
+shared vim scroll/keyboard plumbing. Each source just supplies `[FileDiffSection]`
+(via `UnifiedDiffParser.parseMultiFile`) through a generic `loadStacked(key:...)`.
+
+A sub-decision: a session's diff is computed against the **commit just before the
+session started** (`git rev-list -1 --before=&lt;startedAt&gt;`) diffed to the working tree,
+not against HEAD. Session-written files are usually already committed, so vs-HEAD
+showed nothing.
+
+## Options considered
+
+- One generalized `StackedDiffView` + a `NavItem`/`activate` switch per source (chosen).
+- Three separate detail views (commit/PR/session), each re-implementing scroll, jump
+  bar, collapse, and vim handling.
+- Session diff vs HEAD (rejected: empty once changes are committed) vs. vs
+  pre-session commit (chosen) vs. reconstructing per-tool-call snapshots (no such data).
+
+## Tradeoffs
+
+- Gain: adding a new stacked source is a list + one `NavItem` case + one `activate`
+  branch; all interaction behavior is shared and consistent.
+- Give up: the header is generic (title/subtitle strings) rather than source-specific
+  rich metadata. The session diff folds in any later edits to the same files (no
+  per-session snapshots exist), and depends on `gh` auth for PRs.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0002-devdashcore-library-target.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-22 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0002-devdashcore-library-target.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>DevDash is a single <code>@main</code> SwiftUI executable target with no tests. The diff parser<br>is pure logic that genuinely needs unit tests. Testing code inside an executable<br>target via <code>@testable import</code> is unreliable because of the <code>@main</code> entry point<br>(linker/duplicate-symbol friction). To get a real <code>swift test</code> signal we extracted<br>the pure types (<code>DiffRow</code>, <code>WordSpan</code>, <code>FileDiff</code>, <code>FileDiffSection</code>, <code>DiffRowKind</code>)<br>and <code>UnifiedDiffParser</code> into a new <code>DevDashCore</code> library target, with a<br><code>DevDashCoreTests</code> target depending on it. The app target depends on <code>DevDashCore</code><br>and the new diff files <code>import DevDashCore</code>.</p>
+<h2>Options considered</h2>
+<ul>
+<li>New <code>DevDashCore</code> library target + test target (chosen).</li>
+<li><code>@testable import DevDash</code> of the executable target (fought the <code>@main</code> entry).</li>
+<li>No unit tests; rely on <code>swift build</code> only (the GUI/IO layers already do this, but</li>
+</ul>
+<p>  the parser is exactly the kind of pure logic worth testing).</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: fast, headless, dependency-free unit tests for the parser; a clear home for</li>
+</ul>
+<p>  future pure logic; no <code>@main</code> linking hacks.</p>
+<ul>
+<li>Give up: a second target to maintain and an <code>import DevDashCore</code> in consumers; types</li>
+</ul>
+<p>  shared across the boundary must be <code>public</code>. SwiftPM also required a source file in<br>  the test dir before it would accept the target (a <code>Placeholder.swift</code> was added).</p>
+<p>Rule of thumb going forward: new pure, unit-testable helpers go in <code>DevDashCore</code>;<br>view/IO code stays in the app target.</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+DevDash is a single `@main` SwiftUI executable target with no tests. The diff parser
+is pure logic that genuinely needs unit tests. Testing code inside an executable
+target via `@testable import` is unreliable because of the `@main` entry point
+(linker/duplicate-symbol friction). To get a real `swift test` signal we extracted
+the pure types (`DiffRow`, `WordSpan`, `FileDiff`, `FileDiffSection`, `DiffRowKind`)
+and `UnifiedDiffParser` into a new `DevDashCore` library target, with a
+`DevDashCoreTests` target depending on it. The app target depends on `DevDashCore`
+and the new diff files `import DevDashCore`.
+
+## Options considered
+
+- New `DevDashCore` library target + test target (chosen).
+- `@testable import DevDash` of the executable target (fought the `@main` entry).
+- No unit tests; rely on `swift build` only (the GUI/IO layers already do this, but
+  the parser is exactly the kind of pure logic worth testing).
+
+## Tradeoffs
+
+- Gain: fast, headless, dependency-free unit tests for the parser; a clear home for
+  future pure logic; no `@main` linking hacks.
+- Give up: a second target to maintain and an `import DevDashCore` in consumers; types
+  shared across the boundary must be `public`. SwiftPM also required a source file in
+  the test dir before it would accept the target (a `Placeholder.swift` was added).
+
+Rule of thumb going forward: new pure, unit-testable helpers go in `DevDashCore`;
+view/IO code stays in the app target.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0001-side-by-side-diff-rendering.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-22 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0001-side-by-side-diff-rendering.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>The Changes tab needs a side-by-side diff with syntax highlighting and word-level<br>intra-line highlights, performant on large files. Two sub-problems: how to compute<br>the diff, and how to render two aligned columns in SwiftUI.</p>
+<p>For computation we parse git's own unified-diff output (<code>git diff</code> / <code>git show</code>) in<br><code>UnifiedDiffParser</code>, then run a cheap char-level common-prefix/suffix pass on paired<br>removed/added lines for word spans. For rendering we use a single<br><code>ScrollView { LazyVStack }</code> of pre-aligned rows, where each row is<br><code>HStack[ leftCell | divider | rightCell ]</code> — added rows have an empty left cell,<br>removed rows an empty right cell — instead of two independently scrolling text views.</p>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Compute:</strong> parse git unified output (chosen) vs. write our own LCS line-differ</li>
+</ul>
+<p>  vs. add a diffing dependency (we have a no-external-deps rule; kyde uses the Rust<br>  <code>similar</code> crate, which has no Swift equivalent we wanted to vendor).</p>
+<ul>
+<li><strong>Render:</strong> one aligned <code>LazyVStack</code> of paired rows (chosen) vs. two synced</li>
+</ul>
+<p>  <code>NSTextView</code>s with manual scroll-sync and alignment padding (kyde's gpui approach).</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: git does the correct, fast line diff; <code>LazyVStack</code> gives row alignment and</li>
+</ul>
+<p>  viewport virtualization for free; the renderer stays pure SwiftUI with no deps.</p>
+<ul>
+<li>Give up: word-level highlighting is prefix/suffix only (can over-highlight reordered</li>
+</ul>
+<p>  lines), and there is no per-side horizontal scroll — long lines wrap within their<br>  half. Both are acceptable for v1 and can be revisited if a dual-pane renderer is<br>  ever wanted (the parser output already supports it).</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+The Changes tab needs a side-by-side diff with syntax highlighting and word-level
+intra-line highlights, performant on large files. Two sub-problems: how to compute
+the diff, and how to render two aligned columns in SwiftUI.
+
+For computation we parse git's own unified-diff output (`git diff` / `git show`) in
+`UnifiedDiffParser`, then run a cheap char-level common-prefix/suffix pass on paired
+removed/added lines for word spans. For rendering we use a single
+`ScrollView { LazyVStack }` of pre-aligned rows, where each row is
+`HStack[ leftCell | divider | rightCell ]` — added rows have an empty left cell,
+removed rows an empty right cell — instead of two independently scrolling text views.
+
+## Options considered
+
+- **Compute:** parse git unified output (chosen) vs. write our own LCS line-differ
+  vs. add a diffing dependency (we have a no-external-deps rule; kyde uses the Rust
+  `similar` crate, which has no Swift equivalent we wanted to vendor).
+- **Render:** one aligned `LazyVStack` of paired rows (chosen) vs. two synced
+  `NSTextView`s with manual scroll-sync and alignment padding (kyde's gpui approach).
+
+## Tradeoffs
+
+- Gain: git does the correct, fast line diff; `LazyVStack` gives row alignment and
+  viewport virtualization for free; the renderer stays pure SwiftUI with no deps.
+- Give up: word-level highlighting is prefix/suffix only (can over-highlight reordered
+  lines), and there is no per-side horizontal scroll — long lines wrap within their
+  half. Both are acceptable for v1 and can be revisited if a dual-pane renderer is
+  ever wanted (the parser output already supports it).
+</textarea>
+</div>
   </section>
   <section id="tab-lore-ideas" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-lore-ideas" tabindex="0">
     <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="idea" type="button">+ new Ideas</button> &nbsp; No ideas at <code>docs/ideas/</code> yet — click + new.</p>
+  </section>
+  <section id="tab-lore-notes" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-lore-notes" tabindex="0">
+    <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="note" type="button">+ new Knowledge</button> &nbsp; ⚙ Engine: <code>lore</code> · 4 knowledge read live from <code>docs/notes/*.md</code></p>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/ashdlsa.md" data-lore-type="note">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-22</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/ashdlsa.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"></div>
+  <div class="lore-backlinks"><span class="lore-backlinks-label">↩ 1 linked reference</span> <a class="lore-link" data-lore-target="notes/2026-06-22.md">2026-06-22</a></div>
+  <textarea class="lore-src" style="display:none">
+
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/2026-06-22.md" data-lore-type="note">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-22</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/2026-06-22.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><ul>
+<li><a class="lore-link" data-lore-target="notes/ashdlsa.md">ashdlsa</a></li>
+</ul></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+- [[ashdlsa]]
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/2026-06-21.md" data-lore-type="note">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-21</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/2026-06-21.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><p>- </p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+- 
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/2026-06-20.md" data-lore-type="note">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-20</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/notes/2026-06-20.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><p>- </p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+- 
+</textarea>
+</div>
+  </section>
+  <section id="tab-lore-kpis" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-lore-kpis" tabindex="0">
+    <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="kpi" type="button">+ new KPI</button> &nbsp; No KPIs yet — click + new.</p>
   </section>
   <section id="tab-goals" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-goals" tabindex="0">
     <div data-section-file="sections/goals.html"><div class="doc-head">
@@ -613,9 +983,9 @@
   <p class="empty">None yet. Use the toolbar pencil menu → New Status Report…</p>
 </details>
 <details class="card">
-  <summary><strong>Decisions</strong> <span class="meta">decisions/ · 0</span></summary>
-  <p class="meta" style="margin-top:6px">Append-only decision log.</p>
-  <p class="empty">None yet. Use the toolbar pencil menu → New Decision…</p>
+  <summary><strong>Decision docs (legacy)</strong> <span class="meta">decisions/ · 0</span></summary>
+  <p class="meta" style="margin-top:6px">Bespoke HTML decisions — superseded by the lore Decisions tab.</p>
+  <p class="empty">None yet. Use the toolbar pencil menu → New Decision docs (legacy…</p>
 </details>
 <details class="card">
   <summary><strong>Concept Explainers</strong> <span class="meta">concepts/ · 0</span></summary>
@@ -665,6 +1035,30 @@
         if (idx !== null) { e.preventDefault(); activate(btns[idx], true); }
       });
     });
+
+    // Knowledge-graph nav: clicking a [[wikilink]] or a backlink chip jumps
+    // to the target doc — switches to its tab and scrolls its card into view.
+    document.addEventListener('click', function(e) {
+      var link = e.target.closest('.lore-link[data-lore-target]');
+      if (!link) return;
+      e.preventDefault();
+      var target = link.dataset.loreTarget;           // "dir/file.md"
+      var cards = document.querySelectorAll('[data-lore-file]');
+      var card = null;
+      for (var i = 0; i < cards.length; i++) {
+        var f = cards[i].getAttribute('data-lore-file') || '';
+        if (f.endsWith('/' + target) || f === target) { card = cards[i]; break; }
+      }
+      if (!card) return;
+      var pane = card.closest('.tab-pane');
+      if (pane) {
+        var btn = document.querySelector('nav.tabs .tab[data-tab="' + pane.id.replace(/^tab-/, '') + '"]');
+        if (btn) activate(btn, false);
+      }
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.add('lore-card-flash');
+      setTimeout(function() { card.classList.remove('lore-card-flash'); }, 1200);
+    }, true);
   })();
 </script>
 </body>
