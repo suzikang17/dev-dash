@@ -1,41 +1,39 @@
 import SwiftUI
 
-/// Read-only render of a bullet line: `[[title]]` wikilinks become clickable accent
-/// links (brackets hidden), everything else is plain text. Tapping a link calls
-/// `onOpenLink(title)`; tapping plain text / empty space calls `onEdit()` to swap the
-/// row to the editable field.
+/// Read-only render of a bullet line. Rendered inside a plain `Button` so taps are
+/// handled by AppKit hit-testing (reliable) rather than SwiftUI `Text` link
+/// interaction (which eats taps on link-containing text).
 ///
-/// Layering trick: a full-width transparent Button sits BEHIND the Text. Link glyphs
-/// are interactive and consume their own taps (handled via the openURL environment);
-/// plain glyphs are non-interactive, so those taps fall through to the focus button.
+/// Tap behaviour: if the whole bullet is a single `[[backlink]]`, the tap opens that
+/// doc; otherwise the tap enters edit mode. Inline markdown (bold/italic/code/links)
+/// is styled for appearance only — no interactive link runs.
 struct BulletRendered: View {
     let text: String
     let onOpenLink: (String) -> Void
     let onEdit: () -> Void
 
-    private static let linkScheme = "devdash-lore:"
-
-    var body: some View {
-        rendered
-            .font(DSFont.body)
-            .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
-            // Link glyphs (on top) consume their tap → open. Everything else is
-            // non-interactive text, so taps pass to the clear edit layer behind → edit.
-            .environment(\.openURL, OpenURLAction { url in
-                guard url.absoluteString.hasPrefix(Self.linkScheme) else { return .systemAction }
-                let title = String(url.absoluteString.dropFirst(Self.linkScheme.count)).removingPercentEncoding ?? ""
-                if !title.isEmpty { onOpenLink(title) }
-                return .handled
-            })
-            .background(
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { onEdit() }
-            )
+    /// The title if this bullet is exactly one `[[wikilink]]` and nothing else.
+    private var pureLinkTitle: String? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("[["), t.hasSuffix("]]") else { return nil }
+        let inner = String(t.dropFirst(2).dropLast(2))
+        guard !inner.isEmpty, !inner.contains("[["), !inner.contains("]]") else { return nil }
+        return inner
     }
 
-    // Inline markdown handled in rendered bullets, in priority order (earliest match
-    // wins; ties break by this order). Kept simple/non-nested for V1.
+    var body: some View {
+        Button {
+            if let title = pureLinkTitle { onOpenLink(title) } else { onEdit() }
+        } label: {
+            rendered
+                .font(DSFont.body)
+                .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Inline markdown, in priority order (earliest match wins; ties break by order).
     private static let patterns: [(re: NSRegularExpression, kind: Int)] = [
         (try! NSRegularExpression(pattern: "\\[\\[([^\\]]+?)\\]\\]"), 0),               // [[wikilink]]
         (try! NSRegularExpression(pattern: "\\[([^\\]\\n]+?)\\]\\(([^)\\n]+?)\\)"), 1), // [text](url)
@@ -74,23 +72,12 @@ struct BulletRendered: View {
     private func styled(_ m: NSTextCheckingResult, kind: Int, ns: NSString) -> Text {
         func grp(_ i: Int) -> String { m.range(at: i).location == NSNotFound ? "" : ns.substring(with: m.range(at: i)) }
         switch kind {
-        case 0: return link(grp(1))                                                   // wikilink (clickable)
-        case 1: return Text(grp(1)).foregroundColor(.accentColor)                     // [text](url)
+        case 0: return Text(grp(1)).foregroundColor(.accentColor).underline()          // wikilink (appearance)
+        case 1: return Text(grp(1)).foregroundColor(.accentColor)                       // [text](url)
         case 2: return Text(grp(1)).font(.system(.body, design: .monospaced)).foregroundColor(.pink)
         case 3: return Text(grp(2)).bold()
         case 4: return Text(grp(2)).italic()
         default: return Text(ns.substring(with: m.range))
         }
-    }
-
-    private func link(_ title: String) -> Text {
-        var a = AttributedString(title)
-        a.foregroundColor = .accentColor
-        a.underlineStyle = .single
-        if let enc = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let url = URL(string: "\(Self.linkScheme)\(enc)") {
-            a.link = url
-        }
-        return Text(a)
     }
 }
