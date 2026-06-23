@@ -15,14 +15,16 @@ struct SideBySideDiffView: View {
             } else if diff.rows.isEmpty {
                 placeholder("No changes")
             } else {
-                ScrollView([.vertical, .horizontal]) {
+                ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(diff.rows.enumerated()), id: \.offset) { _, row in
                             DiffRowView(row: row, language: language)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, DSSpace.xs)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(NSColor.textBackgroundColor))
             }
         }
@@ -50,13 +52,14 @@ private struct DiffRowView: View {
                 .padding(.vertical, 2)
                 .background(Color.accentColor.opacity(0.08))
         default:
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 cell(lineNo: row.leftLineNo, text: row.leftText, spans: row.leftSpans,
                      side: .left)
                 Rectangle().fill(DSColor.hairline).frame(width: 1)
                 cell(lineNo: row.rightLineNo, text: row.rightText, spans: row.rightSpans,
                      side: .right)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -64,7 +67,7 @@ private struct DiffRowView: View {
 
     @ViewBuilder
     private func cell(lineNo: Int?, text: String?, spans: [WordSpan], side: Side) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .top, spacing: 6) {
             Text(lineNo.map(String.init) ?? "")
                 .font(DSFont.monoDigits(.caption2))
                 .foregroundColor(.secondary)
