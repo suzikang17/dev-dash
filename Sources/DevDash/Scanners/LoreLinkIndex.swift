@@ -29,7 +29,7 @@ enum LoreLinkIndex {
     /// Every lore doc dir that participates in the graph: the living-doc sections
     /// PLUS `tasks` (which render in LoreTasksView, not a LoreSection). Use this
     /// everywhere the graph is built so links/backlinks span every surface.
-    static var allDirs: [String] { LoreSection.all.map(\.dir) + ["tasks"] }
+    static var allDirs: [String] { LoreSection.all.map(\.dir) + ["tasks", "devlog"] }
 
     /// Build the graph for a project over the given lore section dirs.
     static func build(projectPath: String, dirs: [String]) -> Graph {

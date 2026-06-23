@@ -50,6 +50,13 @@ struct DailyTabView: View {
         loreInitialized = LoreRunner.isInitialized(projectPath: project.path)
     }
 
+    /// Claude sessions a devlog references (via its `sessions:` frontmatter).
+    private func sessionsForDevlog(_ entry: DailyLoreEntry) -> [SessionDigest] {
+        guard entry.loreType == "devlog" else { return [] }
+        let ids = SessionDevlogLink.sessionIds(inDevlogAt: entry.path)
+        return ids.compactMap { store.sessionDigests[$0] }
+    }
+
     @ViewBuilder
     private func content(project: Project) -> some View {
         HSplitView {
@@ -76,10 +83,19 @@ struct DailyTabView: View {
                         )
                         .id(ref.path)   // rebuild when navigating to a different doc
                     } else if let entry = selectedEntry {
-                        NotePanel(entry: entry, onClose: { selectedEntry = nil })
+                        NotePanel(
+                            entry: entry,
+                            onClose: { selectedEntry = nil },
+                            linkedSessions: sessionsForDevlog(entry),
+                            onOpenSession: { selectedEntry = nil; selectedSession = $0 }
+                        )
                     } else if let session = selectedSession {
-                        SessionPanel(digest: session, onClose: { selectedSession = nil })
-                            .environmentObject(store)
+                        SessionPanel(
+                            digest: session,
+                            onClose: { selectedSession = nil },
+                            onOpenDoc: { openDoc = OpenDocRef(path: $0) }
+                        )
+                        .environmentObject(store)
                     } else {
                         // Nothing selected — fill the pane with a hint instead of a
                         // blank void. The second HSplitView column otherwise renders
@@ -260,8 +276,9 @@ struct DailyTabView: View {
             Button {
                 guard let p = project?.path, summarizingDate == nil else { return }
                 summarizingDate = day.dateStr
+                let sessionIds = day.sessions.map(\.id)
                 Task {
-                    await summarizeDay(day.dateStr, projectPath: p)
+                    await summarizeDay(day.dateStr, projectPath: p, sessionIds: sessionIds)
                     await MainActor.run { summarizingDate = nil; reload(project: project!) }
                 }
             } label: {
@@ -514,7 +531,7 @@ struct DailyTabView: View {
 
     // MARK: - Summarize day
 
-    private func summarizeDay(_ dateStr: String, projectPath: String) async {
+    private func summarizeDay(_ dateStr: String, projectPath: String, sessionIds: [String] = []) async {
         let taskDir = "\(projectPath)/docs/tasks"
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: taskDir) else { return }
         var activities: [String] = []
@@ -542,7 +559,10 @@ struct DailyTabView: View {
         let devlogDir = "\(projectPath)/docs/devlog"
         let nextId = LoreRunner.nextId(in: devlogDir)
         let filename = "\(dateStr)-day-\(nextId).md"
-        let content = "---\ntitle: \"\(dateStr) — day summary\"\ndate: \"\(dateStr)\"\n---\n\n# \(dateStr) — day summary\n\n\(body.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+        // Associate the day's Claude sessions with this devlog (resolved both ways
+        // in code: devlog→sessions and session→devlogs).
+        let sessionsLine = sessionIds.isEmpty ? "" : "sessions: \(sessionIds.joined(separator: ","))\n"
+        let content = "---\ntitle: \"\(dateStr) — day summary\"\ndate: \"\(dateStr)\"\n\(sessionsLine)---\n\n# \(dateStr) — day summary\n\n\(body.trimmingCharacters(in: .whitespacesAndNewlines))\n"
         try? content.write(toFile: "\(devlogDir)/\(filename)", atomically: true, encoding: .utf8)
     }
 }
@@ -652,8 +672,10 @@ private struct SessionPanel: View {
     @EnvironmentObject var store: DashboardStore
     let digest: SessionDigest
     let onClose: () -> Void
+    var onOpenDoc: (String) -> Void = { _ in }
     @State private var transcript: SessionTranscript?
     @State private var loading = true
+    @State private var linkedDevlogs: [(title: String, path: String)] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -689,6 +711,25 @@ private struct SessionPanel: View {
             .padding(.horizontal, DSSpace.lg)
             .padding(.vertical, DSSpace.sm)
             Divider()
+            if !linkedDevlogs.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("↩ LOGGED IN \(linkedDevlogs.count) DEVLOG\(linkedDevlogs.count == 1 ? "" : "S")")
+                        .font(DSFont.micro).foregroundColor(.secondary).tracking(0.5)
+                    ForEach(linkedDevlogs, id: \.path) { dl in
+                        Button { onOpenDoc(dl.path) } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "book.closed").font(DSFont.micro).foregroundColor(DSColor.assistant)
+                                Text(dl.title).font(DSFont.label).foregroundColor(DSColor.assistant).lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DSSpace.lg).padding(.vertical, DSSpace.sm)
+                .background(DSColor.assistant.opacity(0.05))
+                Divider()
+            }
             if loading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -709,6 +750,7 @@ private struct SessionPanel: View {
         .frame(minWidth: 340)
         .task(id: digest.id) {
             loading = true
+            linkedDevlogs = SessionDevlogLink.devlogs(forSessionId: digest.id, projectPath: digest.projectPath)
             transcript = await store.transcriptForDigest(digest)
             loading = false
         }
@@ -797,6 +839,8 @@ private struct TurnRow: View {
 private struct NotePanel: View {
     let entry: DailyLoreEntry
     let onClose: () -> Void
+    var linkedSessions: [SessionDigest] = []
+    var onOpenSession: (SessionDigest) -> Void = { _ in }
     @State private var rawContent: String = ""
 
     var body: some View {
@@ -821,6 +865,26 @@ private struct NotePanel: View {
             .padding(.horizontal, DSSpace.lg)
             .padding(.vertical, DSSpace.sm)
             Divider()
+            if !linkedSessions.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("⎯ \(linkedSessions.count) CLAUDE SESSION\(linkedSessions.count == 1 ? "" : "S")")
+                        .font(DSFont.micro).foregroundColor(.secondary).tracking(0.5)
+                    ForEach(linkedSessions) { s in
+                        Button { onOpenSession(s) } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "sparkles").font(DSFont.micro).foregroundColor(DSColor.assistant)
+                                Text(s.title ?? s.firstUserMessage ?? "Session")
+                                    .font(DSFont.label).foregroundColor(DSColor.assistant).lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DSSpace.lg).padding(.vertical, DSSpace.sm)
+                .background(DSColor.assistant.opacity(0.05))
+                Divider()
+            }
             MarkdownWebView(markdown: bodyContent)
         }
         .frame(minWidth: 320)
@@ -1066,6 +1130,33 @@ struct NewLoreTaskSheet: View {
 struct OpenDocRef: Identifiable {
     let path: String
     var id: String { path }
+}
+
+/// Devlog ↔ Claude session links. Sessions aren't lore docs, so the association is
+/// stored as a `sessions:` frontmatter list (comma-separated ids) on the devlog and
+/// resolved both ways in code.
+enum SessionDevlogLink {
+    /// Session ids referenced by a devlog file.
+    static func sessionIds(inDevlogAt path: String) -> [String] {
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+        guard let s = LoreReader.parseFrontmatter(raw)["sessions"], !s.isEmpty else { return [] }
+        return s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// Devlogs whose `sessions:` list contains this session id (the backlink).
+    static func devlogs(forSessionId id: String, projectPath: String) -> [(title: String, path: String)] {
+        let dir = "\(projectPath)/docs/devlog"
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+        var out: [(title: String, path: String)] = []
+        for f in files.sorted() where f.hasSuffix(".md") && f.lowercased() != "index.md" {
+            let path = "\(dir)/\(f)"
+            guard sessionIds(inDevlogAt: path).contains(id) else { continue }
+            let title = (try? String(contentsOfFile: path, encoding: .utf8))
+                .flatMap { LoreReader.parseFrontmatter($0)["title"] } ?? f
+            out.append((title, path))
+        }
+        return out
+    }
 }
 
 /// Editable viewer for a lore doc opened by clicking a `[[backlink]]` in the
