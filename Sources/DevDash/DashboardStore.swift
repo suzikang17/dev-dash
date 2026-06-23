@@ -339,6 +339,8 @@ final class DashboardStore: ObservableObject {
     @Published var eventServerPort: Int = 0
     /// Live external Claude Code sessions keyed by sessionId.
     @Published var liveSessions: [String: LiveSession] = [:]
+    /// In-memory feed of every received hook event, newest first. Capped at 300.
+    @Published var recentEvents: [ClaudeIntegrationEvent] = []
     /// Transient banner shown when a SessionStart event arrives; auto-clears after ~6 s.
     @Published var lastHookBanner: String? = nil
     /// Auto-generate a devlog when a session ends (default off — spawns Claude).
@@ -392,8 +394,80 @@ final class DashboardStore: ObservableObject {
         devloggedSessions = devloggedSessions.filter { liveSessions[$0] != nil }
     }
 
+    /// Build and prepend a ClaudeIntegrationEvent to recentEvents. Purely additive —
+    /// no file I/O, no spawning, no side effects on existing session state.
+    private func recordEvent(_ ev: ClaudeHookEvent) {
+        let (name, path) = projectInfo(for: ev.cwd)
+        let input = ev.raw["tool_input"] as? [String: Any] ?? [:]
+
+        let category: ClaudeIntegrationEvent.Category
+        let detail: String
+
+        switch ev.event {
+        case "SessionStart":
+            category = .session
+            let src = ev.source.map { " (\($0))" } ?? ""
+            detail = "Session started\(src)"
+
+        case "SessionEnd":
+            category = .session
+            detail = "Session ended"
+
+        case "Stop":
+            category = .session
+            detail = "Turn finished"
+
+        case "UserPromptSubmit":
+            category = .prompt
+            let raw = ev.prompt ?? ""
+            let oneline = raw.components(separatedBy: .newlines).joined(separator: " ")
+            let truncated = oneline.count > 120 ? String(oneline.prefix(120)) + "…" : oneline
+            detail = "Prompt: \(truncated)"
+
+        case "PreToolUse", "PostToolUse":
+            let toolName = ev.toolName ?? "unknown"
+            // Categorize: Bash with a git/gh mutation → .git, else .tool
+            let isBash = toolName == "Bash"
+            let cmd = input["command"] as? String ?? ""
+            if isBash && Self.isGitMutation(cmd) {
+                category = .git
+            } else {
+                category = .tool
+            }
+            let prefix = ev.event == "PostToolUse" ? "✓ " : ""
+            let activity = Self.liveActivity(toolName: toolName, input: input)
+            if let file = activity.file {
+                let lastComp = URL(fileURLWithPath: file.path).lastPathComponent
+                detail = "\(prefix)\(toolName) \(lastComp)"
+            } else if let command = activity.command {
+                let truncCmd = command.count > 100 ? String(command.prefix(100)) + "…" : command
+                detail = "\(prefix)\(truncCmd)"
+            } else {
+                detail = "\(prefix)\(toolName)"
+            }
+
+        default:
+            category = .other
+            detail = ev.event
+        }
+
+        let event = ClaudeIntegrationEvent(
+            timestamp: Date(),
+            projectPath: path,
+            projectName: name,
+            hookEvent: ev.event,
+            category: category,
+            detail: detail
+        )
+        recentEvents.insert(event, at: 0)
+        if recentEvents.count > 300 {
+            recentEvents.removeLast(recentEvents.count - 300)
+        }
+    }
+
     @discardableResult
     func handleHookEvent(_ ev: ClaudeHookEvent) -> String? {
+        recordEvent(ev)
         guard let sid = ev.sessionId, !sid.isEmpty else { return nil }
         let now = Date()
 

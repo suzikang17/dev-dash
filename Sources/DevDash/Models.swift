@@ -339,6 +339,21 @@ struct LiveSession: Identifiable, Hashable {
     enum Status: String { case active, ended }
 }
 
+/// A single Claude Code hook event recorded in the in-memory feed.
+struct ClaudeIntegrationEvent: Identifiable, Hashable {
+    let id = UUID()
+    let timestamp: Date
+    let projectPath: String?   // matched known project path, nil if unknown
+    let projectName: String
+    let hookEvent: String      // raw hook_event_name
+    let category: Category
+    let detail: String         // human-readable one-liner
+
+    enum Category: String {
+        case session, prompt, tool, git, other
+    }
+}
+
 /// Per-project metadata persisted to `.devdash/project.json`. Drives stage
 /// gating and template application in the Tasks tab.
 struct ProjectMeta: Codable, Hashable {

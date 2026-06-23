@@ -5,6 +5,7 @@ struct ClaudeTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var prompt = ""
     @State private var allowEdits = false
+    @State private var showAllEvents = false
     @FocusState private var promptFocused: Bool
 
     var body: some View {
@@ -46,6 +47,9 @@ struct ClaudeTabView: View {
                         LiveSessionCard(session: session)
                     }
                 }
+
+                RecentEventsSection(project: project, showAllEvents: $showAllEvents)
+                    .environmentObject(store)
 
                 if !tasks.isEmpty {
                     InlineSectionHeader(label: "Tasks", count: tasks.count, systemImage: "sparkles")
@@ -596,6 +600,108 @@ private struct PhaseStepperView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Recent Claude events feed
+
+private struct RecentEventsSection: View {
+    let project: Project
+    @Binding var showAllEvents: Bool
+    @EnvironmentObject var store: DashboardStore
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    var body: some View {
+        let filtered = store.recentEvents.filter { $0.projectPath == project.path }
+        let displayed = showAllEvents
+            ? filtered
+            : filtered.filter { $0.category != .tool }
+        let capped = Array(displayed.prefix(100))
+        if capped.isEmpty { return AnyView(EmptyView()) }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                HStack(spacing: DSSpace.xs) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(DSFont.micro)
+                        .foregroundColor(.secondary)
+                    Text("RECENT CLAUDE EVENTS")
+                        .font(DSFont.sectionHeader)
+                        .tracking(1.2)
+                        .foregroundColor(.secondary)
+                    Text(verbatim: "(\(filtered.count))")
+                        .font(DSFont.micro)
+                        .foregroundColor(.secondary.opacity(0.7))
+                    Spacer()
+                    Button {
+                        showAllEvents.toggle()
+                    } label: {
+                        Text(showAllEvents ? "Show key events" : "Show all")
+                            .font(DSFont.micro)
+                            .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, DSSpace.xs)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(capped) { event in
+                        RecentEventRow(event: event, formatter: Self.timeFormatter)
+                    }
+                }
+                .padding(DSSpace.sm)
+                .cardSurface()
+            }
+        )
+    }
+}
+
+private struct RecentEventRow: View {
+    let event: ClaudeIntegrationEvent
+    let formatter: DateFormatter
+
+    var body: some View {
+        HStack(spacing: DSSpace.xs) {
+            Image(systemName: categoryIcon)
+                .font(DSFont.micro)
+                .foregroundColor(categoryColor)
+                .frame(width: 12)
+            Text(formatter.string(from: event.timestamp))
+                .font(DSFont.mono(.caption2))
+                .foregroundColor(.secondary)
+                .frame(width: 58, alignment: .leading)
+            Text(event.detail)
+                .font(DSFont.label)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(event.detail)
+        }
+    }
+
+    private var categoryIcon: String {
+        switch event.category {
+        case .session: return "play.circle"
+        case .prompt:  return "text.bubble"
+        case .tool:    return "wrench.and.screwdriver"
+        case .git:     return "arrow.triangle.branch"
+        case .other:   return "circle.dotted"
+        }
+    }
+
+    private var categoryColor: Color {
+        switch event.category {
+        case .session: return DSColor.assistant
+        case .prompt:  return DSColor.info
+        case .tool:    return .secondary
+        case .git:     return DSColor.gitMeta
+        case .other:   return .secondary
         }
     }
 }
