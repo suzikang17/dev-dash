@@ -339,6 +339,24 @@ struct DailyTabView: View {
                     Text("Claude · \(day.sessions.count)").font(.caption.weight(.semibold)).foregroundColor(.secondary)
                 }
             }
+
+            // Lore docs created/dated this day (devlog, decision, task, kpi, …),
+            // grouped by type. The daily page bullets above are separate (the note).
+            let docGroups = Dictionary(grouping: day.docs, by: \.loreType)
+            ForEach(docGroups.keys.sorted(), id: \.self) { type in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(type.capitalized) · \(docGroups[type]?.count ?? 0)")
+                        .font(.caption.weight(.semibold)).foregroundColor(.secondary)
+                    ForEach(docGroups[type] ?? []) { entry in
+                        DailyRow(
+                            label: entry.title,
+                            detail: nil,
+                            isSelected: selectedEntry?.id == entry.id,
+                            action: { selectedSession = nil; openDoc = nil; selectedEntry = entry }
+                        )
+                    }
+                }
+            }
         }
     }
 
