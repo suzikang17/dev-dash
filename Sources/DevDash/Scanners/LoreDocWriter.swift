@@ -28,8 +28,10 @@ enum LoreDocWriter {
             if parts.count == 2 { fm += "\(parts[0]): \(parts[1])\n" }
         }
         if !type.bodyIsFree { fm += "date: \"\(today)\"\n" }   // sections schemas require a date
-        fm += "---\n\n# \(title)\n\n"
+        fm += "---\n\n"
 
+        // Free-body docs are pure bullets (no `# Title` H1 — the title lives in
+        // frontmatter and the doc-pane header), so they round-trip through the outliner.
         if type.bodyIsFree {
             return fm + (bodyMarkdown.isEmpty ? "" : bodyMarkdown + "\n")
         }

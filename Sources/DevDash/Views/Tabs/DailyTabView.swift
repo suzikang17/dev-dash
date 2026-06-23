@@ -61,7 +61,13 @@ struct DailyTabView: View {
                             docs: allDocs.filter { $0.loreType == type }
                         )
                     } else if let ref = openDoc {
-                        BacklinkDocPanel(path: ref.path, onClose: { openDoc = nil })
+                        BacklinkDocPanel(
+                            path: ref.path,
+                            onClose: { openDoc = nil },
+                            projectPath: project.path,
+                            onOpenDoc: { openDoc = OpenDocRef(path: $0) }
+                        )
+                        .id(ref.path)   // rebuild when navigating to a different doc
                     } else if let entry = selectedEntry {
                         NotePanel(entry: entry, onClose: { selectedEntry = nil })
                     } else if let session = selectedSession {
@@ -1007,7 +1013,10 @@ private struct BacklinkDocPanel: View {
     let onClose: () -> Void
 
     @State private var frontmatter: String = ""
-    @State private var docBody: String = ""
+    let projectPath: String
+    var onOpenDoc: (String) -> Void = { _ in }
+
+    @State private var nodes: [DayNode] = []
     @State private var loadedPath: String? = nil
     @State private var saveWork: DispatchWorkItem? = nil
 
@@ -1033,8 +1042,11 @@ private struct BacklinkDocPanel: View {
             .padding(.horizontal, DSSpace.lg)
             .padding(.vertical, DSSpace.sm)
             Divider()
-            MarkdownLiveEditor(text: $docBody)
-                .onChange(of: docBody) { _, _ in scheduleSave() }
+            ScrollView {
+                OutlinerView(nodes: $nodes, projectPath: projectPath, onOpenDoc: onOpenDoc)
+                    .padding(DSSpace.md)
+            }
+            .onChange(of: nodes) { _, _ in scheduleSave() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { load() }
@@ -1046,16 +1058,16 @@ private struct BacklinkDocPanel: View {
         let raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         let parts = Self.splitFrontmatter(raw)
         frontmatter = parts.fm
-        docBody = parts.body
+        nodes = Self.parseBody(parts.body)
         loadedPath = path
     }
 
     private func scheduleSave() {
         guard loadedPath == path else { return }   // ignore the change from load()
         saveWork?.cancel()
-        let fm = frontmatter, content = docBody, target = path
+        let fm = frontmatter, body = DayOutline.serialize(nodes), target = path
         let item = DispatchWorkItem {
-            let text = fm.isEmpty ? content + "\n" : fm + "\n\n" + content + "\n"
+            let text = fm.isEmpty ? body : fm + "\n\n" + body
             try? text.write(toFile: target, atomically: true, encoding: .utf8)
         }
         saveWork = item
@@ -1069,8 +1081,23 @@ private struct BacklinkDocPanel: View {
         guard let work = saveWork, let target = loadedPath else { return }
         work.cancel()
         saveWork = nil
-        let text = frontmatter.isEmpty ? docBody + "\n" : frontmatter + "\n\n" + docBody + "\n"
+        let fm = frontmatter, body = DayOutline.serialize(nodes)
+        let text = fm.isEmpty ? body : fm + "\n\n" + body
         try? text.write(toFile: target, atomically: true, encoding: .utf8)
+    }
+
+    /// Everything is bullets: bulletize any non-list body line (heading/prose) so the
+    /// whole doc edits as an outline and round-trips losslessly.
+    private static func parseBody(_ body: String) -> [DayNode] {
+        var lines: [String] = []
+        for line in body.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+            let leading = line.prefix { $0 == " " }
+            let rest = line.drop { $0 == " " }
+            if rest.hasPrefix("- ") || rest == "-" { lines.append(line) }
+            else { lines.append("\(leading)- \(rest)") }
+        }
+        return DayOutline.parse(lines.joined(separator: "\n"))
     }
 
     private static func splitFrontmatter(_ s: String) -> (fm: String, body: String) {
