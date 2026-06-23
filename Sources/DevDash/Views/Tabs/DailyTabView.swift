@@ -9,6 +9,7 @@ struct DailyTabView: View {
     @State private var mode: ViewMode = .daily
     @State private var browseType: String? = nil
     @State private var browseSearch: String = ""
+    @State private var expandedBrowseTypes: Set<String> = []
     @State private var showNewTask = false
     @State private var summarizingDate: String? = nil
     @State private var loreInitialized = true
@@ -186,23 +187,26 @@ struct DailyTabView: View {
     private func browseContent() -> some View {
         let grouped = allDocs
             .reduce(into: [String: [DailyLoreEntry]]()) { $0[$1.loreType, default: []].append($1) }
-        ScrollView {
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(grouped.keys.sorted(), id: \.self) { type in
+                    let docs = (grouped[type] ?? []).sorted(by: Self.byDateDesc)
+                    let isExpanded = expandedBrowseTypes.contains(type)
                     Button {
-                        selectedEntry = nil; selectedSession = nil
+                        if isExpanded { expandedBrowseTypes.remove(type) }
+                        else { expandedBrowseTypes.insert(type) }
+                        selectedEntry = nil; selectedSession = nil; openDoc = nil
                         browseType = type
                     } label: {
                         HStack {
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .font(.caption2).foregroundColor(.secondary)
                             Text(type.capitalized)
                                 .font(DSFont.body)
                                 .foregroundColor(browseType == type ? .accentColor : .primary)
                             Spacer()
-                            Text("\(grouped[type]?.count ?? 0)")
+                            Text("\(docs.count)")
                                 .font(DSFont.label)
-                                .foregroundColor(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
                         .padding(.vertical, DSSpace.sm)
@@ -211,11 +215,39 @@ struct DailyTabView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+
+                    if isExpanded {
+                        ForEach(docs) { entry in
+                            Button {
+                                openDoc = OpenDocRef(path: entry.path)
+                                browseType = nil; selectedEntry = nil; selectedSession = nil
+                            } label: {
+                                HStack {
+                                    Text(entry.title).font(DSFont.label).lineLimit(1).truncationMode(.middle)
+                                    Spacer()
+                                    Text(entry.dateStr).font(DSFont.micro).foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 3)
+                                .padding(.leading, DSSpace.xl).padding(.trailing, DSSpace.md)
+                                .background(openDoc?.path == entry.path ? Color.accentColor.opacity(0.12) : .clear)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                     Divider().padding(.leading, DSSpace.md)
                 }
             }
             .padding(.top, DSSpace.xs)
         }
+    }
+
+    /// Newest first; undated docs last; ties broken by title.
+    fileprivate static func byDateDesc(_ a: DailyLoreEntry, _ b: DailyLoreEntry) -> Bool {
+        if a.dateStr == b.dateStr { return a.title < b.title }
+        if a.dateStr.isEmpty { return false }
+        if b.dateStr.isEmpty { return true }
+        return a.dateStr > b.dateStr
     }
 
     @ViewBuilder
@@ -285,7 +317,13 @@ struct DailyTabView: View {
 
     private func startWatcher(project: Project) {
         watcher?.stop()
-        watcher = NotesFileWatcher(dir: "\(project.path)/docs/notes") {
+        let docs = "\(project.path)/docs"
+        try? FileManager.default.createDirectory(atPath: "\(docs)/notes", withIntermediateDirectories: true)
+        // Watch the docs root (new type dirs) + every lore dir, so externally written
+        // docs (Claude Code, `lore add`, devlogs, ADRs) appear without a relaunch.
+        let names = Set(LoreSection.all.map(\.dir) + ["tasks", "devlog", "notes"])
+        let subdirs = names.map { "\(docs)/\($0)" }.filter { FileManager.default.fileExists(atPath: $0) }
+        watcher = NotesFileWatcher(dirs: [docs] + subdirs) {
             refreshUnfocusedPages(project: project)
         }
     }
@@ -530,11 +568,7 @@ private struct TypeDetailPanel: View {
 
     @ViewBuilder
     private var tableView: some View {
-        let sorted = docs.sorted {
-            $0.dateStr.isEmpty == $1.dateStr.isEmpty
-                ? $0.title < $1.title
-                : !$0.dateStr.isEmpty && ($0.dateStr > $1.dateStr)
-        }
+        let sorted = docs.sorted(by: DailyTabView.byDateDesc)
         Table(of: DailyLoreEntry.self, selection: $selectedId) {
             TableColumn("Title") { doc in
                 Text(doc.title).lineLimit(1)
