@@ -372,6 +372,23 @@ final class DashboardStore: ObservableObject {
         }
     }
 
+    /// Persisted intent set: projects the user has explicitly installed dev-dash hooks for.
+    /// Decoupled from settings.json content so "zero events enabled" remains a legal installed
+    /// state (the empty→re-enable round-trip survives without losing install intent).
+    /// Persisted as a JSON array of path strings under "devdash.installedHookProjects".
+    @Published var installedHookProjects: Set<String> = {
+        guard let data = UserDefaults.standard.data(forKey: "devdash.installedHookProjects"),
+              let decoded = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+        return Set(decoded)
+    }() {
+        didSet {
+            if let data = try? JSONEncoder().encode(Array(installedHookProjects)) {
+                UserDefaults.standard.set(data, forKey: "devdash.installedHookProjects")
+            }
+        }
+    }
+
     /// Global default set of enabled hook events. Projects without a per-project
     /// enabledEvents override inherit this set. Defaults to all six events.
     /// Persisted as a JSON array of event name strings under "devdash.defaultEnabledEvents".
@@ -436,12 +453,17 @@ final class DashboardStore: ObservableObject {
 
     /// Set or clear the enabled-events override for a project.
     /// Passing nil reverts to inheriting the global default. Prunes the config key when fully empty.
-    /// If the project is currently installed, re-runs install immediately to sync settings.json.
+    /// If the project is currently managed (intent OR content), re-runs install immediately to sync
+    /// settings.json. Captures managed state BEFORE mutating so the empty→re-enable round-trip works:
+    /// disabling all events sets managed=true and reconciles (removing entries), intent is preserved;
+    /// re-enabling an event sees managed=true via intent and reconciles again (re-adding entries).
     func setEnabledEventsOverride(_ events: Set<String>?, for path: String) {
+        let managed = hooksInstalled(for: path)   // capture BEFORE mutating (intent OR content)
+        if managed { installedHookProjects.insert(path) }   // migrate pre-existing into intent set
         var cfg = projectHookConfigs[path] ?? ProjectHookConfig()
         cfg.enabledEvents = events
         projectHookConfigs[path] = cfg.isEmpty ? nil : cfg
-        guard hooksInstalled(for: path) else { return }
+        guard managed else { return }
         try? HookInstaller.installProjectHooks(projectPath: path, events: effectiveEnabledEvents(for: path))
     }
 
@@ -920,21 +942,28 @@ final class DashboardStore: ObservableObject {
     }
 
     /// Installs dev-dash hooks for a project using the effective enabled-event set.
+    /// Records install intent in `installedHookProjects` before reconciling so that
+    /// the empty-events → re-enable round-trip survives without losing intent.
     /// Safe to call multiple times (idempotent reconcile).
     /// Throws `HookInstaller.InstallError` if existing settings.json is unparseable.
     func installHooks(for projectPath: String) throws {
+        installedHookProjects.insert(projectPath)
         try HookInstaller.installProjectHooks(projectPath: projectPath,
                                               events: effectiveEnabledEvents(for: projectPath))
     }
 
-    /// Removes dev-dash hooks from a project's `.claude/settings.json`.
+    /// Removes dev-dash hooks from a project's `.claude/settings.json` and clears install intent.
     func uninstallHooks(for projectPath: String) {
+        installedHookProjects.remove(projectPath)
         HookInstaller.uninstallProjectHooks(projectPath: projectPath)
     }
 
-    /// Returns true if dev-dash hooks are installed in the project's `.claude/settings.json`.
+    /// Returns true if dev-dash hooks are managed for this project — either the user
+    /// explicitly installed them (intent set) or settings.json currently has entries
+    /// (covers pre-existing / manually-installed hooks). Intent is checked first so
+    /// the "zero events enabled" state still counts as installed.
     func hooksInstalled(for projectPath: String) -> Bool {
-        HookInstaller.isInstalled(projectPath: projectPath)
+        installedHookProjects.contains(projectPath) || HookInstaller.isInstalled(projectPath: projectPath)
     }
 
     enum HealthFilter: Hashable {
