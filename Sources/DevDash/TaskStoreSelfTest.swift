@@ -5,6 +5,29 @@ import Foundation
 /// Runs entirely in a fresh temp directory, prints PASS/FAIL per check, exits.
 enum TaskStoreSelfTest {
     static func runIfRequested() {
+        // Diagnostic: --dump-tasks <projectPath> prints TaskStore.read() results.
+        if let i = CommandLine.arguments.firstIndex(of: "--dump-tasks"),
+           i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            let tasks = TaskStore.read(path)
+            print("dump-tasks \(path): \(tasks.count) task(s)")
+            for t in tasks { print("  [\(t.id)] [\(t.status.rawValue)/\(t.owner.rawValue)] \(t.title)") }
+            exit(0)
+        }
+        // Diagnostic: --dump-projects prints the scanned project paths + task counts.
+        if CommandLine.arguments.contains("--dump-projects") {
+            let sem = DispatchSemaphore(value: 0)
+            Task {
+                let projs = await ProjectScanner.scanAll()
+                print("scanned \(projs.count) project(s):")
+                for p in projs.sorted(by: { $0.path < $1.path }) {
+                    print("  \(p.path)  (\(TaskStore.read(p.path).count) tasks)")
+                }
+                sem.signal()
+            }
+            sem.wait()
+            exit(0)
+        }
         guard CommandLine.arguments.contains("--selftest-taskstore") else { return }
         var failures: [String] = []
         func check(_ cond: Bool, _ label: String) {
