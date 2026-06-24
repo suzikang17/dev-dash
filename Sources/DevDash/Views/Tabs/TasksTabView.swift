@@ -15,7 +15,7 @@ struct TasksTabView: View {
     @State private var showTemplatePicker = false
     @FocusState private var addFocused: Bool
     @AppStorage("taskViewMode") private var viewMode: String = "board"
-    @AppStorage("taskSource") private var taskSource: String = "devdash"
+    @AppStorage("taskSource") private var taskSource: String = "lore"
     @State private var migrateMsg: String?
 
     var body: some View {
@@ -95,8 +95,8 @@ struct TasksTabView: View {
     private var sourceToggle: some View {
         HStack(spacing: DSSpace.sm) {
             Picker("Source", selection: $taskSource) {
-                Text("Dev Dash").tag("devdash")
                 Text("Lore").tag("lore")
+                Text("Dev Dash (legacy)").tag("devdash")
             }
             .pickerStyle(.segmented)
             .frame(width: 180)

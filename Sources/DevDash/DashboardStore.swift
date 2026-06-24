@@ -1690,6 +1690,57 @@ final class DashboardStore: ObservableObject {
         refreshTaskSnapshot(for: projectPath)
     }
 
+    // MARK: - Lore-id bridges (for LoreTasksView)
+
+    /// Resolve a lore numeric task id (e.g. "0042" or "42") to a TaskItem and
+    /// call the existing AI methods. Numeric comparison tolerates zero-padding.
+    func launchClaudeForTask(taskId: String, projectPath: String) {
+        guard let t = TaskStore.read(projectPath).first(where: { loreIdEq($0.id, taskId) }) else { return }
+        launchClaudeForTask(t, projectPath: projectPath)
+    }
+
+    func runForTask(taskId: String, projectPath: String, allowEdits: Bool) async {
+        guard let t = TaskStore.read(projectPath).first(where: { loreIdEq($0.id, taskId) }) else { return }
+        await runForTask(t, projectPath: projectPath, allowEdits: allowEdits)
+    }
+
+    /// Numeric equality tolerant of zero-padding (e.g. "0042" == "42").
+    private func loreIdEq(_ a: String, _ b: String) -> Bool {
+        (Int(a) ?? -1) == (Int(b) ?? -2)
+    }
+
+    /// Set status by lore numeric id, mapping lore string values to TaskStatus cases.
+    /// Falls back gracefully: unknown status values are silently ignored (caller
+    /// should fall back to direct file write for those).
+    @discardableResult
+    func setTaskStatusByLoreId(projectPath: String, taskId: String, loreStatus: String) -> Bool {
+        let mapped: TaskStatus
+        switch loreStatus {
+        case "open":        mapped = .open
+        case "in_progress": mapped = .inProgress
+        case "blocked":     mapped = .blocked
+        case "done":        mapped = .done
+        case "skipped":     mapped = .skipped
+        default:            return false
+        }
+        setTaskStatus(projectPath: projectPath, id: taskId, status: mapped)
+        return true
+    }
+
+    /// Set owner by lore numeric id, mapping lore string values to TaskOwner cases.
+    @discardableResult
+    func setTaskOwnerByLoreId(projectPath: String, taskId: String, loreOwner: String) -> Bool {
+        let mapped: TaskOwner
+        switch loreOwner {
+        case "human": mapped = .human
+        case "ai":    mapped = .ai
+        case "none":  mapped = .none
+        default:      return false
+        }
+        setTaskOwner(projectPath: projectPath, id: taskId, owner: mapped)
+        return true
+    }
+
     func reloadTasks(for projectPath: String) {
         projectTasks[projectPath] = TaskStore.read(projectPath)
         refreshTaskSnapshot(for: projectPath)

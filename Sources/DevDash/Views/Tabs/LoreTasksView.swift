@@ -74,6 +74,8 @@ struct LoreIdeaItem: Identifiable {
 struct LoreTasksView: View {
     let projectPath: String
 
+    @EnvironmentObject private var store: DashboardStore
+
     @State private var tasks: [LoreTaskItem] = []
     @State private var selected: LoreTaskItem? = nil
     @State private var search = ""
@@ -513,7 +515,42 @@ struct LoreTasksView: View {
         }
         .id(task.id)
         .draggable(task.file)
+        .contextMenu { taskContextMenu(task) }
         Divider().padding(.leading, 36)
+    }
+
+    @ViewBuilder
+    private func taskContextMenu(_ task: LoreTaskItem) -> some View {
+        Button {
+            setStatus(task, to: task.status == "done" ? "open" : "done")
+        } label: {
+            Label(task.status == "done" ? "Mark Open" : "Mark Done",
+                  systemImage: task.status == "done" ? "circle" : "checkmark.circle.fill")
+        }
+        Divider()
+        Section("Claude") {
+            Button {
+                if let nid = numericId(from: task.file) {
+                    store.launchClaudeForTask(taskId: nid, projectPath: projectPath)
+                    reload()
+                }
+            } label: {
+                Label("Launch with Claude", systemImage: "play.circle")
+            }
+            Button {
+                if let nid = numericId(from: task.file) {
+                    Task { await store.runForTask(taskId: nid, projectPath: projectPath, allowEdits: true); reload() }
+                }
+            } label: {
+                Label("Run (allow edits)", systemImage: "wand.and.stars")
+            }
+        }
+        Divider()
+        Button(role: .destructive) {
+            deleteTask(task)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
     }
 
     private func sectionHeader(_ label: String, color: Color, count: Int) -> some View {
@@ -765,8 +802,25 @@ struct LoreTasksView: View {
         reload()
     }
 
+    /// Derive the numeric lore id (leading digits) from a task filename like "0042-slug.md".
+    private func numericId(from file: String) -> String? {
+        let digits = file.prefix(while: { $0.isNumber })
+        return digits.isEmpty ? nil : String(digits)
+    }
+
     private func setStatus(_ task: LoreTaskItem, to newStatus: String) {
         guard newStatus != task.status else { return }
+
+        // Route through TaskStore (sentinel-delimited history format) when the
+        // status maps to a known TaskStatus case. Fall back to direct file write
+        // for any unknown value so nothing is silently dropped.
+        if let nid = numericId(from: task.file),
+           store.setTaskStatusByLoreId(projectPath: projectPath, taskId: nid, loreStatus: newStatus) {
+            updateInPlace(file: task.file)
+            return
+        }
+
+        // Fallback: direct file write for unrecognised status values.
         guard let raw = try? String(contentsOfFile: task.path, encoding: .utf8) else { return }
         let statusUpdated = raw.components(separatedBy: "\n").map { line in
             line.hasPrefix("status:") ? "status: \(newStatus)" : line
@@ -785,6 +839,14 @@ struct LoreTasksView: View {
     }
 
     private func setField(_ task: LoreTaskItem, key: String, value: String) {
+        // Route owner mutations through TaskStore for consistency.
+        if key == "owner",
+           let nid = numericId(from: task.file),
+           store.setTaskOwnerByLoreId(projectPath: projectPath, taskId: nid, loreOwner: value) {
+            updateInPlace(file: task.file)
+            return
+        }
+
         guard let raw = try? String(contentsOfFile: task.path, encoding: .utf8) else { return }
         var lines = raw.components(separatedBy: "\n")
         var found = false
