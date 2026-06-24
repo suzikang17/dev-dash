@@ -82,10 +82,11 @@ enum TaskStoreSelfTest {
             check(false, "a: add threw \(error)"); return
         }
 
-        // Set phases and ghIssue via setPhases + update
+        // Set phases, ghIssue, and pr via update
         var modified = t
         modified.phases = ["Phase 1", "Phase 2"]
         modified.ghIssueURL = URL(string: "https://github.com/org/repo/issues/42")
+        modified.pr = "https://github.com/org/repo/pull/7"
         do {
             try TaskStore.update(projectPath: proj, modified)
         } catch {
@@ -108,6 +109,7 @@ enum TaskStoreSelfTest {
         check(read.phases == ["Phase 1", "Phase 2"],   "a: phases round-trip")
         check(read.ghIssueURL?.absoluteString == "https://github.com/org/repo/issues/42",
               "a: ghIssueURL round-trip")
+        check(read.pr == "https://github.com/org/repo/pull/7", "a: pr round-trip")
     }
 
     // MARK: - Check b: adversarial title/notes escaping

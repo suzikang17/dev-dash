@@ -22,6 +22,12 @@ struct TaskDetailSheet: View {
     @State private var hasTests = false
     @FocusState private var titleFocused: Bool
 
+    // PR card state
+    enum PRLoadState {
+        case idle, loading, loaded(PRDetail), failed
+    }
+    @State private var prLoadState: PRLoadState = .idle
+
     private var task: TaskItem? {
         store.tasksV2(for: projectPath).first { $0.id == taskId }
     }
@@ -41,6 +47,7 @@ struct TaskDetailSheet: View {
                     titleEditor
                     metadataRow
                     descriptionEditor
+                    if task?.pr != nil { prCard }
                     personaSection
                     phasesSection
                     artifactsSection
@@ -232,6 +239,126 @@ struct TaskDetailSheet: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    // MARK: - PR Card
+
+    /// Parse a PR number from a GitHub pull URL like `.../pull/42`.
+    @ViewBuilder
+    private var prCard: some View {
+        if let prURL = task?.pr {
+            let number = prNumberFromURL(prURL)
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                SectionHeader("Pull Request")
+                VStack(alignment: .leading, spacing: DSSpace.sm) {
+                    // Header row: branch icon + PR # + open button
+                    HStack(spacing: DSSpace.sm) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .foregroundColor(.accentColor)
+                            .font(DSFont.label)
+                        if let n = number {
+                            Text("PR #\(n)")
+                                .font(DSFont.bodyEmphasized)
+                        } else {
+                            Text("Pull Request")
+                                .font(DSFont.bodyEmphasized)
+                        }
+                        Spacer()
+                        let canOpen = number != nil || URL(string: prURL) != nil
+                        Button {
+                            if let n = number {
+                                Task { await GitDiffScanner.openPRWeb(path: projectPath, number: n) }
+                            } else if let u = URL(string: prURL) {
+                                NSWorkspace.shared.open(u)
+                            }
+                        } label: {
+                            Label("Open PR", systemImage: "arrow.up.forward.app")
+                                .font(DSFont.micro)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!canOpen)
+                    }
+
+                    // Live detail or loading/fallback
+                    switch prLoadState {
+                    case .idle:
+                        EmptyView()
+                    case .loading:
+                        HStack(spacing: DSSpace.xs) {
+                            ProgressView().controlSize(.small)
+                            Text("Fetching PR details…")
+                                .font(DSFont.micro)
+                                .foregroundColor(.secondary)
+                        }
+                    case .loaded(let detail):
+                        VStack(alignment: .leading, spacing: DSSpace.xs) {
+                            Text(detail.title)
+                                .font(DSFont.label)
+                                .foregroundColor(.primary)
+                                .lineLimit(2)
+                            HStack(spacing: DSSpace.md) {
+                                prStateBadge(detail.state)
+                                Label("+\(detail.additions)", systemImage: "plus")
+                                    .font(DSFont.monoDigits(.caption2))
+                                    .foregroundColor(DSColor.success)
+                                Label("-\(detail.deletions)", systemImage: "minus")
+                                    .font(DSFont.monoDigits(.caption2))
+                                    .foregroundColor(DSColor.danger)
+                                if !detail.headRefName.isEmpty {
+                                    Label(detail.headRefName, systemImage: "arrow.triangle.branch")
+                                        .font(DSFont.mono(.caption2))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    case .failed:
+                        // Fallback: just show the raw link
+                        Text(prURL)
+                            .font(DSFont.mono(.caption2))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .padding(DSSpace.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
+                .overlay(RoundedRectangle(cornerRadius: DSRadius.medium)
+                    .stroke(Color.accentColor.opacity(0.2), lineWidth: 0.5))
+            }
+            .task(id: prURL) {
+                guard let n = prNumberFromURL(prURL) else {
+                    prLoadState = .failed; return
+                }
+                prLoadState = .loading
+                if let detail = await GitDiffScanner.prDetail(path: projectPath, number: n) {
+                    prLoadState = .loaded(detail)
+                } else {
+                    prLoadState = .failed
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func prStateBadge(_ state: String) -> some View {
+        let (label, color): (String, Color) = {
+            switch state.lowercased() {
+            case "open":   return ("Open", DSColor.success)
+            case "merged": return ("Merged", Color.purple)
+            default:       return ("Closed", .secondary)
+            }
+        }()
+        Text(label)
+            .font(DSFont.sectionHeader)
+            .tracking(0.6)
+            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
+            .background(color.opacity(0.15))
+            .foregroundColor(color)
+            .clipShape(Capsule())
     }
 
     @ViewBuilder
@@ -492,6 +619,7 @@ struct TaskDetailSheet: View {
         loaded = true
         hasTests = FileManager.default.fileExists(
             atPath: "\(projectPath)/.devdash/manual-tests/\(t.id).md")
+        prLoadState = .idle
     }
 
     private func saveAndDismiss() {
@@ -550,6 +678,16 @@ struct TaskDetailSheet: View {
         f.dateFormat = "MMM d, HH:mm"
         return f.string(from: d)
     }
+}
+
+/// Parse a PR number from a GitHub pull URL (e.g. `.../pull/42` → 42).
+/// Shared by TaskDetailSheet and TasksTabView so the two can't drift.
+func prNumberFromURL(_ url: String) -> Int? {
+    guard let u = URL(string: url),
+          let comps = URLComponents(url: u, resolvingAgainstBaseURL: false) else { return nil }
+    let parts = comps.path.components(separatedBy: "/")
+    guard let pullIdx = parts.firstIndex(of: "pull"), pullIdx + 1 < parts.count else { return nil }
+    return Int(parts[pullIdx + 1])
 }
 
 private extension String {

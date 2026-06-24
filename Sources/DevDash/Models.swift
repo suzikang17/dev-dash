@@ -285,6 +285,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var completedPhases: [String] = []
     var gstackPersonaOverride: String? = nil
     var linkedDocPath: String? = nil
+    var pr: String? = nil
 
     var kanbanColumn: KanbanColumn {
         switch (status, owner, hasAIRun) {

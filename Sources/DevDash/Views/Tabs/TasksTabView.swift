@@ -1081,6 +1081,9 @@ private struct TaskLine: View {
             Spacer()
 
             CategoryChip(category: task.category)
+            if let prURL = task.pr, let n = prNumberFromURL(prURL) {
+                PRBadge(number: n)
+            }
             if task.source != .local {
                 SourceBadge(source: task.source)
             }
@@ -1181,6 +1184,19 @@ private struct TaskLine: View {
         case .done: return DSColor.success
         case .skipped: return .secondary.opacity(0.6)
         }
+    }
+}
+
+private struct PRBadge: View {
+    let number: Int
+    var body: some View {
+        Label("#\(number)", systemImage: "arrow.triangle.branch")
+            .font(DSFont.micro)
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
+            .background(Color.accentColor.opacity(0.12))
+            .foregroundColor(.accentColor)
+            .clipShape(Capsule())
     }
 }
 

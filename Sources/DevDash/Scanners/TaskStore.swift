@@ -329,6 +329,7 @@ enum TaskStore {
         }
         str("persona", t.gstackPersonaOverride)
         str("linkedDoc", t.linkedDocPath)
+        str("pr", t.pr)
         if let pid = t.parentId, !pid.isEmpty { lines.append("parent: \(yamlStr(pid))") }
         lines.append("---")
 
@@ -388,6 +389,7 @@ enum TaskStore {
         }
         setStr("persona", t.gstackPersonaOverride)
         setStr("linkedDoc", t.linkedDocPath)
+        setStr("pr", t.pr)
         if let pid = t.parentId, !pid.isEmpty {
             doc = setOrAddFrontmatterKey(in: doc, key: "parent", value: yamlStr(pid))
         } else {
@@ -666,7 +668,8 @@ enum TaskStore {
             phases: phases,
             completedPhases: completedPhases,
             gstackPersonaOverride: fm["persona"].flatMap { $0.isEmpty ? nil : $0 },
-            linkedDocPath: fm["linkedDoc"].flatMap { $0.isEmpty ? nil : $0 }
+            linkedDocPath: fm["linkedDoc"].flatMap { $0.isEmpty ? nil : $0 },
+            pr: fm["pr"].flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
