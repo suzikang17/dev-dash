@@ -738,8 +738,10 @@ struct SettingsView: View {
             ForEach(hookSpecs) { spec in
                 let isOn = effective.contains(spec.event)
                 Button {
-                    var newSet = effective
-                    if isOn { newSet.remove(spec.event) } else { newSet.insert(spec.event) }
+                    // Read live (not the captured snapshot) so rapid re-toggles don't
+                    // write back a stale set.
+                    var newSet = store.effectiveEnabledEvents(for: projectPath)
+                    if newSet.contains(spec.event) { newSet.remove(spec.event) } else { newSet.insert(spec.event) }
                     store.setEnabledEventsOverride(newSet, for: projectPath)
                 } label: {
                     HStack {
@@ -776,8 +778,9 @@ struct SettingsView: View {
             ForEach(hookSpecs) { spec in
                 let isOn = current.contains(spec.event)
                 Button {
+                    // Decide from the live set, not the captured snapshot.
                     var newSet = store.defaultEnabledEvents
-                    if isOn { newSet.remove(spec.event) } else { newSet.insert(spec.event) }
+                    if newSet.contains(spec.event) { newSet.remove(spec.event) } else { newSet.insert(spec.event) }
                     store.defaultEnabledEvents = newSet
                 } label: {
                     HStack {
