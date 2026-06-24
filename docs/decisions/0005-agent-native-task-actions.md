@@ -19,8 +19,8 @@ Key fact: **dev-dash is file-backed and those files are lore docs.** Tasks are
 running app watches those dirs (`NotesFileWatcher`/`TaskStore`) and re-renders on
 change. lore already provides the write API for them:
 
-- `lore add <type> --title "..." --fields k=v ...` — creates a doc; `--fields` spreads
-  arbitrary frontmatter, so `lore add task --fields pr=<url>` files a PR-linked task
+- `lore add <type> --title "..." --field k=v ...` — creates a doc; `--field` spreads
+  arbitrary frontmatter, so `lore add task --field pr=<url>` files a PR-linked task
   with NO schema change.
 - `lore set-status <type> <id> <status>` — updates `status:` AND appends
   `- <timestamp> old → new` to `## Status history` — the exact format `TaskStore` uses.
@@ -46,10 +46,10 @@ native macOS notifications. Launched sessions and their outputs attach to the **
   (existing `runForTask`) vs. external Terminal.app.
 - **Attach to:** **task (chosen)** vs. session vs. both.
 - **Artifacts (decided):** a new lore `artifact` doc type — markdown with
-  `--fields task=<id>`, indexed/searchable, consistent with the doc model; binary
+  `--field task=<id>`, indexed/searchable, consistent with the doc model; binary
   outputs (screenshots, images, diffs) are referenced from the artifact doc rather
   than stored as lore docs. Requires adding the `artifact` type to the lore package.
-- **PR link:** plain `pr:` frontmatter via `lore add --fields` (chosen — no schema
+- **PR link:** plain `pr:` frontmatter via `lore add --field` (chosen — no schema
   change) vs. ejecting the task schema to formalize it (later, if validation wanted).
 - **Notifications:** native `UNUserNotificationCenter` (app is signed w/ bundle id),
   fired from hook/file-watch handlers, with a Settings toggle.
@@ -70,7 +70,7 @@ native macOS notifications. Launched sessions and their outputs attach to the **
    `claude` seeded with the task spec + a note on the `lore` report-back commands;
    sets owner=ai.
 2. PR-linked task rendering — render a task's `pr:` field as a live PR card (reuse the
-   `gh` machinery). Creation already works via `lore add task --fields pr=<url>`.
+   `gh` machinery). Creation already works via `lore add task --field pr=<url>`.
 3. Artifacts — add an `artifact` type to the lore package; render artifact docs for a
    task in an artifacts panel in task detail (md/web/diff/image renderers exist),
    filtered by their `task=<id>` field; binaries referenced.

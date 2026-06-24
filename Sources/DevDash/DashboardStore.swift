@@ -1891,8 +1891,8 @@ final class DashboardStore: ObservableObject {
 
         As you work, report progress to the dashboard with the `lore` CLI:
         - Update this task's status:  lore set-status task \(task.id) <new-status>
-        - If you open a PR, file a review task:  lore add task --title "Review: <desc>" --fields pr=<PR_URL> category=qa
-        - Record an artifact (summary, test plan, report):  lore add artifact --fields task=\(task.id) --title "<name>"
+        - If you open a PR, file a review task:  lore add task --title "Review: <desc>" --field pr=<PR_URL> --field category=qa
+        - Record an artifact (summary, test plan, report):  lore add artifact --title "<name>" --field task=\(task.id) --field kind=summary
         """
 
         // Write prompt to a temp file so we can pass it to claude without
