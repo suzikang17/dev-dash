@@ -1117,6 +1117,9 @@ private struct TaskLine: View {
                     Divider()
                     Section("Claude") {
                         Button {
+                            store.launchClaudeForTask(task, projectPath: projectPath)
+                        } label: { Label("Launch with Claude", systemImage: "play.circle") }
+                        Button {
                             Task {
                                 await store.runForTask(task, projectPath: projectPath, allowEdits: false)
                                 store.tabStore.detailTab = .claude
@@ -1538,6 +1541,9 @@ private struct KanbanCard: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            Button("Launch with Claude") {
+                store.launchClaudeForTask(task, projectPath: projectPath)
+            }
             Button("Investigate (read-only)") {
                 Task { await store.runForTask(task, projectPath: projectPath, allowEdits: false) }
             }

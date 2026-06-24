@@ -300,7 +300,7 @@ final class DashboardStore: ObservableObject {
     private func projectKey(for selection: Selection?) -> String? {
         guard let sel = selection else { return nil }
         switch sel {
-        case .home: return nil
+        case .home, .simulator: return nil
         case .project(let path): return path
         case .service(let id):
             // Map service to its project so a service↔project switch shares tab memory
@@ -1157,7 +1157,7 @@ final class DashboardStore: ObservableObject {
     func project(for selection: Selection?) -> Project? {
         guard let sel = selection else { return nil }
         switch sel {
-        case .home:
+        case .home, .simulator:
             return nil
         case .project(let path):
             return projects.first { $0.path == path }
@@ -1170,7 +1170,7 @@ final class DashboardStore: ObservableObject {
     func service(for selection: Selection?) -> Service? {
         guard let sel = selection else { return nil }
         switch sel {
-        case .home:
+        case .home, .simulator:
             return nil
         case .service(let id):
             return services.first { $0.id == id }
@@ -1743,6 +1743,62 @@ final class DashboardStore: ObservableObject {
             kind: .taskExecution,
             linkedTaskId: task.id
         )
+    }
+
+    /// Open the project's embedded terminal and start an interactive `claude`
+    /// session seeded with the task spec and a report-back protocol using the
+    /// `lore` CLI. Distinct from `runForTask` (which uses `claude -p` headless);
+    /// this is the interactive terminal path so the user can watch/drive it.
+    func launchClaudeForTask(_ task: TaskItem, projectPath: String) {
+        guard !projectPath.isEmpty else { return }
+
+        let prompt = """
+        Task \(task.id): \(task.title)
+        Category: \(task.category.label)
+        \(task.notes.map { "Notes:\n\($0)" } ?? "")
+
+        Work on this task in this project.
+
+        As you work, report progress to the dashboard with the `lore` CLI:
+        - Update this task's status:  lore set-status task \(task.id) <new-status>
+        - If you open a PR, file a review task:  lore add task --title "Review: <desc>" --fields pr=<PR_URL> category=qa
+        - Record an artifact (summary, test plan, report):  lore add artifact --fields task=\(task.id) --title "<name>"
+        """
+
+        // Write prompt to a temp file so we can pass it to claude without
+        // any shell-quoting hazards from multi-line content.
+        let launchDir = (NSHomeDirectory() as NSString).appendingPathComponent(".devdash/launch")
+        let promptPath = (launchDir as NSString).appendingPathComponent("\(task.id).txt")
+        do {
+            try FileManager.default.createDirectory(
+                atPath: launchDir, withIntermediateDirectories: true, attributes: nil)
+            try prompt.write(toFile: promptPath, atomically: true, encoding: .utf8)
+        } catch {
+            return
+        }
+
+        // Set owner and status to mirror runForTask.
+        try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .ai)
+        try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .open)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+
+        // Navigate to this project and open the terminal drawer.
+        selection = .project(path: projectPath)
+        terminalOpen = true
+
+        // Ensure the session exists (session(for:) is idempotent — spawns lazily
+        // on first call, returns the cached view on subsequent calls). We call it
+        // here so the PTY is started before we send the command.
+        _ = terminals.session(for: projectPath)
+
+        // Give the shell a brief moment to finish its login-shell init before
+        // the command arrives. 400 ms is enough for a cold PTY; warm sessions
+        // are already ready and will just execute immediately.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            let cmd = "claude \"$(cat '\(promptPath)')\"\n"
+            terminals.send(cmd, to: projectPath)
+        }
     }
 
     /// Ask claude -p to suggest tasks for the current stage given the

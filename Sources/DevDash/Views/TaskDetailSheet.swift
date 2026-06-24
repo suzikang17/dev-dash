@@ -426,6 +426,11 @@ struct TaskDetailSheet: View {
             HStack(spacing: DSSpace.sm) {
                 if let t = task {
                     Button {
+                        store.launchClaudeForTask(t, projectPath: projectPath)
+                        dismiss()
+                    } label: { Label("Launch with Claude", systemImage: "play.circle") }
+                        .buttonStyle(.borderedProminent)
+                    Button {
                         Task {
                             await store.runForTask(t, projectPath: projectPath, allowEdits: false)
                             store.tabStore.detailTab = .claude
