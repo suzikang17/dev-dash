@@ -51,7 +51,10 @@ final class DashboardStore: ObservableObject {
     private var _devServices: [Service] = []
     private var _infraServices: [Service] = []
     @Published var projects: [Project] = [] {
-        didSet { terminals.reconcile(activePaths: Set(projects.map { $0.path })) }
+        didSet {
+            terminals.reconcile(activePaths: Set(projects.map { $0.path }))
+            armTaskWatcher()
+        }
     }
     @Published var sessions: [ClaudeSession] = []
     @Published var tasksByProject: [ProjectTasks] = []
@@ -252,6 +255,105 @@ final class DashboardStore: ObservableObject {
     }
     let terminals = TerminalSessionStore(appearance: .current())
 
+    // MARK: - Task file watcher
+    private var taskWatcher: NotesFileWatcher?
+    /// projectPath → (taskId → TaskItem) snapshot used for change diffing.
+    private var taskSnapshot: [String: [String: TaskItem]] = [:]
+    /// The dir set the current watcher was armed with; used to avoid tearing
+    /// down and rebuilding FDs/DispatchSources on every refresh tick when the
+    /// project list hasn't actually changed.
+    private var taskWatcherDirs: Set<String> = []
+
+    /// Public entry point for the app startup path. Idempotent — safe to call
+    /// before projects are loaded (watcher is a no-op until projects populate).
+    func armTaskWatcherIfNeeded() { armTaskWatcher() }
+
+    /// (Re-)arm the watcher over every project's docs/tasks directory.
+    /// Called from `projects.didSet` so it stays current when projects change.
+    /// No-ops when the desired dir set is identical to the currently armed set.
+    private func armTaskWatcher() {
+        let desired = Set(projects.map { "\($0.path)/docs/tasks" })
+        guard desired != taskWatcherDirs else { return }
+        taskWatcher?.stop()
+        taskWatcher = nil
+        taskWatcherDirs = desired
+        guard !desired.isEmpty else { return }
+        taskWatcher = NotesFileWatcher(dirs: Array(desired), onChange: { [weak self] in
+            // Already debounced by NotesFileWatcher (0.3 s). Hop to main for store mutation.
+            DispatchQueue.main.async { self?.reloadTasksAndNotify() }
+        })
+    }
+
+    /// Reload tasks for every project, diff vs snapshot, and fire notifications
+    /// for meaningful changes. First call per project seeds the snapshot silently.
+    func reloadTasksAndNotify() {
+        for project in projects {
+            let path = project.path
+            let fresh = TaskStore.read(path)
+            let freshMap = Dictionary(uniqueKeysWithValues: fresh.map { ($0.id, $0) })
+
+            if let snap = taskSnapshot[path] {
+                // Diff: only notify when we have a prior snapshot (not first load).
+                if enableNotifications {
+                    for (id, task) in freshMap {
+                        if snap[id] == nil {
+                            // New task
+                            if task.pr != nil {
+                                Notifier.post(title: "PR review task created", body: task.title)
+                            } else {
+                                Notifier.post(title: "New task", body: task.title)
+                            }
+                        } else if snap[id]?.status != .done && task.status == .done {
+                            // Task moved to done
+                            Notifier.post(title: "Task done", body: task.title)
+                        }
+                    }
+                }
+            }
+            // Always update snapshot and projectTasks.
+            taskSnapshot[path] = freshMap
+            projectTasks[path] = fresh.isEmpty ? nil : fresh
+        }
+    }
+
+    /// Diff-notify for a single project (used by the SessionEnd path).
+    private func reloadTasksAndNotifyForProject(_ projectPath: String) {
+        let fresh = TaskStore.read(projectPath)
+        let freshMap = Dictionary(uniqueKeysWithValues: fresh.map { ($0.id, $0) })
+
+        if let snap = taskSnapshot[projectPath], enableNotifications {
+            for (id, task) in freshMap {
+                if snap[id] == nil {
+                    if task.pr != nil {
+                        Notifier.post(title: "PR review task created", body: task.title)
+                    } else {
+                        Notifier.post(title: "New task", body: task.title)
+                    }
+                } else if snap[id]?.status != .done && task.status == .done {
+                    Notifier.post(title: "Task done", body: task.title)
+                }
+            }
+        }
+        taskSnapshot[projectPath] = freshMap
+        projectTasks[projectPath] = fresh.isEmpty ? nil : fresh
+    }
+
+    /// Seed `taskSnapshot` from the current `projectTasks` WITHOUT notifying.
+    /// Call once after `loadProjectMetaAndTasks` populates projectTasks on main so
+    /// that tasks already on disk at launch never trigger notifications.
+    func seedTaskSnapshots() {
+        for (path, tasks) in projectTasks {
+            taskSnapshot[path] = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        }
+    }
+
+    /// Silently refresh the snapshot for `projectPath` after an in-app mutation
+    /// so external file-watcher callbacks don't double-report the app's own changes.
+    private func refreshTaskSnapshot(for projectPath: String) {
+        let tasks = TaskStore.read(projectPath)
+        taskSnapshot[projectPath] = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+    }
+
     // Resize geometry (persisted; plain vars — containers own @State and write back).
     var terminalHeight: CGFloat {
         get { CGFloat(UserDefaults.standard.object(forKey: "devdash.terminal.height") as? Double ?? 280) }
@@ -347,6 +449,15 @@ final class DashboardStore: ObservableObject {
     @Published var autoDevlogOnSessionEnd: Bool =
         UserDefaults.standard.bool(forKey: "devdash.autoDevlogOnSessionEnd") {
         didSet { UserDefaults.standard.set(autoDevlogOnSessionEnd, forKey: "devdash.autoDevlogOnSessionEnd") }
+    }
+    /// Fire native macOS notifications when Claude creates a PR task, completes a task,
+    /// or finishes a meaningful session. Default on; uses register(defaults:) so first-
+    /// launch reads true without an explicit write.
+    @Published var enableNotifications: Bool = {
+        UserDefaults.standard.register(defaults: ["devdash.enableNotifications": true])
+        return UserDefaults.standard.bool(forKey: "devdash.enableNotifications")
+    }() {
+        didSet { UserDefaults.standard.set(enableNotifications, forKey: "devdash.enableNotifications") }
     }
     /// Inject open tasks + latest devlog into Claude sessions via hook stdout (default on — no AI spawn, fast).
     /// Uses register(defaults:) so an unset key still reads true on first launch.
@@ -686,12 +797,13 @@ final class DashboardStore: ObservableObject {
             // Removal is handled by the periodic pruneLiveSessions() sweep.
             if let session = liveSessions[sid] {
                 maybeAutoDevlog(for: session)
+                let hasWrite = session.liveFiles.contains { $0.operation == .write || $0.operation == .edit }
+                let hasGit   = session.liveCommands.contains { Self.isGitMutation($0) }
+                let meaningful = hasWrite || hasGit
                 // Advance linked task when: unambiguous link was set AND session was meaningful.
                 if let taskId = session.linkedTaskId,
                    let projPath = session.projectPath {
-                    let hasWrite = session.liveFiles.contains { $0.operation == .write || $0.operation == .edit }
-                    let hasGit   = session.liveCommands.contains { Self.isGitMutation($0) }
-                    if hasWrite || hasGit {
+                    if meaningful {
                         // Re-read current task state — user may have completed/dropped it mid-session.
                         let current = TaskStore.read(projPath).first { $0.id == taskId }
                         if let current, current.status != .done && current.status != .skipped {
@@ -700,6 +812,14 @@ final class DashboardStore: ObservableObject {
                             reloadTasks(for: projPath)
                         }
                     }
+                }
+                // Notify on meaningful session end + diff tasks for that project.
+                if meaningful, let projPath = session.projectPath {
+                    if enableNotifications {
+                        Notifier.post(title: "Claude finished",
+                                      body: "Session ended in \(session.projectName)")
+                    }
+                    reloadTasksAndNotifyForProject(projPath)
                 }
             }
 
@@ -1384,6 +1504,7 @@ final class DashboardStore: ObservableObject {
                 self?.projectTasks = taskMap
                 self?.projectProviders = providerMap
                 self?.projectHealth = healthMap
+                self?.seedTaskSnapshots()
             }
         }
     }
@@ -1494,6 +1615,7 @@ final class DashboardStore: ObservableObject {
                 linkedDocPath: linkedDocPath
             )
             projectTasks[projectPath] = TaskStore.read(projectPath)
+            refreshTaskSnapshot(for: projectPath)
             todoError = nil
             regenerateRoadmap(for: projectPath)
         } catch {
@@ -1504,6 +1626,7 @@ final class DashboardStore: ObservableObject {
     func setTaskParent(projectPath: String, id: String, newParentId: String?) {
         try? TaskStore.setParent(projectPath: projectPath, id: id, newParentId: newParentId)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
         regenerateRoadmap(for: projectPath)
     }
 
@@ -1518,27 +1641,32 @@ final class DashboardStore: ObservableObject {
     func setTaskStatus(projectPath: String, id: String, status: TaskStatus) {
         try? TaskStore.setStatus(projectPath: projectPath, id: id, status: status)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
         regenerateRoadmap(for: projectPath)
     }
 
     func setTaskOwner(projectPath: String, id: String, owner: TaskOwner) {
         try? TaskStore.setOwner(projectPath: projectPath, id: id, owner: owner)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
     }
 
     func reloadTasks(for projectPath: String) {
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
     }
 
     func deleteTask(projectPath: String, id: String) {
         try? TaskStore.delete(projectPath: projectPath, id: id)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
         regenerateRoadmap(for: projectPath)
     }
 
     func updateTask(projectPath: String, _ task: TaskItem) {
         try? TaskStore.update(projectPath: projectPath, task)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
         regenerateRoadmap(for: projectPath)
     }
 
@@ -1735,6 +1863,8 @@ final class DashboardStore: ObservableObject {
 
         try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .ai)
         try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .open)
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
 
         await runClaude(
             prompt: prompt,
@@ -1781,6 +1911,7 @@ final class DashboardStore: ObservableObject {
         try? TaskStore.setOwner(projectPath: projectPath, id: task.id, owner: .ai)
         try? TaskStore.setStatus(projectPath: projectPath, id: task.id, status: .open)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
 
         // Navigate to this project and open the terminal drawer.
         selection = .project(path: projectPath)
@@ -1903,6 +2034,7 @@ final class DashboardStore: ObservableObject {
         try? TaskStore.setStatus(projectPath: projectPath, id: taskId, status: .done)
         try? TaskStore.setOwner(projectPath: projectPath, id: taskId, owner: .none)
         projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
         regenerateRoadmap(for: projectPath)
         guard let task = tasksV2(for: projectPath).first(where: { $0.id == taskId }) else { return }
         await generateTaskReleaseNote(task, projectPath: projectPath)
@@ -2052,6 +2184,8 @@ final class DashboardStore: ObservableObject {
                     if let tid = arr[idx].linkedTaskId {
                         try? TaskStore.setHasAIRun(projectPath: path, id: tid)
                         try? TaskStore.setOwner(projectPath: path, id: tid, owner: .human)
+                        self?.projectTasks[path] = TaskStore.read(path)
+                        self?.refreshTaskSnapshot(for: path)
                     }
                 }
                 self?.runningClaude.removeValue(forKey: taskId)

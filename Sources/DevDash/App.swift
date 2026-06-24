@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 @main
 struct DevDashApp: App {
@@ -54,6 +55,7 @@ struct DevDashApp: App {
                     }
                 }
                 .task {
+                    Notifier.requestAuthIfNeeded()
                     let hasSavedSelection = UserDefaults.standard.string(forKey: "devdash.lastSelection") != nil
                     if store.selection == nil && !hasSavedSelection { store.selection = .home }
                     store.startEventServer()
@@ -67,6 +69,7 @@ struct DevDashApp: App {
                     store.refreshRecentCommits()
                     store.refreshSessionDigests()
                     store.loadProjectMetaAndTasks()
+                    store.armTaskWatcherIfNeeded()
                 }
         }
         .windowStyle(.titleBar)

@@ -503,6 +503,15 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Notify on Claude task activity", isOn: $store.enableNotifications)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        Text("Native notifications when Claude creates a PR task, completes a task, or finishes a session.")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text("Defaults for all projects — override per project below.")
                         .font(DSFont.micro)
                         .foregroundStyle(.tertiary)
