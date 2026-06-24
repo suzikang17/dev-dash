@@ -64,10 +64,10 @@ struct ContentView: View {
     }
 
     /// Hidden buttons binding ⌘1–9 to the nine detail tabs (only while a
-    /// project/service is selected — home ignores detailTab). ⌘0 is Home.
+    /// project/service is selected — home and simulator ignore detailTab). ⌘0 is Home.
     @ViewBuilder
     private var tabShortcuts: some View {
-        if let sel = store.selection, sel != .home {
+        if let sel = store.selection, sel != .home, sel != .simulator {
             ForEach(Array(DetailTab.allCases.prefix(9).enumerated()), id: \.offset) { idx, tab in
                 Button("") { tabStore.detailTab = tab }
                     .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
@@ -146,7 +146,7 @@ struct ContentView: View {
             .accessibilityLabel("Forward")
         }
         ToolbarItem(placement: .principal) {
-            if let sel = store.selection, sel != .home {
+            if let sel = store.selection, sel != .home, sel != .simulator {
                 Picker("Mode", selection: $tabStore.detailTab) {
                     ForEach(DetailTab.allCases) { tab in
                         Label(tab.label, systemImage: tab.systemImage).tag(tab)
@@ -233,6 +233,8 @@ struct ContentView: View {
         switch selection {
         case .home:
             return "Dev Dashboard"
+        case .simulator:
+            return "Simulator"
         case .service(let id):
             return store.services.first { $0.id == id }?.name ?? "Service"
         case .project(let path):

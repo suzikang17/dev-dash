@@ -38,6 +38,8 @@ struct DetailPaneView: View {
             switch store.selection {
             case .none, .some(.home):
                 HomeView()
+            case .some(.simulator):
+                SimulatorView()
             case .some:
                 switch tabStore.detailTab {
                 case .preview: PreviewTabView()

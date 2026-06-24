@@ -559,12 +559,14 @@ struct ProjectTasks: Identifiable, Hashable {
 
 enum Selection: Hashable {
     case home
+    case simulator
     case service(serviceID: String)
     case project(path: String)
 
     var key: String {
         switch self {
         case .home: return "home"
+        case .simulator: return "simulator"
         case .service(let id): return "service:\(id)"
         case .project(let path): return "project:\(path)"
         }

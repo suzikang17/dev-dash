@@ -194,6 +194,18 @@ struct SidebarView: View {
                         .help("Home (⌘0)")
                         .accessibilityLabel("Home")
 
+                        Button {
+                            store.selection = .simulator
+                        } label: {
+                            Image(systemName: store.selection == .simulator ? "iphone.gen3" : "iphone")
+                                .foregroundColor(store.selection == .simulator ? .accentColor : .secondary)
+                                .font(DSFont.body)
+                        }
+                        .buttonStyle(.plain)
+                        .dsHitTarget()
+                        .help("Simulator")
+                        .accessibilityLabel("Simulator")
+
                         Divider().frame(height: 14)
 
                         Image(systemName: "magnifyingglass")
