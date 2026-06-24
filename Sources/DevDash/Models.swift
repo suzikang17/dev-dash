@@ -605,6 +605,19 @@ enum DetailTab: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Lore artifacts (ADR-0005)
+
+struct Artifact: Identifiable, Hashable {
+    let id: String          // numeric filename prefix (e.g. "0001")
+    let title: String
+    let task: String?       // linked task numeric id
+    let kind: String?       // summary/test-plan/report/diff/screenshot/link/other
+    let file: String?       // optional referenced file path
+    let created: String?
+    let body: String        // markdown body
+    let path: String        // full .md path
+}
+
 struct FileNode: Identifiable, Hashable {
     let path: String
     let name: String

@@ -20,6 +20,10 @@ struct TaskDetailSheet: View {
     /// Whether this task has a generated manual-test file. Resolved on load so
     /// `artifactsSection` doesn't hit disk (`fileExists`) on every render.
     @State private var hasTests = false
+    /// Lore artifacts linked to this task (loaded on appear + watcher token change).
+    @State private var loreArtifacts: [Artifact] = []
+    /// Artifact whose body is currently being shown in a sheet.
+    @State private var selectedArtifact: Artifact? = nil
     @FocusState private var titleFocused: Bool
 
     // PR card state
@@ -62,8 +66,12 @@ struct TaskDetailSheet: View {
             footer
         }
         .frame(minWidth: 640, idealWidth: 720, minHeight: 540, idealHeight: 700)
-        .onAppear { loadFromStore() }
-        .onChange(of: taskId) { _, _ in loadFromStore() }
+        .onAppear { loadFromStore(); loadArtifacts() }
+        .onChange(of: taskId) { _, _ in loadFromStore(); loadArtifacts() }
+        .onChange(of: store.artifactsRefreshToken) { _, _ in loadArtifacts() }
+        .sheet(item: $selectedArtifact) { artifact in
+            ArtifactBodySheet(artifact: artifact)
+        }
     }
 
     @ViewBuilder
@@ -530,20 +538,92 @@ struct TaskDetailSheet: View {
     @ViewBuilder
     private var artifactsSection: some View {
         let testsPath = "\(projectPath)/.devdash/manual-tests/\(task?.id ?? "").md"
+        let showSection = hasTests || !loreArtifacts.isEmpty
 
-        if hasTests {
-            VStack(alignment: .leading, spacing: DSSpace.xs) {
-                SectionHeader("Manual tests")
-                Button {
-                    store.openFile(testsPath)
-                    dismiss()
-                } label: {
-                    Label("Open test checklist", systemImage: "checklist")
+        if showSection {
+            VStack(alignment: .leading, spacing: DSSpace.sm) {
+                SectionHeader("Artifacts")
+
+                // Manual test checklist (legacy .devdash path)
+                if hasTests {
+                    Button {
+                        store.openFile(testsPath)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: DSSpace.sm) {
+                            Image(systemName: "checklist")
+                                .foregroundColor(.accentColor)
+                                .frame(width: 16)
+                            Text("Manual test checklist")
+                                .font(DSFont.body)
+                                .foregroundColor(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, DSSpace.xs).padding(.horizontal, DSSpace.sm)
+                        .cardSurface(DSRadius.small)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+
+                // Lore artifact docs
+                ForEach(loreArtifacts) { artifact in
+                    Button {
+                        artifactTapped(artifact)
+                    } label: {
+                        HStack(spacing: DSSpace.sm) {
+                            Image(systemName: artifactIcon(artifact.kind))
+                                .foregroundColor(.accentColor)
+                                .frame(width: 16)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(artifact.title)
+                                    .font(DSFont.body)
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                if let created = artifact.created {
+                                    Text(created)
+                                        .font(DSFont.micro)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: artifact.file != nil ? "arrow.up.forward.app" : "chevron.right")
+                                .font(DSFont.micro)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, DSSpace.xs).padding(.horizontal, DSSpace.sm)
+                        .cardSurface(DSRadius.small)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
+    }
+
+    private func artifactTapped(_ artifact: Artifact) {
+        if let filePath = artifact.file,
+           !filePath.isEmpty,
+           FileManager.default.fileExists(atPath: filePath) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: filePath))
+        } else {
+            selectedArtifact = artifact
+        }
+    }
+
+    private func artifactIcon(_ kind: String?) -> String {
+        switch kind?.lowercased() {
+        case "summary":    return "doc.text"
+        case "test-plan":  return "checklist"
+        case "report":     return "chart.bar.doc.horizontal"
+        case "diff":       return "plus.forwardslash.minus"
+        case "screenshot": return "photo"
+        case "link":       return "link"
+        default:           return "doc"
+        }
+    }
+
+    private func loadArtifacts() {
+        guard let t = task else { loreArtifacts = []; return }
+        loreArtifacts = ArtifactStore.read(projectPath, forTask: t.id)
     }
 
     @ViewBuilder
@@ -620,6 +700,7 @@ struct TaskDetailSheet: View {
         hasTests = FileManager.default.fileExists(
             atPath: "\(projectPath)/.devdash/manual-tests/\(t.id).md")
         prLoadState = .idle
+        loadArtifacts()
     }
 
     private func saveAndDismiss() {
@@ -677,6 +758,62 @@ struct TaskDetailSheet: View {
         let f = DateFormatter()
         f.dateFormat = "MMM d, HH:mm"
         return f.string(from: d)
+    }
+}
+
+// MARK: - Artifact body sheet
+
+/// Modal sheet that renders an artifact's markdown body.
+private struct ArtifactBodySheet: View {
+    let artifact: Artifact
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: DSSpace.sm) {
+                Image(systemName: artifactIcon(artifact.kind))
+                    .foregroundColor(.accentColor)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(artifact.title)
+                        .font(DSFont.bodyEmphasized)
+                        .lineLimit(2)
+                    if let created = artifact.created {
+                        Text(created)
+                            .font(DSFont.micro)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                Button("Close") { dismiss() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(DSSpace.md)
+            Divider()
+            if artifact.body.isEmpty {
+                Spacer()
+                Text("No body content")
+                    .font(DSFont.label)
+                    .foregroundColor(.secondary)
+                Spacer()
+            } else {
+                MarkdownWebView(markdown: artifact.body)
+            }
+        }
+        .frame(minWidth: 560, idealWidth: 640, minHeight: 400, idealHeight: 520)
+    }
+
+    private func artifactIcon(_ kind: String?) -> String {
+        switch kind?.lowercased() {
+        case "summary":    return "doc.text"
+        case "test-plan":  return "checklist"
+        case "report":     return "chart.bar.doc.horizontal"
+        case "diff":       return "plus.forwardslash.minus"
+        case "screenshot": return "photo"
+        case "link":       return "link"
+        default:           return "doc"
+        }
     }
 }
 

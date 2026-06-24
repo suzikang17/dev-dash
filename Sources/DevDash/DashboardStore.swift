@@ -255,10 +255,14 @@ final class DashboardStore: ObservableObject {
     }
     let terminals = TerminalSessionStore(appearance: .current())
 
-    // MARK: - Task file watcher
+    // MARK: - Task + artifact file watcher
     private var taskWatcher: NotesFileWatcher?
     /// projectPath → (taskId → TaskItem) snapshot used for change diffing.
     private var taskSnapshot: [String: [String: TaskItem]] = [:]
+    /// projectPath → Set<artifactId> snapshot used for new-artifact diffing.
+    private var artifactSnapshot: [String: Set<String>] = [:]
+    /// Bumped whenever the watcher fires so TaskDetailSheet can re-read artifacts.
+    @Published var artifactsRefreshToken: Int = 0
     /// The dir set the current watcher was armed with; used to avoid tearing
     /// down and rebuilding FDs/DispatchSources on every refresh tick when the
     /// project list hasn't actually changed.
@@ -268,11 +272,15 @@ final class DashboardStore: ObservableObject {
     /// before projects are loaded (watcher is a no-op until projects populate).
     func armTaskWatcherIfNeeded() { armTaskWatcher() }
 
-    /// (Re-)arm the watcher over every project's docs/tasks directory.
+    /// (Re-)arm the watcher over every project's docs/tasks and docs/artifacts directories.
     /// Called from `projects.didSet` so it stays current when projects change.
     /// No-ops when the desired dir set is identical to the currently armed set.
+    /// NotesFileWatcher skips dirs that don't exist yet (open() returns -1 → fd < 0).
     private func armTaskWatcher() {
-        let desired = Set(projects.map { "\($0.path)/docs/tasks" })
+        var desired = Set(projects.map { "\($0.path)/docs/tasks" })
+        for project in projects {
+            desired.insert("\(project.path)/docs/artifacts")
+        }
         guard desired != taskWatcherDirs else { return }
         taskWatcher?.stop()
         taskWatcher = nil
@@ -284,11 +292,14 @@ final class DashboardStore: ObservableObject {
         })
     }
 
-    /// Reload tasks for every project, diff vs snapshot, and fire notifications
-    /// for meaningful changes. First call per project seeds the snapshot silently.
+    /// Reload tasks and artifacts for every project, diff vs snapshots, and fire
+    /// notifications for meaningful changes. First call per project seeds silently.
     func reloadTasksAndNotify() {
+        var didChangeArtifacts = false
         for project in projects {
             let path = project.path
+
+            // — Tasks —
             let fresh = TaskStore.read(path)
             let freshMap = Dictionary(uniqueKeysWithValues: fresh.map { ($0.id, $0) })
 
@@ -313,7 +324,29 @@ final class DashboardStore: ObservableObject {
             // Always update snapshot and projectTasks.
             taskSnapshot[path] = freshMap
             projectTasks[path] = fresh.isEmpty ? nil : fresh
+
+            // — Artifacts —
+            let freshArtifacts = ArtifactStore.read(path)
+            let freshIds = Set(freshArtifacts.map { $0.id })
+
+            if let snapIds = artifactSnapshot[path] {
+                // Diff: only notify when we have a prior snapshot (not first load).
+                // LOAD-BEARING: this `if let` (nil snapshot = silent) is the entire
+                // anti-spam guarantee for launch AND late-added projects. Do NOT refactor
+                // into a seed-then-diff that would notify on every existing artifact.
+                if enableNotifications {
+                    for artifact in freshArtifacts where !snapIds.contains(artifact.id) {
+                        Notifier.post(title: "Artifact added", body: artifact.title)
+                    }
+                }
+            }
+            // Always update artifact snapshot and bump token if anything changed.
+            if artifactSnapshot[path] != freshIds {
+                artifactSnapshot[path] = freshIds
+                didChangeArtifacts = true
+            }
         }
+        if didChangeArtifacts { artifactsRefreshToken &+= 1 }
     }
 
     /// Diff-notify for a single project (used by the SessionEnd path).
@@ -338,12 +371,18 @@ final class DashboardStore: ObservableObject {
         projectTasks[projectPath] = fresh.isEmpty ? nil : fresh
     }
 
-    /// Seed `taskSnapshot` from the current `projectTasks` WITHOUT notifying.
+    /// Seed `taskSnapshot` and `artifactSnapshot` from disk WITHOUT notifying.
     /// Call once after `loadProjectMetaAndTasks` populates projectTasks on main so
-    /// that tasks already on disk at launch never trigger notifications.
+    /// that tasks and artifacts already on disk at launch never trigger notifications.
     func seedTaskSnapshots() {
         for (path, tasks) in projectTasks {
             taskSnapshot[path] = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        }
+        // Seed artifact snapshots for every known project path (artifacts may exist
+        // even if there are no tasks, so iterate projects directly).
+        for project in projects {
+            let ids = Set(ArtifactStore.read(project.path).map { $0.id })
+            artifactSnapshot[project.path] = ids
         }
     }
 
