@@ -6,6 +6,32 @@ import AppKit
 struct SettingsView: View {
     @EnvironmentObject var store: DashboardStore
 
+    // MARK: - Tab navigation
+    private enum SettingsTab: String, CaseIterable, Identifiable {
+        case appearance, folders, claude, document, terminal
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .appearance: return "Appearance"
+            case .folders:    return "Project folders"
+            case .claude:     return "Claude integration"
+            case .document:   return "Document"
+            case .terminal:   return "Terminal"
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .appearance: return "paintbrush"
+            case .folders:    return "folder"
+            case .claude:     return "sparkles"
+            case .document:   return "doc.text"
+            case .terminal:   return "terminal"
+            }
+        }
+    }
+
+    @State private var selectedTab: SettingsTab = .appearance
+
     // MARK: - Claude integration section state
     @State private var installed: Set<String> = []
     @State private var hookError: String? = nil
@@ -31,23 +57,58 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: DSSpace.xl) {
-                    appearanceSection
-                    Divider()
-                    foldersSection
-                    Divider()
-                    claudeIntegrationSection
-                    Divider()
-                    documentSection
-                    Divider()
-                    terminalSection
+            HStack(spacing: 0) {
+                // LEFT: sidebar nav
+                VStack(alignment: .leading, spacing: DSSpace.xs) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        Button {
+                            selectedTab = tab
+                        } label: {
+                            HStack(spacing: DSSpace.sm) {
+                                Image(systemName: tab.systemImage)
+                                    .frame(width: 16, alignment: .center)
+                                    .foregroundStyle(selectedTab == tab ? Color.accentColor : .secondary)
+                                Text(tab.label)
+                                    .font(DSFont.label)
+                                    .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, DSSpace.md)
+                            .padding(.vertical, DSSpace.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous)
+                                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.12) : Color.clear)
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
                 }
-                .padding(DSSpace.xl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(DSSpace.sm)
+                .frame(width: 180)
+                .frame(maxHeight: .infinity)
+                .background(Color.primary.opacity(0.03))
+
+                Divider()
+
+                // RIGHT: content pane
+                ScrollView {
+                    Group {
+                        switch selectedTab {
+                        case .appearance: appearanceSection
+                        case .folders:    foldersSection
+                        case .claude:     claudeIntegrationSection
+                        case .document:   documentSection
+                        case .terminal:   terminalSection
+                        }
+                    }
+                    .padding(DSSpace.xl)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
-        .frame(width: 480, height: 640)
+        .frame(width: 720, height: 640)
         .background(.ultraThickMaterial)
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous))
     }
