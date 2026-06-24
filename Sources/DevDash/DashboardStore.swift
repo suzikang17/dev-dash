@@ -356,6 +356,50 @@ final class DashboardStore: ObservableObject {
     }() {
         didSet { UserDefaults.standard.set(injectProjectContext, forKey: "devdash.injectProjectContext") }
     }
+    /// Per-project overrides for the two global Claude integration behaviors.
+    /// Keyed by project path. A missing key means the project inherits the global default.
+    /// Persisted as JSON under "devdash.projectHookConfigs".
+    @Published var projectHookConfigs: [String: ProjectHookConfig] = {
+        guard let data = UserDefaults.standard.data(forKey: "devdash.projectHookConfigs"),
+              let decoded = try? JSONDecoder().decode([String: ProjectHookConfig].self, from: data)
+        else { return [:] }
+        return decoded
+    }() {
+        didSet {
+            if let data = try? JSONEncoder().encode(projectHookConfigs) {
+                UserDefaults.standard.set(data, forKey: "devdash.projectHookConfigs")
+            }
+        }
+    }
+
+    /// Effective "inject context" setting for a project — project override if set, else global default.
+    func effectiveInjectContext(for path: String?) -> Bool {
+        guard let path else { return injectProjectContext }
+        return projectHookConfigs[path]?.injectContext ?? injectProjectContext
+    }
+
+    /// Effective "auto devlog" setting for a project — project override if set, else global default.
+    func effectiveAutoDevlog(for path: String?) -> Bool {
+        guard let path else { return autoDevlogOnSessionEnd }
+        return projectHookConfigs[path]?.autoDevlog ?? autoDevlogOnSessionEnd
+    }
+
+    /// Set or clear the inject-context override for a project.
+    /// Passing nil clears the override (reverts to global default). Prunes the key when empty.
+    func setInjectContextOverride(_ value: Bool?, for path: String) {
+        var cfg = projectHookConfigs[path] ?? ProjectHookConfig()
+        cfg.injectContext = value
+        projectHookConfigs[path] = cfg.isEmpty ? nil : cfg
+    }
+
+    /// Set or clear the auto-devlog override for a project.
+    /// Passing nil clears the override (reverts to global default). Prunes the key when empty.
+    func setAutoDevlogOverride(_ value: Bool?, for path: String) {
+        var cfg = projectHookConfigs[path] ?? ProjectHookConfig()
+        cfg.autoDevlog = value
+        projectHookConfigs[path] = cfg.isEmpty ? nil : cfg
+    }
+
     /// Session IDs that have already had a devlog generated; prevents dupes.
     private var devloggedSessions: Set<String> = []
     /// Per-project debounce tasks for git refresh after detected git/gh commands.
@@ -486,8 +530,8 @@ final class DashboardStore: ObservableObject {
                 // Clear only the exact banner we set; a newer banner is left alone.
                 if self.lastHookBanner == banner { self.lastHookBanner = nil }
             }
-            // Context injection: only for known projects.
-            if injectProjectContext, let projPath = path {
+            // Context injection: only for known projects, using effective per-project setting.
+            if effectiveInjectContext(for: path), let projPath = path {
                 var ctx = buildInjectedContext(forProjectPath: projPath, projectName: name) ?? ""
                 // Unambiguous task link: exactly one in-progress task → set link + annotate context.
                 let active = (projectTasks[projPath] ?? []).filter {
@@ -510,8 +554,8 @@ final class DashboardStore: ObservableObject {
             liveSessions[sid]?.status = .active
             liveSessions[sid]?.lastPrompt = ev.prompt
             liveSessions[sid]?.lastEventAt = now
-            // Context injection: only for known projects.
-            if injectProjectContext, let projPath = liveSessions[sid]?.projectPath {
+            // Context injection: only for known projects, using effective per-project setting.
+            if effectiveInjectContext(for: liveSessions[sid]?.projectPath), let projPath = liveSessions[sid]?.projectPath {
                 let projName = liveSessions[sid]?.projectName ?? ""
                 var ctx = buildInjectedContext(forProjectPath: projPath, projectName: projName) ?? ""
                 // Unambiguous task link: exactly one in-progress task → set link + annotate context.
@@ -726,7 +770,7 @@ final class DashboardStore: ObservableObject {
     /// Generate a devlog for a just-ended session if the setting is on and the
     /// session was meaningful (wrote/edited files or ran git commands).
     private func maybeAutoDevlog(for session: LiveSession) {
-        guard autoDevlogOnSessionEnd,
+        guard effectiveAutoDevlog(for: session.projectPath),
               let projectPath = session.projectPath,
               LoreRunner.isInitialized(projectPath: projectPath),
               !devloggedSessions.contains(session.id) else { return }

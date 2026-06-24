@@ -422,7 +422,7 @@ struct SettingsView: View {
                 }
                 .padding(.top, 2)
 
-                // Behavior toggles
+                // Behavior toggles — these are GLOBAL defaults; per-project overrides below.
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Toggle("Inject project context into sessions", isOn: $store.injectProjectContext)
@@ -442,6 +442,10 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    Text("Defaults for all projects — override per project below.")
+                        .font(DSFont.micro)
+                        .foregroundStyle(.tertiary)
+                        .italic()
                 }
                 .padding(.top, 4)
 
@@ -573,46 +577,119 @@ struct SettingsView: View {
     }
 
     private func hookProjectRow(_ project: Project) -> some View {
-        HStack(spacing: DSSpace.sm) {
-            Image(systemName: "terminal")
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
-            Text(project.name)
-                .font(DSFont.label)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(project.path)
-            Text(DevRoots.shortenPath(project.path))
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(project.path)
-            Spacer(minLength: DSSpace.sm)
-            if installed.contains(project.path) {
-                Button("Remove") {
-                    store.uninstallHooks(for: project.path)
-                    installed.remove(project.path)
-                    hookError = nil
+        let isInstalled = installed.contains(project.path)
+        let isLive = store.liveSessions.values.contains {
+            $0.projectPath == project.path && $0.status == .active
+        }
+        let eventCount = store.recentEvents.filter { $0.projectPath == project.path }.count
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: DSSpace.sm) {
+                // Live-status dot
+                Circle()
+                    .fill(isLive ? Color.green : Color.clear)
+                    .frame(width: 7, height: 7)
+                    .overlay(
+                        Circle().stroke(isLive ? Color.green : Color.secondary.opacity(0.4), lineWidth: 1)
+                    )
+
+                Text(project.name)
+                    .font(DSFont.label)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(project.path)
+
+                if eventCount > 0 {
+                    Text("\(eventCount) events")
+                        .font(DSFont.micro)
+                        .foregroundStyle(.tertiary)
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .foregroundStyle(.secondary)
-            } else {
-                Button("Install") {
-                    do {
+
+                Spacer(minLength: DSSpace.sm)
+
+                if isInstalled {
+                    Button("Remove") {
+                        store.uninstallHooks(for: project.path)
+                        installed.remove(project.path)
                         hookError = nil
-                        try store.installHooks(for: project.path)
-                        installed.insert(project.path)
-                    } catch {
-                        hookError = error.localizedDescription
                     }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Button("Install") {
+                        do {
+                            hookError = nil
+                            try store.installHooks(for: project.path)
+                            installed.insert(project.path)
+                        } catch {
+                            hookError = error.localizedDescription
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            }
+
+            // Per-project override pickers — only shown when hooks are installed.
+            if isInstalled {
+                HStack(spacing: DSSpace.md) {
+                    hookOverridePicker(
+                        label: "Context",
+                        globalDefault: store.injectProjectContext,
+                        current: store.projectHookConfigs[project.path]?.injectContext
+                    ) { newValue in
+                        store.setInjectContextOverride(newValue, for: project.path)
+                    }
+                    hookOverridePicker(
+                        label: "Devlog",
+                        globalDefault: store.autoDevlogOnSessionEnd,
+                        current: store.projectHookConfigs[project.path]?.autoDevlog
+                    ) { newValue in
+                        store.setAutoDevlogOverride(newValue, for: project.path)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 14)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+    }
+
+    /// A compact tri-state Menu (Default / On / Off) for a single per-project hook override.
+    private func hookOverridePicker(
+        label: String,
+        globalDefault: Bool,
+        current: Bool?,
+        onChange: @escaping (Bool?) -> Void
+    ) -> some View {
+        let defaultLabel = "Default (\(globalDefault ? "On" : "Off"))"
+        let selectionLabel: String = {
+            switch current {
+            case nil:   return defaultLabel
+            case true:  return "On"
+            case false: return "Off"
+            }
+        }()
+
+        return Menu {
+            Button(defaultLabel) { onChange(nil) }
+            Divider()
+            Button("On")  { onChange(true) }
+            Button("Off") { onChange(false) }
+        } label: {
+            HStack(spacing: 3) {
+                Text(label)
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+                Text(selectionLabel)
+                    .font(DSFont.micro)
+                    .foregroundStyle(current == nil ? .tertiary : .primary)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
     }
 
     // MARK: - Helpers
