@@ -30,3 +30,14 @@ phase: Tooling
 
 - Live interactive embed renders in `WKWebView` (captured the streaming iOS 26.4 home screen via the app's exact load path); taps/buttons work; `swift build` green; two `ce-swift-ios-reviewer` passes with fixes applied (quit-leak, build cancellation, multi-target `.app` selection).
 - Build & Run chain proven end-to-end against a synthetic iOS app (SimProbe): `xcodebuild build` → `-showBuildSettings -json` (JSON shape matches `BuildSettingsEnvelope`) → `simctl install` → `simctl launch`, with a screenshot confirming the app running on the booted iPhone 17 Pro. `-list -json` scheme parsing also confirmed against a real workspace.
+
+## Picking up next session (real-project test)
+
+The only untested path is Build & Run against a large real-world app. To resume:
+
+1. **Prereqs:** `baguette` on PATH (`brew install baguette`, needs Xcode 26 + Apple Silicon) and an iOS sim booted (`xcrun simctl boot <udid>`, or use the in-app device picker).
+2. **Run it:** open dev-dash → **Simulator** tab → **Start simulator** → in the Build & Run panel pick the real Xcode project → **Build & Run**.
+3. **Watch for** (the things SimProbe couldn't surface): code-signing prompts/failures, SPM/CocoaPods dependency resolution, multi-scheme projects needing the scheme picker, and the wrong-`.app`-target case in multi-target schemes (mitigated by selecting the target whose product ends in `.app`).
+4. **Success** = the app launches in the embed and is clickable; **failure** = the error tail shows in the Build panel (timeouts are labelled "Build timed out after 10 min").
+
+Relevant code: `Scanners/SimAppRunner.swift` (pipeline), `Scanners/BaguetteRunner.swift` (sidecar), `Views/Tabs/SimulatorView.swift` (UI). Deferred: Phase 2 native VideoToolbox renderer (see ADR 0007).
