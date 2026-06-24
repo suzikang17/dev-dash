@@ -644,9 +644,10 @@ struct ProjectRecap: Codable, Equatable {
 /// Per-project overrides for the two global Claude integration behaviors.
 /// A nil field means "inherit the global default"; a non-nil field overrides it for this project.
 struct ProjectHookConfig: Codable, Hashable {
-    var injectContext: Bool?   // nil = inherit global default
-    var autoDevlog: Bool?      // nil = inherit global default
-    var isEmpty: Bool { injectContext == nil && autoDevlog == nil }
+    var injectContext: Bool?        // nil = inherit global default
+    var autoDevlog: Bool?           // nil = inherit global default
+    var enabledEvents: Set<String>? // nil = inherit global default event set
+    var isEmpty: Bool { injectContext == nil && autoDevlog == nil && enabledEvents == nil }
 }
 
 struct ClaudeTask: Identifiable, Hashable {

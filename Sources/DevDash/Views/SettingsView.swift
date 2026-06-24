@@ -446,6 +446,14 @@ struct SettingsView: View {
                         .font(DSFont.micro)
                         .foregroundStyle(.tertiary)
                         .italic()
+
+                    // Global default event set
+                    HStack(spacing: DSSpace.sm) {
+                        Text("Events installed by default")
+                            .font(DSFont.label)
+                        globalEventsMenu
+                    }
+                    .padding(.top, 2)
                 }
                 .padding(.top, 4)
 
@@ -600,7 +608,7 @@ struct SettingsView: View {
                     .help(project.path)
 
                 if eventCount > 0 {
-                    Text("\(eventCount) events")
+                    Text("\(eventCount) recent")
                         .font(DSFont.micro)
                         .foregroundStyle(.tertiary)
                 }
@@ -648,12 +656,85 @@ struct SettingsView: View {
                     ) { newValue in
                         store.setAutoDevlogOverride(newValue, for: project.path)
                     }
+                    hookEventsPicker(projectPath: project.path)
                     Spacer(minLength: 0)
                 }
                 .padding(.leading, 14)
             }
         }
         .padding(.vertical, 3)
+    }
+
+    /// A compact Menu listing all 6 hook events as checkmark toggles for a specific project.
+    /// Shows the count of enabled events vs total. Includes "Reset to default" to clear override.
+    private func hookEventsPicker(projectPath: String) -> some View {
+        let hookSpecs = HookInstaller.hookSpecs
+        let effective = store.effectiveEnabledEvents(for: projectPath)
+        let hasOverride = store.projectHookConfigs[projectPath]?.enabledEvents != nil
+        let label = "Events \(effective.count)/\(hookSpecs.count)"
+
+        return Menu {
+            ForEach(hookSpecs) { spec in
+                let isOn = effective.contains(spec.event)
+                Button {
+                    var newSet = effective
+                    if isOn { newSet.remove(spec.event) } else { newSet.insert(spec.event) }
+                    store.setEnabledEventsOverride(newSet, for: projectPath)
+                } label: {
+                    HStack {
+                        if isOn {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(spec.event)
+                    }
+                }
+            }
+            if hasOverride {
+                Divider()
+                Button("Reset to default") {
+                    store.setEnabledEventsOverride(nil, for: projectPath)
+                }
+            }
+        } label: {
+            Text(label)
+                .font(DSFont.micro)
+                .foregroundStyle(hasOverride ? .primary : .tertiary)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
+    }
+
+    /// Global default events menu — a compact checklist of all 6 events bound to `store.defaultEnabledEvents`.
+    private var globalEventsMenu: some View {
+        let hookSpecs = HookInstaller.hookSpecs
+        let current = store.defaultEnabledEvents
+        let label = "\(current.count)/\(hookSpecs.count)"
+
+        return Menu {
+            ForEach(hookSpecs) { spec in
+                let isOn = current.contains(spec.event)
+                Button {
+                    var newSet = store.defaultEnabledEvents
+                    if isOn { newSet.remove(spec.event) } else { newSet.insert(spec.event) }
+                    store.defaultEnabledEvents = newSet
+                } label: {
+                    HStack {
+                        if isOn {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(spec.event)
+                    }
+                }
+            }
+        } label: {
+            Text(label)
+                .font(DSFont.micro)
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
     }
 
     /// A compact tri-state Menu (Default / On / Off) for a single per-project hook override.

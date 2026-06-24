@@ -372,6 +372,40 @@ final class DashboardStore: ObservableObject {
         }
     }
 
+    /// Global default set of enabled hook events. Projects without a per-project
+    /// enabledEvents override inherit this set. Defaults to all six events.
+    /// Persisted as a JSON array of event name strings under "devdash.defaultEnabledEvents".
+    @Published var defaultEnabledEvents: Set<String> = {
+        let allEvents = Set(HookInstaller.hookSpecs.map { $0.event })
+        guard let data = UserDefaults.standard.data(forKey: "devdash.defaultEnabledEvents"),
+              let decoded = try? JSONDecoder().decode([String].self, from: data)
+        else { return allEvents }
+        return Set(decoded)
+    }() {
+        didSet {
+            if let data = try? JSONEncoder().encode(Array(defaultEnabledEvents)) {
+                UserDefaults.standard.set(data, forKey: "devdash.defaultEnabledEvents")
+            }
+            // Re-reconcile every installed project that has no per-project override,
+            // so inheriting projects stay in sync with the new global default.
+            // Best-effort (try?) — must NOT write defaultEnabledEvents to avoid loops.
+            let newDefault = defaultEnabledEvents
+            for project in projects {
+                let path = project.path
+                guard projectHookConfigs[path]?.enabledEvents == nil,
+                      hooksInstalled(for: path)
+                else { continue }
+                try? HookInstaller.installProjectHooks(projectPath: path, events: newDefault)
+            }
+        }
+    }
+
+    /// Effective enabled-event set for a project: project override if set, else global default.
+    func effectiveEnabledEvents(for path: String?) -> Set<String> {
+        guard let path else { return defaultEnabledEvents }
+        return projectHookConfigs[path]?.enabledEvents ?? defaultEnabledEvents
+    }
+
     /// Effective "inject context" setting for a project — project override if set, else global default.
     func effectiveInjectContext(for path: String?) -> Bool {
         guard let path else { return injectProjectContext }
@@ -398,6 +432,17 @@ final class DashboardStore: ObservableObject {
         var cfg = projectHookConfigs[path] ?? ProjectHookConfig()
         cfg.autoDevlog = value
         projectHookConfigs[path] = cfg.isEmpty ? nil : cfg
+    }
+
+    /// Set or clear the enabled-events override for a project.
+    /// Passing nil reverts to inheriting the global default. Prunes the config key when fully empty.
+    /// If the project is currently installed, re-runs install immediately to sync settings.json.
+    func setEnabledEventsOverride(_ events: Set<String>?, for path: String) {
+        var cfg = projectHookConfigs[path] ?? ProjectHookConfig()
+        cfg.enabledEvents = events
+        projectHookConfigs[path] = cfg.isEmpty ? nil : cfg
+        guard hooksInstalled(for: path) else { return }
+        try? HookInstaller.installProjectHooks(projectPath: path, events: effectiveEnabledEvents(for: path))
     }
 
     /// Session IDs that have already had a devlog generated; prevents dupes.
@@ -874,10 +919,12 @@ final class DashboardStore: ObservableObject {
         }
     }
 
-    /// Installs dev-dash hooks for a project. Safe to call multiple times (idempotent).
+    /// Installs dev-dash hooks for a project using the effective enabled-event set.
+    /// Safe to call multiple times (idempotent reconcile).
     /// Throws `HookInstaller.InstallError` if existing settings.json is unparseable.
     func installHooks(for projectPath: String) throws {
-        try HookInstaller.installProjectHooks(projectPath: projectPath)
+        try HookInstaller.installProjectHooks(projectPath: projectPath,
+                                              events: effectiveEnabledEvents(for: projectPath))
     }
 
     /// Removes dev-dash hooks from a project's `.claude/settings.json`.

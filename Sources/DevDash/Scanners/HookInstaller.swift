@@ -87,11 +87,13 @@ enum HookInstaller {
 
     // MARK: - Project hook installation
 
-    /// Merges dev-dash hook entries into `<projectPath>/.claude/settings.json`.
+    /// Reconciles dev-dash hook entries in `<projectPath>/.claude/settings.json` to
+    /// exactly the given `events` set. Events in the set get a devdash entry added
+    /// (idempotent); events NOT in the set have any devdash entry removed.
     /// Calls `installHelperScript()` first. Preserves all non-devdash keys/hooks.
     /// Throws `InstallError.settingsCorrupted` if the file exists but can't be parsed,
     /// to prevent overwriting settings we don't understand. (#1)
-    static func installProjectHooks(projectPath: String) throws {
+    static func installProjectHooks(projectPath: String, events: Set<String>) throws {
         installHelperScript()
 
         let settingsPath = "\(projectPath)/.claude/settings.json"
@@ -125,19 +127,33 @@ enum HookInstaller {
 
         for spec in hookSpecs {
             let event = spec.event
-            var entries = hooks[event] as? [[String: Any]] ?? []
-
-            let alreadyInstalled = entries.contains { entry in
-                guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-                return innerHooks.contains { ($0["command"] as? String)?.hasSuffix("devdash-hook") == true }
+            if events.contains(event) {
+                // Ensure a devdash entry exists (idempotent add)
+                var entries = hooks[event] as? [[String: Any]] ?? []
+                let alreadyInstalled = entries.contains { entry in
+                    guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                    return innerHooks.contains { ($0["command"] as? String)?.hasSuffix("devdash-hook") == true }
+                }
+                if !alreadyInstalled {
+                    let entry: [String: Any] = [
+                        "hooks": [["type": "command", "command": commandPath]]
+                    ]
+                    entries.append(entry)
+                    hooks[event] = entries
+                }
+            } else {
+                // Remove any devdash entries for this event, preserving non-devdash entries
+                guard var entries = hooks[event] as? [[String: Any]] else { continue }
+                entries = entries.filter { entry in
+                    guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return true }
+                    return !innerHooks.contains { ($0["command"] as? String)?.hasSuffix("devdash-hook") == true }
+                }
+                if entries.isEmpty {
+                    hooks.removeValue(forKey: event)
+                } else {
+                    hooks[event] = entries
+                }
             }
-            if alreadyInstalled { continue }
-
-            let entry: [String: Any] = [
-                "hooks": [["type": "command", "command": commandPath]]
-            ]
-            entries.append(entry)
-            hooks[event] = entries
         }
 
         root["hooks"] = hooks
