@@ -5,5 +5,7 @@ status: open
 owner: human
 category: engineering
 ai_run: false
+lore_type: ticket
+migrated_from: "0001"
 ---
 - 

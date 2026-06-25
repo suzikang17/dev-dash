@@ -1,11 +1,12 @@
 ---
-lore_type: task
+lore_type: ticket
 created: '2026-06-24'
 title: Test simulator Build & Run against a real iOS project
 status: open
 owner: human
 category: engineering
 ai_run: false
+migrated_from: "0003"
 ---
 # Test simulator Build & Run against a real iOS project
 
