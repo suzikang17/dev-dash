@@ -547,7 +547,7 @@ struct TasksTabView: View {
 
     @ViewBuilder
     private func taskList(project: Project) -> some View {
-        let tasks = store.tasksV2(for: project.path)
+        let tasks = store.tasksForDisplay(projectPath: project.path)
         let template = store.template(for: project.path)
         let currentStageId = store.meta(for: project.path).currentStageId
 
@@ -1230,6 +1230,7 @@ private struct SourceBadge: View {
         case .template: return .accentColor
         case .suggested: return DSColor.assistant
         case .github: return DSColor.warning
+        case .linear: return DSColor.info
         }
     }
 }
@@ -1287,7 +1288,7 @@ private struct MyQueueView: View {
     var body: some View {
         // Fetch + derive once per render; humanTasks/aiTasks are each read
         // several times below and previously re-hit the store + re-sorted each time.
-        let all = store.tasksV2(for: project.path)
+        let all = store.tasksForDisplay(projectPath: project.path)
         let humanTasks = all
             .filter { $0.kanbanColumn.ownerIsHuman && $0.status != .done && $0.status != .skipped }
             .sorted { urgencyScore($0) > urgencyScore($1) }
@@ -1406,7 +1407,7 @@ private struct KanbanBoardView: View {
     var body: some View {
         // Group tasks by column once per render rather than filtering the full
         // list once per column (was 6× O(n) per body evaluation).
-        let allTasks = store.tasksV2(for: project.path)
+        let allTasks = store.tasksForDisplay(projectPath: project.path)
         let byColumn = Dictionary(grouping: allTasks, by: { $0.kanbanColumn })
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: DSSpace.md) {
@@ -1515,6 +1516,23 @@ private struct KanbanCard: View {
             store.openTaskProjectPath = projectPath
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.xs) {
+                // Linear identifier badge (e.g. "ENG-42") — tapping opens the issue URL.
+                if let identifier = task.linearIdentifier, let urlStr = task.linearURL,
+                   let url = URL(string: urlStr) {
+                    Button {
+                        NSWorkspace.shared.open(url)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "rhombus")
+                                .font(.system(size: 9))
+                            Text(identifier)
+                                .font(DSFont.monoDigits(.caption2))
+                        }
+                        .foregroundStyle(DSColor.info)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Text(task.title)
                     .font(DSFont.bodyEmphasized)
                     .foregroundColor(.primary)

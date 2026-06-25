@@ -178,6 +178,8 @@ struct LoreTasksView: View {
                             if viewMode == .kanban { kanbanContent }
                             else if viewMode == .needs { needsContent }
                             else { ideasContent }
+                            // Linear group tasks — always shown below lore content when bound.
+                            if viewMode != .ideas { linearGroupContent }
                         }
                     }
                     .focusable()
@@ -361,6 +363,72 @@ struct LoreTasksView: View {
                     files.compactMap { findTask($0) }.forEach { applyColumnChange($0, to: .blocked) }
                     return true
                 }
+        }
+    }
+
+    // MARK: - Linear group tasks
+
+    /// Renders the group's shared Linear issues below the lore task list.
+    /// Only visible when the repo belongs to a group that has a Linear team
+    /// bound and has cached issues in store.groupLinearTasks.
+    @ViewBuilder
+    private var linearGroupContent: some View {
+        if let grp = store.group(for: projectPath),
+           let linearTasks = store.groupLinearTasks[grp.id],
+           !linearTasks.isEmpty {
+            let headerLabel = grp.linearTeamName.map { "Linear — \($0)" } ?? "Linear"
+            let activeTasks = linearTasks.filter { $0.status != .done && $0.status != .skipped }
+            let doneTasks   = linearTasks.filter { $0.status == .done || $0.status == .skipped }
+
+            // Active issues
+            Section {
+                ForEach(activeTasks) { task in
+                    LinearGroupTaskRow(task: task, projectPath: projectPath)
+                    Divider().padding(.leading, 36)
+                }
+                if activeTasks.isEmpty {
+                    Text("No open issues")
+                        .font(DSFont.micro).foregroundColor(.secondary.opacity(0.35))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 36).padding(.vertical, DSSpace.sm)
+                }
+            } header: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rhombus")
+                        .font(.system(size: 7))
+                        .foregroundColor(DSColor.info)
+                    Text(headerLabel)
+                        .font(DSFont.sectionHeader).foregroundColor(.secondary)
+                    Text(verbatim: "\(activeTasks.count)")
+                        .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                .background(Color(NSColor.windowBackgroundColor))
+            }
+
+            // Done Linear issues (collapsed under the lore done section pattern)
+            if !doneTasks.isEmpty {
+                Section {
+                    ForEach(doneTasks) { task in
+                        LinearGroupTaskRow(task: task, projectPath: projectPath)
+                        Divider().padding(.leading, 36)
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "rhombus")
+                            .font(.system(size: 7))
+                            .foregroundColor(DSColor.info.opacity(0.5))
+                        Text("Linear — done")
+                            .font(DSFont.sectionHeader).foregroundColor(.secondary)
+                        Text(verbatim: "\(doneTasks.count)")
+                            .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                    .background(Color(NSColor.windowBackgroundColor))
+                }
+            }
         }
     }
 
@@ -1049,6 +1117,65 @@ private struct LoreTaskRow: View {
         case "research":     return .indigo
         default:             return .secondary
         }
+    }
+}
+
+// MARK: - Linear group task row
+
+/// Read-only-ish row for a group's Linear TaskItem shown inside LoreTasksView.
+/// Status changes route through store.setTaskStatus (group-aware push-back path).
+private struct LinearGroupTaskRow: View {
+    let task: TaskItem
+    let projectPath: String
+    @EnvironmentObject private var store: DashboardStore
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Status toggle button (done ↔ open)
+            Button {
+                let next: TaskStatus = (task.status == .done || task.status == .skipped) ? .open : .done
+                store.setTaskStatus(projectPath: projectPath, id: task.id, status: next)
+            } label: {
+                Image(systemName: task.status == .done || task.status == .skipped
+                    ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(task.status == .done || task.status == .skipped
+                        ? DSColor.success : .secondary)
+                    .font(DSFont.title)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(task.status == .done ? "Mark open" : "Mark done")
+
+            VStack(alignment: .leading, spacing: 2) {
+                // Linear identifier badge — tapping opens the issue in browser.
+                if let identifier = task.linearIdentifier, let urlStr = task.linearURL,
+                   let url = URL(string: urlStr) {
+                    Button {
+                        NSWorkspace.shared.open(url)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "rhombus").font(.system(size: 8))
+                            Text(identifier).font(DSFont.monoDigits(.caption2))
+                        }
+                        .foregroundStyle(DSColor.info)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text(task.title)
+                    .font(DSFont.body)
+                    .strikethrough(task.status == .done || task.status == .skipped)
+                    .foregroundColor(task.status == .done || task.status == .skipped ? .secondary : .primary)
+                    .lineLimit(2).multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let notes = task.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(DSFont.micro).foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 

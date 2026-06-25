@@ -211,6 +211,8 @@ final class DashboardStore: ObservableObject {
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
     @Published var projectTasks: [String: [TaskItem]] = [:]   // path → tasks
+    @Published var projectGroups: [ProjectGroup] = []         // all groups (global)
+    @Published var groupLinearTasks: [String: [TaskItem]] = [:] // groupId → Linear tasks
     @Published var projectProviders: [String: [Provider]] = [:]   // path → providers
     @Published var projectHealth: [String: [String: HealthRunResult]] = [:]   // path → checkId → result
     @Published var runningHealthChecks: Set<String> = []   // "<path>:<checkId>"
@@ -1145,6 +1147,10 @@ final class DashboardStore: ObservableObject {
     /// scan root) is always reflected rather than silently dropped.
     private var refreshPending = false
 
+    /// Group ids currently being fetched from Linear. Mirrors the refreshing/refreshPending
+    /// coalescing pattern: if a refresh is already in flight for a group, we skip it.
+    private var refreshingGroups: Set<String> = []
+
     // MARK: - Project folders (scan roots)
 
     /// Add a folder to the scan roots, persist, and rescan. No-op for blanks
@@ -1215,6 +1221,17 @@ final class DashboardStore: ObservableObject {
                         group.addTask {
                             guard let status = await GitStatusScanner.scan(path: path) else { return }
                             await MainActor.run { self?.gitStatuses[path] = status }
+                        }
+                    }
+                }
+            }
+            // Linear sync — fan out across groups that have a team binding.
+            let boundGroups = projectGroups.filter { $0.linearTeamId != nil }
+            if !boundGroups.isEmpty {
+                Task.detached(priority: .utility) { [weak self] in
+                    await withTaskGroup(of: Void.self) { group in
+                        for g in boundGroups {
+                            group.addTask { await self?.refreshGroupLinearTasks(g) }
                         }
                     }
                 }
@@ -1544,6 +1561,9 @@ final class DashboardStore: ObservableObject {
                 self?.projectProviders = providerMap
                 self?.projectHealth = healthMap
                 self?.seedTaskSnapshots()
+                // Load groups after meta is set so migration can read it.
+                self?.loadGroupsAndTasks()
+                self?.migratePerRepoLinearBindings()
             }
         }
     }
@@ -1677,7 +1697,307 @@ final class DashboardStore: ObservableObject {
         tasksV2(for: projectPath).filter { $0.parentId == nil && $0.stage == stage }
     }
 
+    // MARK: - Linear integration
+
+    /// Tracks in-flight (or failed) status pushes to Linear so refreshGroupLinearTasks
+    /// won't overwrite local status changes that haven't yet landed remotely.
+    private var pendingLinearPush: [String: TaskStatus] = [:]
+
+    /// Published so views can react without calling SecItemCopyMatching on every render.
+    @Published var isLinearKeyPresent: Bool = KeychainStore.linearKey() != nil
+
+    func setLinearAPIKey(_ key: String) {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            KeychainStore.clearLinearKey()
+        } else {
+            KeychainStore.setLinearKey(trimmed)
+        }
+        isLinearKeyPresent = KeychainStore.linearKey() != nil
+        // Kick off a refresh for all groups already bound to a Linear team.
+        let boundGroups = projectGroups.filter { $0.linearTeamId != nil }
+        for g in boundGroups {
+            Task { await refreshGroupLinearTasks(g) }
+        }
+    }
+
+    func clearLinearAPIKey() {
+        KeychainStore.clearLinearKey()
+        isLinearKeyPresent = false
+    }
+
+    // MARK: - Project Groups
+
+    /// Return the group this repo belongs to, if any.
+    func group(for projectPath: String) -> ProjectGroup? {
+        projectGroups.first { $0.projectPaths.contains(projectPath) }
+    }
+
+    func groupById(_ id: String) -> ProjectGroup? {
+        projectGroups.first { $0.id == id }
+    }
+
+    /// Merge-in a fresh groups array from disk; also load their cached Linear tasks.
+    private func loadGroupsAndTasks() {
+        let groups = GroupStore.read()
+        projectGroups = groups
+        var tasksMap: [String: [TaskItem]] = [:]
+        for g in groups {
+            let t = GroupStore.readTasks(groupId: g.id)
+            if !t.isEmpty { tasksMap[g.id] = t }
+        }
+        groupLinearTasks = tasksMap
+        // Kick a one-shot fan-out so bound groups sync on launch rather than
+        // waiting for the first 15-second auto-refresh tick.
+        let boundGroups = groups.filter { $0.linearTeamId != nil }
+        for g in boundGroups {
+            Task { await refreshGroupLinearTasks(g) }
+        }
+    }
+
+    private func persistGroups() {
+        GroupStore.write(projectGroups)
+    }
+
+    @discardableResult
+    func createGroup(
+        name: String,
+        linearTeamId: String? = nil,
+        linearTeamName: String? = nil,
+        linearProjectId: String? = nil,
+        linearProjectName: String? = nil
+    ) -> ProjectGroup {
+        let now = Date()
+        let g = ProjectGroup(
+            id: UUID().uuidString,
+            name: name,
+            projectPaths: [],
+            linearTeamId: linearTeamId,
+            linearTeamName: linearTeamName,
+            linearProjectId: linearProjectId,
+            linearProjectName: linearProjectName,
+            createdAt: now,
+            updatedAt: now
+        )
+        projectGroups.append(g)
+        persistGroups()
+        return g
+    }
+
+    func renameGroup(id: String, name: String) {
+        guard let idx = projectGroups.firstIndex(where: { $0.id == id }) else { return }
+        projectGroups[idx].name = name
+        projectGroups[idx].updatedAt = Date()
+        persistGroups()
+    }
+
+    func deleteGroup(id: String) {
+        projectGroups.removeAll { $0.id == id }
+        groupLinearTasks.removeValue(forKey: id)
+        GroupStore.deleteTasks(groupId: id)
+        persistGroups()
+        UserDefaults.standard.removeObject(forKey: "devdash.groupCollapsed.\(id)")
+    }
+
+    func setGroupLinearBinding(
+        id: String,
+        teamId: String?,
+        teamName: String?,
+        projectId: String?,
+        projectName: String?
+    ) {
+        guard let idx = projectGroups.firstIndex(where: { $0.id == id }) else { return }
+        let resolvedTeamId = teamId.flatMap { $0.isEmpty ? nil : $0 }
+        projectGroups[idx].linearTeamId = resolvedTeamId
+        projectGroups[idx].linearTeamName = teamName.flatMap { $0.isEmpty ? nil : $0 }
+        projectGroups[idx].linearProjectId = projectId
+        projectGroups[idx].linearProjectName = projectName
+        projectGroups[idx].updatedAt = Date()
+        persistGroups()
+        if resolvedTeamId == nil {
+            groupLinearTasks.removeValue(forKey: id)
+            GroupStore.deleteTasks(groupId: id)
+        } else {
+            let g = projectGroups[idx]
+            Task { await refreshGroupLinearTasks(g) }
+        }
+    }
+
+    /// Add a repo to a group. Removes it from any other group first (one-group-per-repo).
+    func addProjectToGroup(projectPath: String, groupId: String) {
+        for idx in projectGroups.indices where projectGroups[idx].projectPaths.contains(projectPath) {
+            projectGroups[idx].projectPaths.removeAll { $0 == projectPath }
+            projectGroups[idx].updatedAt = Date()
+        }
+        guard let idx = projectGroups.firstIndex(where: { $0.id == groupId }) else { return }
+        if !projectGroups[idx].projectPaths.contains(projectPath) {
+            projectGroups[idx].projectPaths.append(projectPath)
+        }
+        projectGroups[idx].updatedAt = Date()
+        persistGroups()
+        let g = projectGroups[idx]
+        if g.linearTeamId != nil {
+            Task { await refreshGroupLinearTasks(g) }
+        }
+    }
+
+    func removeProjectFromGroup(projectPath: String) {
+        for idx in projectGroups.indices where projectGroups[idx].projectPaths.contains(projectPath) {
+            projectGroups[idx].projectPaths.removeAll { $0 == projectPath }
+            projectGroups[idx].updatedAt = Date()
+        }
+        persistGroups()
+    }
+
+    // MARK: - Migration (per-repo Linear binding → group)
+
+    /// Runs once at init when projectMeta has been loaded. For each project with
+    /// a linearTeamId set, finds or creates a matching group and migrates it.
+    private func migratePerRepoLinearBindings() {
+        let bound = projectMeta.filter { $0.value.linearTeamId != nil }
+        guard !bound.isEmpty else { return }
+
+        for (path, meta) in bound {
+            guard let teamId = meta.linearTeamId else { continue }
+            let bindingKey = meta.linearProjectId ?? teamId
+
+            let existing = projectGroups.first { g in
+                if let pid = meta.linearProjectId {
+                    return g.linearProjectId == pid
+                }
+                return g.linearTeamId == teamId && g.linearProjectId == nil
+            }
+
+            let groupId: String
+            if let g = existing {
+                groupId = g.id
+            } else {
+                let groupName = meta.linearProjectName ?? meta.linearTeamName ?? "Linear"
+                let g = createGroup(
+                    name: groupName,
+                    linearTeamId: meta.linearTeamId,
+                    linearTeamName: meta.linearTeamName,
+                    linearProjectId: meta.linearProjectId,
+                    linearProjectName: meta.linearProjectName
+                )
+                groupId = g.id
+            }
+
+            addProjectToGroup(projectPath: path, groupId: groupId)
+            var m = meta
+            m.linearTeamId = nil
+            m.linearTeamName = nil
+            m.linearProjectId = nil
+            m.linearProjectName = nil
+            try? ProjectMetaStore.write(path, meta: m)
+            projectMeta[path] = m
+
+            _ = bindingKey  // suppress unused warning
+        }
+    }
+
+    // MARK: - Group-level Linear sync
+
+    /// Fetch Linear issues once for the group's team (+project filter) and upsert
+    /// into groupLinearTasks[group.id].
+    func refreshGroupLinearTasks(_ group: ProjectGroup) async {
+        guard let teamId = group.linearTeamId, !teamId.isEmpty,
+              KeychainStore.linearKey() != nil else { return }
+
+        let alreadyRefreshing = await MainActor.run {
+            if self.refreshingGroups.contains(group.id) { return true }
+            self.refreshingGroups.insert(group.id)
+            return false
+        }
+        guard !alreadyRefreshing else { return }
+        defer {
+            Task { @MainActor in self.refreshingGroups.remove(group.id) }
+        }
+
+        let issues = await LinearScanner.fetchIssues(teamId: teamId, projectId: group.linearProjectId)
+        guard !issues.isEmpty else { return }
+
+        let bindingStillValid = await MainActor.run {
+            guard let live = self.projectGroups.first(where: { $0.id == group.id }) else { return false }
+            return live.linearTeamId == group.linearTeamId
+                && live.linearProjectId == group.linearProjectId
+        }
+        guard bindingStillValid else { return }
+
+        await MainActor.run {
+            let pending = self.pendingLinearPush
+            var existing = self.groupLinearTasks[group.id] ?? []
+
+            for issue in issues {
+                let mapped = LinearScanner.toTaskItem(issue)
+                if let idx = existing.firstIndex(where: { $0.linearIssueId == issue.id }) {
+                    var t = existing[idx]
+                    t.title = mapped.title
+                    t.notes = mapped.notes
+                    t.linearIdentifier = mapped.linearIdentifier
+                    t.linearURL = mapped.linearURL
+                    if pending[t.id] == nil {
+                        t.status = mapped.status
+                        t.startedAt = mapped.startedAt
+                        t.completedAt = mapped.completedAt
+                    }
+                    existing[idx] = t
+                } else {
+                    existing.append(mapped)
+                }
+            }
+
+            self.groupLinearTasks[group.id] = existing
+            GroupStore.writeTasks(groupId: group.id, tasks: existing)
+        }
+    }
+
+    /// Tasks to display for a selected project: its own local tasks plus, if the
+    /// repo belongs to a group, the group's shared Linear tasks.
+    func tasksForDisplay(projectPath: String) -> [TaskItem] {
+        var result = projectTasks[projectPath] ?? []
+        if let g = group(for: projectPath), let linearTasks = groupLinearTasks[g.id] {
+            let existingIds = Set(result.map { $0.id })
+            let extra = linearTasks.filter { !existingIds.contains($0.id) }
+            result.append(contentsOf: extra)
+        }
+        return result
+    }
+
     func setTaskStatus(projectPath: String, id: String, status: TaskStatus) {
+        // Check if this task lives in a group's Linear task list first.
+        if let grp = group(for: projectPath),
+           var groupTasks = groupLinearTasks[grp.id],
+           let idx = groupTasks.firstIndex(where: { $0.id == id }) {
+            let task = groupTasks[idx]
+            guard task.source == .linear, let issueId = task.linearIssueId else {
+                // Non-Linear task in group — fall through to local store.
+                return setLocalTaskStatus(projectPath: projectPath, id: id, status: status)
+            }
+            groupTasks[idx].status = status
+            groupLinearTasks[grp.id] = groupTasks
+            GroupStore.writeTasks(groupId: grp.id, tasks: groupTasks)
+
+            pendingLinearPush[id] = status
+            let teamId = grp.linearTeamId ?? ""
+            Task.detached(priority: .utility) {
+                let states = await LinearScanner.fetchStates(teamId: teamId)
+                guard let stateId = LinearScanner.stateId(for: status, in: states) else {
+                    await MainActor.run { _ = self.pendingLinearPush.removeValue(forKey: id) }
+                    return
+                }
+                let success = await LinearScanner.updateIssueState(issueId: issueId, stateId: stateId)
+                if success {
+                    await MainActor.run { _ = self.pendingLinearPush.removeValue(forKey: id) }
+                }
+            }
+            return
+        }
+
+        setLocalTaskStatus(projectPath: projectPath, id: id, status: status)
+    }
+
+    private func setLocalTaskStatus(projectPath: String, id: String, status: TaskStatus) {
         try? TaskStore.setStatus(projectPath: projectPath, id: id, status: status)
         projectTasks[projectPath] = TaskStore.read(projectPath)
         refreshTaskSnapshot(for: projectPath)

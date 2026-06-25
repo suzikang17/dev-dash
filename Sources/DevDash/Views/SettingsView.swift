@@ -8,7 +8,7 @@ struct SettingsView: View {
 
     // MARK: - Tab navigation
     private enum SettingsTab: String, CaseIterable, Identifiable {
-        case appearance, folders, claude, document, terminal
+        case appearance, folders, claude, document, terminal, linear
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -17,6 +17,7 @@ struct SettingsView: View {
             case .claude:     return "Claude integration"
             case .document:   return "Document"
             case .terminal:   return "Terminal"
+            case .linear:     return "Linear"
             }
         }
         var systemImage: String {
@@ -26,6 +27,7 @@ struct SettingsView: View {
             case .claude:     return "sparkles"
             case .document:   return "doc.text"
             case .terminal:   return "terminal"
+            case .linear:     return "rhombus"
             }
         }
     }
@@ -101,6 +103,7 @@ struct SettingsView: View {
                         case .claude:     claudeIntegrationSection
                         case .document:   documentSection
                         case .terminal:   terminalSection
+                        case .linear:     linearSection
                         }
                     }
                     .padding(DSSpace.xl)
@@ -844,6 +847,15 @@ struct SettingsView: View {
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .fixedSize()
+    }
+
+    // MARK: - Linear
+
+    private var linearSection: some View {
+        section(title: "Linear") {
+            LinearSettingsView()
+                .environmentObject(store)
+        }
     }
 
     // MARK: - Helpers

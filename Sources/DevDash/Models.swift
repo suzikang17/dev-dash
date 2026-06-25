@@ -208,7 +208,7 @@ enum TaskCategory: String, Codable, CaseIterable, Hashable {
 }
 
 enum TaskSource: String, Codable, Hashable {
-    case local, template, suggested, github
+    case local, template, suggested, github, linear
 
     var label: String {
         switch self {
@@ -216,6 +216,17 @@ enum TaskSource: String, Codable, Hashable {
         case .template: return "Template"
         case .suggested: return "Suggested"
         case .github: return "GitHub"
+        case .linear: return "Linear"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .local: return "doc.text"
+        case .template: return "square.grid.2x2"
+        case .suggested: return "lightbulb"
+        case .github: return "exclamationmark.bubble"
+        case .linear: return "rhombus"
         }
     }
 }
@@ -286,6 +297,10 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var gstackPersonaOverride: String? = nil
     var linkedDocPath: String? = nil
     var pr: String? = nil
+    // Linear integration fields (nil for non-Linear tasks)
+    var linearIssueId: String? = nil
+    var linearIdentifier: String? = nil   // e.g. "ENG-123"
+    var linearURL: String? = nil
 
     var kanbanColumn: KanbanColumn {
         switch (status, owner, hasAIRun) {
@@ -355,6 +370,22 @@ struct ClaudeIntegrationEvent: Identifiable, Hashable {
     }
 }
 
+// MARK: - Project Groups (Linear binding at the group level)
+
+/// A named set of repos that share a single Linear binding.
+/// Stored globally at `~/.devdash/groups.json`.
+struct ProjectGroup: Identifiable, Codable, Hashable {
+    let id: String                  // stable UUID string
+    var name: String
+    var projectPaths: [String]      // ordered member repo paths
+    var linearTeamId: String?
+    var linearTeamName: String?
+    var linearProjectId: String?
+    var linearProjectName: String?
+    var createdAt: Date
+    var updatedAt: Date
+}
+
 /// Per-project metadata persisted to `.devdash/project.json`. Drives stage
 /// gating and template application in the Tasks tab.
 struct ProjectMeta: Codable, Hashable {
@@ -369,6 +400,11 @@ struct ProjectMeta: Codable, Hashable {
     var customDevServerURL: String?
     var productionURL: String?
     var updatedAt: Date
+    // Linear integration binding (nil = not bound)
+    var linearTeamId: String? = nil
+    var linearTeamName: String? = nil
+    var linearProjectId: String? = nil
+    var linearProjectName: String? = nil
 
     static let empty = ProjectMeta(
         templateId: nil, currentStageId: nil, stageStartedAt: nil,

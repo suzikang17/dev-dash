@@ -24,6 +24,9 @@ struct SidebarView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var search = ""
     @State private var sidebarTab: SidebarTab = .running
+    @State private var showNewGroupSheet = false
+    @State private var newGroupName = ""
+    @State private var pendingGroupProjectPath: String? = nil
 
     var filteredProjects: [Project] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
@@ -135,15 +138,47 @@ struct SidebarView: View {
                             .frame(maxWidth: .infinity)
                     }
                 case .projects:
-                    let grouped = Dictionary(grouping: projects) {
+                    // Determine which project paths are in any group.
+                    let groupedPaths = Set(store.projectGroups.flatMap { $0.projectPaths })
+
+                    // --- Group sections (Linear-bound) first ---
+                    ForEach(store.projectGroups.sorted(by: { $0.createdAt < $1.createdAt })) { grp in
+                        let members = grp.projectPaths.compactMap { path in
+                            projects.first { $0.path == path }
+                        }
+                        let visibleMembers: [Project] = {
+                            let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+                            guard !q.isEmpty else { return members }
+                            return members.filter { $0.name.lowercased().contains(q) }
+                        }()
+                        if !visibleMembers.isEmpty || search.trimmingCharacters(in: .whitespaces).isEmpty {
+                            CollapsibleGroupSection(
+                                group: grp,
+                                members: visibleMembers,
+                                runningPorts: runningPorts
+                            )
+                        }
+                    }
+
+                    // --- Ungrouped repos under their dev-root folder headers ---
+                    let ungrouped = projects.filter { !groupedPaths.contains($0.path) }
+                    let folderGrouped = Dictionary(grouping: ungrouped) {
                         DevRoots.rootGroup(for: $0.path)
                     }
-                    let groupKeys = grouped.keys.sorted()
-                    ForEach(groupKeys, id: \.self) { key in
+                    let folderKeys = folderGrouped.keys.sorted()
+                    ForEach(folderKeys, id: \.self) { key in
                         Section {
-                            ForEach(grouped[key] ?? []) { proj in
-                                SidebarProjectRow(project: proj, runningPort: runningPorts[proj.path])
-                                    .tag(Selection.project(path: proj.path))
+                            ForEach(folderGrouped[key] ?? []) { proj in
+                                SidebarProjectRow(
+                                    project: proj,
+                                    runningPort: runningPorts[proj.path],
+                                    onNewGroup: {
+                                        pendingGroupProjectPath = proj.path
+                                        showNewGroupSheet = true
+                                    },
+                                    onAddToGroup: { _ in }
+                                )
+                                .tag(Selection.project(path: proj.path))
                             }
                         } header: {
                             HStack(spacing: DSSpace.xs) {
@@ -154,7 +189,7 @@ struct SidebarView: View {
                                     .font(DSFont.mono(.caption2).weight(.semibold))
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(verbatim: String(grouped[key]?.count ?? 0))
+                                Text(verbatim: String(folderGrouped[key]?.count ?? 0))
                                     .font(DSFont.monoDigits(.caption2))
                                     .foregroundColor(.secondary)
                             }
@@ -177,6 +212,13 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.plain)
+            .sheet(isPresented: $showNewGroupSheet) {
+                NewGroupSheet(
+                    projectPath: pendingGroupProjectPath,
+                    onCreated: { pendingGroupProjectPath = nil }
+                )
+                .environmentObject(store)
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     Divider()
@@ -449,6 +491,10 @@ private struct SidebarProjectRow: View {
     let project: Project
     let runningPort: Int?
     @EnvironmentObject var store: DashboardStore
+    /// Callbacks injected by the parent sidebar so the row can trigger sheets
+    /// without holding its own @State (which would be reset on list rebuilds).
+    var onNewGroup: (() -> Void)? = nil
+    var onAddToGroup: ((String) -> Void)? = nil
 
     /// True when an external Claude Code session is actively working in this project.
     private var hasLiveSession: Bool {
@@ -535,6 +581,28 @@ private struct SidebarProjectRow: View {
                 }
             }
             Divider()
+            // Group membership
+            let currentGroup = store.group(for: project.path)
+            if let g = currentGroup {
+                Button {
+                    store.removeProjectFromGroup(projectPath: project.path)
+                } label: {
+                    Label("Remove from \"\(g.name)\"", systemImage: "rectangle.badge.minus")
+                }
+            }
+            Menu("Add to Linear group") {
+                ForEach(store.projectGroups.sorted(by: { $0.name < $1.name })) { g in
+                    if g.id != currentGroup?.id {
+                        Button(g.name) {
+                            onAddToGroup?(g.id)
+                            store.addProjectToGroup(projectPath: project.path, groupId: g.id)
+                        }
+                    }
+                }
+                Divider()
+                Button("New group…") { onNewGroup?() }
+            }
+            Divider()
             Button {
                 NSWorkspace.shared.open(URL(fileURLWithPath: project.path))
             } label: {
@@ -604,5 +672,140 @@ private struct GitRefLabel: View {
                 Text("·").font(DSFont.micro).foregroundColor(.secondary)
             }
         }
+    }
+}
+
+// MARK: - UserDefaults key helper for group collapse state
+
+private func groupCollapseKey(_ id: String) -> String { "devdash.groupCollapsed.\(id)" }
+
+// MARK: - Collapsible group section
+
+/// A sidebar section for one ProjectGroup. Persists collapse state in UserDefaults.
+private struct CollapsibleGroupSection: View {
+    let group: ProjectGroup
+    let members: [Project]
+    let runningPorts: [String: Int]
+
+    @EnvironmentObject var store: DashboardStore
+    @State private var collapsed: Bool
+
+    init(group: ProjectGroup, members: [Project], runningPorts: [String: Int]) {
+        self.group = group
+        self.members = members
+        self.runningPorts = runningPorts
+        let key = groupCollapseKey(group.id)
+        _collapsed = State(initialValue: UserDefaults.standard.bool(forKey: key))
+    }
+
+    var body: some View {
+        Section {
+            if !collapsed {
+                ForEach(members) { proj in
+                    SidebarProjectRow(
+                        project: proj,
+                        runningPort: runningPorts[proj.path],
+                        onNewGroup: nil,
+                        onAddToGroup: { groupId in
+                            store.addProjectToGroup(projectPath: proj.path, groupId: groupId)
+                        }
+                    )
+                    .tag(Selection.project(path: proj.path))
+                }
+            }
+        } header: {
+            groupHeader
+        }
+    }
+
+    private var groupHeader: some View {
+        Button {
+            collapsed.toggle()
+            UserDefaults.standard.set(collapsed, forKey: groupCollapseKey(group.id))
+        } label: {
+            HStack(spacing: DSSpace.xs) {
+                Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                Image(systemName: "rhombus")
+                    .font(DSFont.micro)
+                    .foregroundColor(DSColor.info)
+                Text(group.name)
+                    .font(DSFont.mono(.caption2).weight(.semibold))
+                    .foregroundColor(.primary)
+                if let teamName = group.linearTeamName {
+                    Text("·")
+                        .font(DSFont.micro)
+                        .foregroundColor(.secondary)
+                    Text(teamName)
+                        .font(DSFont.micro)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text(verbatim: String(members.count))
+                    .font(DSFont.monoDigits(.caption2))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - New group sheet
+
+struct NewGroupSheet: View {
+    var projectPath: String?
+    var onCreated: (() -> Void)?
+
+    @EnvironmentObject var store: DashboardStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSSpace.lg) {
+            Text("New Linear Group")
+                .font(DSFont.title)
+
+            Text("Create a group to share a Linear binding across multiple repos.")
+                .font(DSFont.label)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextField("Group name…", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { create() }
+
+            if let path = projectPath {
+                Text("Repo \"\(URL(fileURLWithPath: path).lastPathComponent)\" will be added to this group.")
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Create") { create() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(DSSpace.xl)
+        .frame(width: 400)
+    }
+
+    private func create() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let g = store.createGroup(name: trimmed)
+        if let path = projectPath {
+            store.addProjectToGroup(projectPath: path, groupId: g.id)
+        }
+        onCreated?()
+        dismiss()
     }
 }
