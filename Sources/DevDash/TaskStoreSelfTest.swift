@@ -43,6 +43,7 @@ enum TaskStoreSelfTest {
         checkNumericIdTolerance(check)
         checkSetStatusHistory(check)
         checkMigrationOneTime(check)
+        checkSetPR(check)
 
         let msg = failures.isEmpty
             ? "taskstore-selftest: ALL PASS"
@@ -418,6 +419,108 @@ enum TaskStoreSelfTest {
 
         check(read.notes == "User content here", "g: notes clean after setStatus (sentinel not leaked)")
         check(read.status == .done,              "g: status reads back as done")
+    }
+
+    // MARK: - Check i: setPR setter
+
+    private static func checkSetPR(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("i")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let t: TaskItem
+        do {
+            t = try TaskStore.add(projectPath: proj, title: "PR setter task",
+                                  notes: "Some notes")
+        } catch {
+            check(false, "i: add threw \(error)"); return
+        }
+
+        // Set a PR URL.
+        let prURL = "https://github.com/org/repo/pull/42"
+        do {
+            try TaskStore.setPR(projectPath: proj, id: t.id, url: prURL)
+        } catch {
+            check(false, "i: setPR threw \(error)"); return
+        }
+
+        let tasks1 = TaskStore.read(proj)
+        guard let read1 = tasks1.first(where: { $0.id == t.id }) else {
+            check(false, "i: task not found after setPR"); return
+        }
+        check(read1.pr == prURL, "i: pr field set correctly (got \(read1.pr ?? "nil"))")
+
+        // Notes and other fields must survive the in-place edit.
+        check(read1.notes == "Some notes", "i: notes preserved after setPR")
+        check(read1.title == "PR setter task", "i: title preserved after setPR")
+
+        // Clear the PR URL (nil).
+        do {
+            try TaskStore.setPR(projectPath: proj, id: t.id, url: nil)
+        } catch {
+            check(false, "i: setPR(nil) threw \(error)"); return
+        }
+
+        let tasks2 = TaskStore.read(proj)
+        guard let read2 = tasks2.first(where: { $0.id == t.id }) else {
+            check(false, "i: task not found after setPR(nil)"); return
+        }
+        check(read2.pr == nil, "i: pr field cleared after setPR(nil) (got \(read2.pr ?? "nil"))")
+
+        // Verify raw file no longer has the pr: key.
+        let dir = TaskStore.file(for: proj)
+        if let filename = TaskStore.findFile(id: t.id, in: dir),
+           let raw = try? String(contentsOfFile: "\(dir)/\(filename)", encoding: .utf8) {
+            let fm = TaskStore.parseTaskFrontmatter(raw)
+            check(fm["pr"] == nil, "i: pr key absent from frontmatter after clear")
+        } else {
+            check(false, "i: can't read file for raw verification")
+        }
+
+        // DashboardStore helpers: isGHPRCreate and parsePRURL.
+        check(DashboardStore.isGHPRCreate("gh pr create --title foo"),
+              "i: isGHPRCreate matches 'gh pr create --title foo'")
+        check(DashboardStore.isGHPRCreate("git add . && gh pr create"),
+              "i: isGHPRCreate matches after &&")
+        check(!DashboardStore.isGHPRCreate("echo \"gh pr create\""),
+              "i: isGHPRCreate does NOT match echo")
+        check(!DashboardStore.isGHPRCreate("gh pr list"),
+              "i: isGHPRCreate does NOT match 'gh pr list'")
+        check(!DashboardStore.isGHPRCreate("gh pr"),
+              "i: isGHPRCreate does NOT match bare 'gh pr'")
+
+        let sampleOutput = "https://github.com/org/repo/pull/99\n"
+        check(DashboardStore.parsePRURL(from: sampleOutput) == "https://github.com/org/repo/pull/99",
+              "i: parsePRURL extracts PR URL from gh output")
+        check(DashboardStore.parsePRURL(from: "no url here") == nil,
+              "i: parsePRURL returns nil for non-URL output")
+
+        // kanbanColumn guard: a done task is NOT in aiWorking, so the PR promotion
+        // block must not touch it (isGHPRCreate gate only fires when kanbanColumn == .aiWorking).
+        let projDone = makeTempProject("i-done")
+        defer { try? FileManager.default.removeItem(atPath: projDone) }
+        let td: TaskItem
+        do {
+            td = try TaskStore.add(projectPath: projDone, title: "Done task")
+        } catch {
+            check(false, "i: done-task add threw \(error)"); return
+        }
+        // Mark done and owner=.ai to confirm kanbanColumn != .aiWorking when status==.done.
+        do {
+            try TaskStore.setStatus(projectPath: projDone, id: td.id, status: .done)
+            try TaskStore.setOwner(projectPath: projDone, id: td.id, owner: .ai)
+        } catch {
+            check(false, "i: done-task setup threw \(error)"); return
+        }
+        let doneTasks = TaskStore.read(projDone)
+        if let doneTask = doneTasks.first(where: { $0.id == td.id }) {
+            check(doneTask.kanbanColumn != .aiWorking,
+                  "i: done task is NOT in aiWorking (kanban=\(doneTask.kanbanColumn))")
+            // Simulate what the PostToolUse block does: only act when kanbanColumn == .aiWorking.
+            let wouldPromote = doneTask.kanbanColumn == .aiWorking
+            check(!wouldPromote, "i: done task would NOT be promoted by PR gate (aiWorking guard)")
+        } else {
+            check(false, "i: done task not found after setup")
+        }
     }
 
     // MARK: - Check h: migration one-time

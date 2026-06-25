@@ -185,6 +185,22 @@ enum TaskStore {
         try result.write(toFile: "\(dir)/\(filename)", atomically: true, encoding: .utf8)
     }
 
+    /// Set or clear the `pr:` frontmatter key in place, preserving all other keys and body.
+    /// Passing nil or empty string removes the key.
+    static func setPR(projectPath: String, id: String, url: String?) throws {
+        let dir = file(for: projectPath)
+        guard let filename = findFile(id: id, in: dir),
+              let raw = try? String(contentsOfFile: "\(dir)/\(filename)", encoding: .utf8)
+        else { return }
+        let result: String
+        if let url = url, !url.isEmpty {
+            result = setOrAddFrontmatterKey(in: raw, key: "pr", value: yamlStr(url))
+        } else {
+            result = removeFrontmatterKey(in: raw, key: "pr")
+        }
+        try result.write(toFile: "\(dir)/\(filename)", atomically: true, encoding: .utf8)
+    }
+
     static func setPhases(projectPath: String, id: String, phases: [String]) throws {
         let dir = file(for: projectPath)
         guard let filename = findFile(id: id, in: dir),

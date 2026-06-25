@@ -816,13 +816,40 @@ final class DashboardStore: ObservableObject {
             ensureSession(sid: sid, cwd: ev.cwd, now: now)
             liveSessions[sid]?.currentTool = nil
             liveSessions[sid]?.lastEventAt = now
-            // Debounced git/PR refresh when a Bash command mutates git state.
             if ev.toolName == "Bash",
                let input = ev.raw["tool_input"] as? [String: Any],
-               let cmd = input["command"] as? String,
-               Self.isGitMutation(cmd),
-               let path = liveSessions[sid]?.projectPath {
-                scheduleGitRefresh(for: path)
+               let cmd = input["command"] as? String {
+                // Debounced git/PR refresh when a Bash command mutates git state.
+                if Self.isGitMutation(cmd),
+                   let path = liveSessions[sid]?.projectPath {
+                    scheduleGitRefresh(for: path)
+                }
+                // PR opened → move linked task to Review & QA.
+                if Self.isGHPRCreate(cmd),
+                   let session = liveSessions[sid],
+                   let taskId = session.linkedTaskId,
+                   let projPath = session.projectPath {
+                    let prURL = (ev.raw["tool_output"] as? String).flatMap {
+                        Self.parsePRURL(from: $0)
+                    }
+                    // Only promote from aiWorking → reviewQA. This is correctly idempotent
+                    // (after the move the column becomes .reviewQA, not .aiWorking, so a
+                    // second event is a no-op) AND leaves done/blocked/other-state tasks
+                    // completely untouched.
+                    let current = TaskStore.read(projPath).first { $0.id == taskId }
+                    if current?.kanbanColumn == .aiWorking {
+                        if let url = prURL {
+                            try? TaskStore.setPR(projectPath: projPath, id: taskId, url: url)
+                        }
+                        try? TaskStore.setHasAIRun(projectPath: projPath, id: taskId)
+                        try? TaskStore.setOwner(projectPath: projPath, id: taskId, owner: .human)
+                        reloadTasksAndNotifyForProject(projPath)
+                        if enableNotifications {
+                            let title = current?.title ?? taskId
+                            Notifier.post(title: "PR opened → Review & QA", body: title)
+                        }
+                    }
+                }
             }
 
         case "Stop":
@@ -902,6 +929,34 @@ final class DashboardStore: ObservableObject {
             default:    return false
             }
         }
+    }
+
+    /// Returns true if `cmd` contains a segment whose leading tokens are `gh pr create`.
+    /// Splits on `&&`, `;`, `|` — same anchoring as `isGitMutation` — so
+    /// `echo "gh pr create"` does NOT match.
+    nonisolated static func isGHPRCreate(_ cmd: String) -> Bool {
+        let separators = CharacterSet(charactersIn: ";&|")
+        return cmd.components(separatedBy: separators).contains { segment in
+            let words = segment
+                .trimmingCharacters(in: .whitespaces)
+                .components(separatedBy: .whitespaces)
+                .filter { !$0.isEmpty }
+            guard words.count >= 3 else { return false }
+            return words[0] == "gh" && words[1] == "pr" && words[2] == "create"
+        }
+    }
+
+    /// Extract the first GitHub-style PR URL from `gh pr create` output.
+    /// Matches `https://<host>/<owner>/<repo>/pull/<N>` loosely (tolerates
+    /// GitHub Enterprise hosts). Returns nil if no match.
+    nonisolated static func parsePRURL(from output: String) -> String? {
+        // Simple line-by-line scan: find the first token that looks like a PR URL.
+        let pattern = "https://[^/\\s]+/[^/\\s]+/[^/\\s]+/pull/[0-9]+"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(output.startIndex..., in: output)
+        guard let match = regex.firstMatch(in: output, range: range) else { return nil }
+        guard let swiftRange = Range(match.range, in: output) else { return nil }
+        return String(output[swiftRange])
     }
 
     /// Cancel any pending refresh for `path` and schedule a new one ~1.5 s out.
