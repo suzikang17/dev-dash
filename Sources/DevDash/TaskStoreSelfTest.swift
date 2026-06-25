@@ -28,6 +28,39 @@ enum TaskStoreSelfTest {
             sem.wait()
             exit(0)
         }
+        // Diagnostic: --migrate-tickets <projectPath>
+        // Runs TicketMigrator on the given path (point at a COPY of real data),
+        // then prints the resulting tickets and tasks, plus marker/backup existence.
+        if let i = CommandLine.arguments.firstIndex(of: "--migrate-tickets"),
+           i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            print("migrate-tickets: running on \(path)")
+            let result = TicketMigrator.migrate(projectPath: path)
+            if result.skipped {
+                print("  (skipped — marker already present)")
+            } else {
+                print("  tickets created: \(result.ticketsCreated)")
+                print("  tasks repointed: \(result.tasksRepointed)")
+            }
+            let markerPath = "\(path)/.devdash/.tickets-migrated"
+            let backupDir  = "\(path)/.devdash/migrated-tasks"
+            let fm = FileManager.default
+            print("  marker exists:   \(fm.fileExists(atPath: markerPath))")
+            print("  backup dir exists: \(fm.fileExists(atPath: backupDir))")
+            let tickets = TicketStore.read(path)
+            print("tickets (\(tickets.count)):")
+            for t in tickets {
+                print("  [\(t.id)] [\(t.status.rawValue)] \(t.title)")
+            }
+            let tasks = TaskStore.read(path)
+            print("tasks (\(tasks.count)):")
+            for t in tasks {
+                let ticketTag = t.ticket.map { "ticket=\($0)" } ?? "ticket=nil"
+                let parentTag = t.parentId.map { "parent=\($0)" } ?? "parent=nil"
+                print("  [\(t.id)] [\(ticketTag)] [\(parentTag)] \(t.title)")
+            }
+            exit(0)
+        }
         guard CommandLine.arguments.contains("--selftest-taskstore") else { return }
         var failures: [String] = []
         func check(_ cond: Bool, _ label: String) {

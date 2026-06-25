@@ -17,6 +17,10 @@ struct LoreTaskItem: Identifiable {
     var completed: String
     var body: String
     var completedToday: Bool
+    /// Owning ticket id from the `ticket:` frontmatter key. Nil if not set.
+    var ticketId: String?
+    /// Parent task id from the `parent:` frontmatter key. Nil if root task.
+    var parentId: String?
 
     var kanbanColumn: LoreKanbanColumn {
         switch (status, owner, aiRun) {
@@ -56,7 +60,7 @@ enum LoreKanbanColumn: String, CaseIterable {
     }
 }
 
-enum LoreViewMode: String { case kanban, needs, ideas }
+enum LoreViewMode: String { case tickets, kanban, needs, ideas }
 enum LoreCommandMode { case status, owner, priority }
 
 struct LoreIdeaItem: Identifiable {
@@ -80,7 +84,7 @@ struct LoreTasksView: View {
     @State private var selected: LoreTaskItem? = nil
     @State private var search = ""
     @State private var showDone = false
-    @State private var viewMode: LoreViewMode = .kanban
+    @State private var viewMode: LoreViewMode = .tickets
     @State private var activeCommand: LoreCommandMode? = nil
     @State private var showNewTask = false
     @State private var showListDeleteConfirm = false
@@ -92,6 +96,13 @@ struct LoreTasksView: View {
     @State private var loreInitialized = true
     @State private var graph: LoreLinkIndex.Graph? = nil
     @State private var graphWork: DispatchWorkItem? = nil
+    // Ticket hierarchy state
+    @State private var showNewTicket = false
+    @State private var newTicketTitle = ""
+    @State private var expandedTickets: Set<String> = []
+    @State private var expandedTasksForSubtasks: Set<String> = []
+    @State private var addTaskForTicket: String? = nil   // ticketId to add task under
+    @State private var newTicketTaskTitle = ""
 
     private var filtered: [LoreTaskItem] {
         guard !search.isEmpty else { return tasks }
@@ -113,11 +124,30 @@ struct LoreTasksView: View {
     }
 
     private var flatTaskList: [LoreTaskItem] {
-        if viewMode == .kanban {
+        switch viewMode {
+        case .tickets:
+            // All tasks in ticket order (for keyboard nav in ticket mode).
+            // Iterate only ROOT tasks per ticket; subtasks are appended once as children.
+            let tickets = store.projectTickets[projectPath] ?? []
+            var result: [LoreTaskItem] = []
+            for ticket in tickets {
+                let ticketTasks = filtered.filter { loreNumEq($0.ticketId, ticket.id) }
+                let roots = ticketTasks.filter { $0.parentId == nil }
+                for task in roots {
+                    result.append(task)
+                    let subtasks = ticketTasks.filter { loreNumEq($0.parentId, numericPrefix(task.file)) }
+                    result.append(contentsOf: subtasks)
+                }
+            }
+            // Unassigned tasks (no ticket field or ticket doesn't resolve)
+            let assignedFiles = Set(result.map { $0.file })
+            result.append(contentsOf: filtered.filter { !assignedFiles.contains($0.file) && $0.ticketId == nil })
+            return result
+        case .kanban:
             return LoreKanbanColumn.allCases
                 .filter { $0 != .done || showDone }
                 .flatMap { tasksFor($0) }
-        } else {
+        case .needs, .ideas:
             return yourTurnTasks + aiTurnTasks + blockedNeedsTasks
         }
     }
@@ -143,6 +173,7 @@ struct LoreTasksView: View {
         HSplitView {
             VStack(spacing: 0) {
                 Picker("", selection: $viewMode) {
+                    Text("Tickets").tag(LoreViewMode.tickets)
                     Text("Kanban").tag(LoreViewMode.kanban)
                     Text("Needs").tag(LoreViewMode.needs)
                     Text("Ideas").tag(LoreViewMode.ideas)
@@ -152,7 +183,17 @@ struct LoreTasksView: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 Divider()
 
-                if viewMode != .ideas {
+                if viewMode == .tickets {
+                    HStack(spacing: DSSpace.sm) {
+                        Image(systemName: "ticket").foregroundColor(.accentColor)
+                        TextField("New ticket — type a title, press ↩", text: $newTicketTitle)
+                            .textFieldStyle(.plain)
+                            .onSubmit { quickCreateTicket() }
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+                    .background(Color(NSColor.windowBackgroundColor))
+                    Divider()
+                } else if viewMode != .ideas {
                     HStack(spacing: DSSpace.sm) {
                         Image(systemName: "plus.circle.fill").foregroundColor(.accentColor)
                         TextField("New task — type a title, press ↩", text: $newTaskTitle)
@@ -175,7 +216,8 @@ struct LoreTasksView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
-                            if viewMode == .kanban { kanbanContent }
+                            if viewMode == .tickets { ticketsContent }
+                            else if viewMode == .kanban { kanbanContent }
                             else if viewMode == .needs { needsContent }
                             else { ideasContent }
                             // Linear group tasks — always shown below lore content when bound.
@@ -257,6 +299,8 @@ struct LoreTasksView: View {
         .onChange(of: viewMode) { _, newMode in
             if newMode == .ideas {
                 reloadIdeas()
+            } else if newMode == .tickets {
+                reload()
             } else {
                 if let sel = selected, !flatTaskList.contains(where: { $0.id == sel.id }) {
                     selected = flatTaskList.first
@@ -267,6 +311,257 @@ struct LoreTasksView: View {
     }
 
     // MARK: - List sections
+
+    // MARK: Tickets hierarchy
+
+    @ViewBuilder
+    private var ticketsContent: some View {
+        let tickets = store.projectTickets[projectPath] ?? []
+        if tickets.isEmpty {
+            VStack(spacing: DSSpace.sm) {
+                Text("No tickets yet").font(.caption).foregroundColor(.secondary)
+                Text("Type a title above and press ↩ to create one")
+                    .font(DSFont.micro).foregroundColor(.secondary.opacity(0.6))
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 40)
+        } else {
+            ForEach(tickets, id: \.id) { ticket in
+                ticketSection(ticket)
+            }
+            // Unassigned tasks — tasks whose ticket field doesn't resolve
+            let unassigned = tasks.filter { task in
+                guard let tid = task.ticketId else { return true }
+                return !tickets.contains { TicketStore.numEq($0.id, tid) }
+            }.filter { t in
+                search.isEmpty || t.title.localizedCaseInsensitiveContains(search)
+            }
+            if !unassigned.isEmpty {
+                Section {
+                    ForEach(unassigned) { task in
+                        taskRow(task)
+                        Divider().padding(.leading, 36)
+                    }
+                } header: {
+                    sectionHeader("Unassigned", color: .secondary, count: unassigned.count)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ticketSection(_ ticket: Ticket) -> some View {
+        let isExpanded = expandedTickets.contains(ticket.id)
+        let ticketTasks = tasks.filter { loreNumEq($0.ticketId, ticket.id) }
+            .filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
+
+        Section {
+            if isExpanded {
+                if ticketTasks.isEmpty {
+                    HStack(spacing: DSSpace.sm) {
+                        Color.clear.frame(width: 20)
+                        Text("No tasks").font(DSFont.micro).foregroundColor(.secondary.opacity(0.5))
+                            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
+                        Spacer()
+                    }
+                } else {
+                    // Collect ids of all tasks in this ticket so we can detect orphans.
+                    let ticketTaskPrefixes = Set(ticketTasks.map { numericPrefix($0.file) })
+                    ForEach(ticketTasks) { task in
+                        // Render root tasks directly. A task is a "root" if it has no
+                        // parentId OR its parentId doesn't resolve to any sibling in
+                        // this ticket (orphaned subtask — don't drop it).
+                        let parentResolvesInTicket: Bool = {
+                            guard let pid = task.parentId else { return false }
+                            return ticketTaskPrefixes.contains(where: { loreNumEq($0, pid) })
+                        }()
+                        if !parentResolvesInTicket {
+                            ticketTaskRow(task, ticketTasks: ticketTasks)
+                            Divider().padding(.leading, 52)
+                        }
+                    }
+                }
+                // "Add task" inline field
+                if addTaskForTicket == ticket.id {
+                    HStack(spacing: DSSpace.sm) {
+                        Color.clear.frame(width: 20)
+                        Image(systemName: "plus.circle").foregroundColor(.accentColor).font(DSFont.title)
+                        TextField("New task title, press ↩", text: $newTicketTaskTitle)
+                            .textFieldStyle(.plain)
+                            .onSubmit { quickCreateTaskForTicket(ticketId: ticket.id) }
+                        Button("Cancel") { addTaskForTicket = nil; newTicketTaskTitle = "" }
+                            .buttonStyle(.borderless).controlSize(.small).foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                } else {
+                    Button {
+                        addTaskForTicket = ticket.id
+                        newTicketTaskTitle = ""
+                    } label: {
+                        HStack(spacing: DSSpace.sm) {
+                            Color.clear.frame(width: 20)
+                            Image(systemName: "plus").foregroundColor(.accentColor).font(.system(size: 10))
+                            Text("Add task").font(DSFont.micro).foregroundColor(.accentColor)
+                            Spacer()
+                        }
+                        .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Divider()
+            }
+        } header: {
+            ticketHeader(ticket, taskCount: ticketTasks.count, isExpanded: isExpanded)
+        }
+    }
+
+    @ViewBuilder
+    private func ticketTaskRow(_ task: LoreTaskItem, ticketTasks: [LoreTaskItem]) -> some View {
+        let subtasks = ticketTasks.filter { child in
+            guard let pid = child.parentId else { return false }
+            return loreNumEq(pid, numericPrefix(task.file))
+        }
+        let isSubExpanded = expandedTasksForSubtasks.contains(task.file)
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                // Expand/collapse subtasks toggle (width reserved always)
+                Button {
+                    if expandedTasksForSubtasks.contains(task.file) {
+                        expandedTasksForSubtasks.remove(task.file)
+                    } else {
+                        expandedTasksForSubtasks.insert(task.file)
+                    }
+                } label: {
+                    Image(systemName: subtasks.isEmpty ? "" :
+                            (isSubExpanded ? "chevron.down" : "chevron.right"))
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .frame(width: 20)
+                }
+                .buttonStyle(.plain)
+                .disabled(subtasks.isEmpty)
+                .accessibilityLabel(isSubExpanded ? "Collapse subtasks" : "Expand subtasks")
+
+                LoreTaskRow(
+                    task: task,
+                    selectedId: Binding(get: { selected?.id }, set: { _ in }),
+                    showColumn: false
+                ) {
+                    selected = task; listFocused = true
+                } onToggle: {
+                    setStatus(task, to: task.status == "done" ? "open" : "done")
+                }
+                .id(task.id)
+                .draggable(task.file)
+                .contextMenu { taskContextMenu(task) }
+            }
+
+            if isSubExpanded && !subtasks.isEmpty {
+                ForEach(subtasks) { sub in
+                    Divider().padding(.leading, 52)
+                    HStack(spacing: 0) {
+                        Color.clear.frame(width: 20)    // indent spacer
+                        LoreTaskRow(
+                            task: sub,
+                            selectedId: Binding(get: { selected?.id }, set: { _ in }),
+                            showColumn: false
+                        ) {
+                            selected = sub; listFocused = true
+                        } onToggle: {
+                            setStatus(sub, to: sub.status == "done" ? "open" : "done")
+                        }
+                        .id(sub.id)
+                        .draggable(sub.file)
+                        .contextMenu { taskContextMenu(sub) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func ticketHeader(_ ticket: Ticket, taskCount: Int, isExpanded: Bool) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.12)) {
+                if expandedTickets.contains(ticket.id) {
+                    expandedTickets.remove(ticket.id)
+                } else {
+                    expandedTickets.insert(ticket.id)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9)).foregroundColor(.secondary)
+                ticketStatusDot(ticket.status)
+                Text(ticket.title)
+                    .font(DSFont.sectionHeader).foregroundColor(.primary)
+                    .lineLimit(1)
+                if ticket.owner != .none {
+                    Text(ticket.owner.rawValue)
+                        .font(DSFont.micro).foregroundColor(.secondary)
+                }
+                if let prURL = ticket.pr, let n = prNumberFromURL(prURL) {
+                    TicketPRBadge(number: n)
+                }
+                Spacer()
+                Text(verbatim: "\(taskCount)")
+                    .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+            }
+            .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+            .background(Color(NSColor.windowBackgroundColor))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func ticketStatusDot(_ status: TaskStatus) -> some View {
+        let color: Color
+        switch status {
+        case .open:       color = .secondary
+        case .inProgress: color = DSColor.info
+        case .blocked:    color = DSColor.warning
+        case .done:       color = DSColor.success
+        case .skipped:    color = .secondary.opacity(0.4)
+        }
+        return Circle().fill(color).frame(width: 7, height: 7)
+    }
+
+    // MARK: - Ticket quick-create
+
+    private func quickCreateTicket() {
+        let title = newTicketTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        store.addTicket(projectPath: projectPath, title: title)
+        newTicketTitle = ""
+        // Expand the newly created ticket
+        if let ticket = (store.projectTickets[projectPath] ?? []).last {
+            expandedTickets.insert(ticket.id)
+        }
+    }
+
+    private func quickCreateTaskForTicket(ticketId: String) {
+        let title = newTicketTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        store.addTask(projectPath: projectPath, title: title, ticket: ticketId)
+        newTicketTaskTitle = ""
+        addTaskForTicket = nil
+        reload()
+    }
+
+    // MARK: - Numeric helpers for ticket↔task linking
+
+    /// Extract the leading numeric prefix from a task filename (e.g. "0042-foo.md" → "0042").
+    private func numericPrefix(_ filename: String) -> String {
+        String(filename.prefix(while: { $0.isNumber }))
+    }
+
+    /// Numeric-equality tolerant comparison (e.g. "0042" == "42").
+    private func loreNumEq(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b, !a.isEmpty, !b.isEmpty else { return false }
+        if let ia = Int(a), let ib = Int(b) { return ia == ib }
+        return a == b
+    }
 
     @ViewBuilder
     private var kanbanContent: some View {
@@ -843,7 +1138,9 @@ struct LoreTasksView: View {
             notes: fm["notes"] ?? "",
             completed: fm["completed"] ?? "",
             body: body,
-            completedToday: completedToday
+            completedToday: completedToday,
+            ticketId: fm["ticket"].flatMap { $0.isEmpty ? nil : $0 },
+            parentId: fm["parent"].flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
@@ -1411,6 +1708,21 @@ private struct LoreIdeaDetailPane: View {
             .padding(DSSpace.lg)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// MARK: - Ticket PR badge (reuses the same visual as PRBadge in TasksTabView)
+
+private struct TicketPRBadge: View {
+    let number: Int
+    var body: some View {
+        Label("#\(number)", systemImage: "arrow.triangle.branch")
+            .font(DSFont.micro)
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, DSSpace.xs).padding(.vertical, 2)
+            .background(Color.accentColor.opacity(0.12))
+            .foregroundColor(.accentColor)
+            .clipShape(Capsule())
     }
 }
 

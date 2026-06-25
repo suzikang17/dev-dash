@@ -211,6 +211,7 @@ final class DashboardStore: ObservableObject {
 
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
     @Published var projectTasks: [String: [TaskItem]] = [:]   // path → tasks
+    @Published var projectTickets: [String: [Ticket]] = [:]   // path → tickets
     @Published var projectGroups: [ProjectGroup] = []         // all groups (global)
     @Published var groupLinearTasks: [String: [TaskItem]] = [:] // groupId → Linear tasks
     @Published var projectProviders: [String: [Provider]] = [:]   // path → providers
@@ -274,7 +275,7 @@ final class DashboardStore: ObservableObject {
     /// before projects are loaded (watcher is a no-op until projects populate).
     func armTaskWatcherIfNeeded() { armTaskWatcher() }
 
-    /// (Re-)arm the watcher over every project's docs/tasks and docs/artifacts directories.
+    /// (Re-)arm the watcher over every project's docs/tasks, docs/tickets, and docs/artifacts directories.
     /// Called from `projects.didSet` so it stays current when projects change.
     /// No-ops when the desired dir set is identical to the currently armed set.
     /// NotesFileWatcher skips dirs that don't exist yet (open() returns -1 → fd < 0).
@@ -282,6 +283,7 @@ final class DashboardStore: ObservableObject {
         var desired = Set(projects.map { "\($0.path)/docs/tasks" })
         for project in projects {
             desired.insert("\(project.path)/docs/artifacts")
+            desired.insert("\(project.path)/docs/tickets")
         }
         guard desired != taskWatcherDirs else { return }
         taskWatcher?.stop()
@@ -296,10 +298,15 @@ final class DashboardStore: ObservableObject {
 
     /// Reload tasks and artifacts for every project, diff vs snapshots, and fire
     /// notifications for meaningful changes. First call per project seeds silently.
+    /// Also silently reloads tickets (no notifications for ticket changes).
     func reloadTasksAndNotify() {
         var didChangeArtifacts = false
         for project in projects {
             let path = project.path
+
+            // — Tickets (silent reload — no notifications) —
+            let freshTickets = TicketStore.read(path)
+            projectTickets[path] = freshTickets.isEmpty ? nil : freshTickets
 
             // — Tasks —
             let fresh = TaskStore.read(path)
@@ -1599,19 +1606,30 @@ final class DashboardStore: ObservableObject {
         projectTasks[projectPath] ?? []
     }
 
-    /// Initial load — pulls meta + tasks + providers for every project.
-    /// Detection runs once per project here; subsequent edits hit just one path.
+    /// Initial load — pulls meta + tasks + tickets + providers for every project.
+    /// For each project, runs TicketMigrator off the main actor (blocking file I/O;
+    /// self-gated via marker so it only runs once). After migration completes, reads
+    /// tickets so the UI shows the post-migration state on first render.
     func loadProjectMetaAndTasks() {
         let paths = projects.map { $0.path }
         Task.detached(priority: .utility) { [weak self] in
             var metaMap: [String: ProjectMeta] = [:]
             var taskMap: [String: [TaskItem]] = [:]
+            var ticketMap: [String: [Ticket]] = [:]
             var providerMap: [String: [Provider]] = [:]
             var healthMap: [String: [String: HealthRunResult]] = [:]
             for path in paths {
+                // Run migration first (marker-gated, fast-path when already done).
+                // This is blocking file I/O — must stay off the main actor.
+                TicketMigrator.migrate(projectPath: path)
+
                 metaMap[path] = ProjectMetaStore.read(path)
+                // Read tasks AFTER migration so post-migration task state is used.
                 let tasks = TaskStore.read(path)
                 if !tasks.isEmpty { taskMap[path] = tasks }
+                // Read tickets AFTER migration so newly-created tickets appear.
+                let tickets = TicketStore.read(path)
+                if !tickets.isEmpty { ticketMap[path] = tickets }
                 let providers = ProviderStore.refresh(path)
                 if !providers.isEmpty { providerMap[path] = providers }
                 let health = HealthStore.read(path)
@@ -1620,6 +1638,7 @@ final class DashboardStore: ObservableObject {
             await MainActor.run {
                 self?.projectMeta = metaMap
                 self?.projectTasks = taskMap
+                self?.projectTickets = ticketMap
                 self?.projectProviders = providerMap
                 self?.projectHealth = healthMap
                 self?.seedTaskSnapshots()
@@ -1628,6 +1647,13 @@ final class DashboardStore: ObservableObject {
                 self?.migratePerRepoLinearBindings()
             }
         }
+    }
+
+    /// Reload tickets for a single project from disk, publishing on the main actor.
+    /// Call after any in-app ticket mutation.
+    func reloadTickets(for projectPath: String) {
+        let tickets = TicketStore.read(projectPath)
+        projectTickets[projectPath] = tickets.isEmpty ? nil : tickets
     }
 
     func applyTemplate(_ template: LaunchTemplate, to projectPath: String) {
@@ -1726,15 +1752,27 @@ final class DashboardStore: ObservableObject {
         stage: String? = nil,
         notes: String? = nil,
         parentId: String? = nil,
-        linkedDocPath: String? = nil
+        linkedDocPath: String? = nil,
+        ticket: String? = nil
     ) {
         do {
-            _ = try TaskStore.add(
+            var task = try TaskStore.add(
                 projectPath: projectPath, title: title,
                 category: category, stage: stage, notes: notes,
                 source: .local, parentId: parentId,
                 linkedDocPath: linkedDocPath
             )
+            // Set ticket field if provided (write the frontmatter key in-place).
+            if let ticketId = ticket {
+                let dir = TaskStore.file(for: projectPath)
+                if let fname = TaskStore.findFile(id: task.id, in: dir),
+                   let raw = try? String(contentsOfFile: "\(dir)/\(fname)", encoding: .utf8) {
+                    let patched = TaskStore.setOrAddFrontmatterKey(in: raw, key: "ticket",
+                                                                   value: TaskStore.yamlStr(ticketId))
+                    try? patched.write(toFile: "\(dir)/\(fname)", atomically: true, encoding: .utf8)
+                }
+                task.ticket = ticketId
+            }
             projectTasks[projectPath] = TaskStore.read(projectPath)
             refreshTaskSnapshot(for: projectPath)
             todoError = nil
@@ -1742,6 +1780,38 @@ final class DashboardStore: ObservableObject {
         } catch {
             todoError = "Couldn't add task: \(error.localizedDescription)"
         }
+    }
+
+    /// Create a new ticket doc (docs/tickets/*.md) for the project and refresh.
+    func addTicket(
+        projectPath: String,
+        title: String,
+        category: TaskCategory = .other,
+        owner: TaskOwner = .none,
+        notes: String? = nil
+    ) {
+        do {
+            _ = try TicketStore.add(
+                projectPath: projectPath, title: title,
+                category: category, owner: owner, notes: notes
+            )
+            reloadTickets(for: projectPath)
+            todoError = nil
+        } catch {
+            todoError = "Couldn't add ticket: \(error.localizedDescription)"
+        }
+    }
+
+    /// Set status on a ticket by id, then refresh tickets.
+    func setTicketStatus(projectPath: String, id: String, status: TaskStatus) {
+        try? TicketStore.setStatus(projectPath: projectPath, id: id, status: status)
+        reloadTickets(for: projectPath)
+    }
+
+    /// Set owner on a ticket by id, then refresh tickets.
+    func setTicketOwner(projectPath: String, id: String, owner: TaskOwner) {
+        try? TicketStore.setOwner(projectPath: projectPath, id: id, owner: owner)
+        reloadTickets(for: projectPath)
     }
 
     func setTaskParent(projectPath: String, id: String, newParentId: String?) {
