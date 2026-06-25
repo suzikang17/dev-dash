@@ -163,7 +163,11 @@ enum GitStatusScanner {
 
         func flush() {
             guard let p = pendingPath else { return }
-            result.append(.init(path: p, branch: pendingBranch, isMain: p == mainPath))
+            // `git worktree list --porcelain` always emits the PRIMARY worktree
+            // first, regardless of which checkout the command was run from.
+            // Mark index 0 (first flushed entry) as main; all others are linked worktrees.
+            let isMain = result.isEmpty
+            result.append(.init(path: p, branch: pendingBranch, isMain: isMain))
         }
 
         for line in raw.components(separatedBy: "\n") {

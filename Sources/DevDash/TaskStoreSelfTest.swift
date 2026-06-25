@@ -44,6 +44,7 @@ enum TaskStoreSelfTest {
         checkSetStatusHistory(check)
         checkMigrationOneTime(check)
         checkSetPR(check)
+        checkWorktreeGrouping(check)
 
         let msg = failures.isEmpty
             ? "taskstore-selftest: ALL PASS"
@@ -521,6 +522,90 @@ enum TaskStoreSelfTest {
         } else {
             check(false, "i: done task not found after setup")
         }
+    }
+
+    // MARK: - Check j: worktree grouping
+
+    /// Pure unit test for SidebarView.groupWorktrees. No filesystem I/O needed.
+    private static func checkWorktreeGrouping(_ check: (Bool, String) -> Void) {
+        // Helper: build a minimal Project fixture.
+        func proj(_ path: String) -> Project {
+            Project(
+                id: path,
+                name: (path as NSString).lastPathComponent,
+                path: path,
+                stack: nil,
+                framework: "",
+                health: .active,
+                lastCommitAt: nil,
+                branch: "main",
+                githubURL: nil,
+                isGit: true
+            )
+        }
+
+        // Helper: build a GitStatus with a specific worktrees array.
+        func makeStatus(worktrees: [GitStatus.Worktree]) -> GitStatus {
+            GitStatus(
+                branch: "main",
+                upstream: nil,
+                aheadCount: 0,
+                behindCount: 0,
+                stagedCount: 0,
+                unstagedCount: 0,
+                untrackedCount: 0,
+                stashCount: 0,
+                localBranches: [],
+                worktrees: worktrees
+            )
+        }
+
+        // --- Fixture (a): standalone project with no gitStatus ---
+        let standalone = proj("/repos/solo")
+        let groupsA = SidebarView.groupWorktrees([standalone], gitStatuses: [:])
+        check(groupsA.count == 1,                     "j-a: standalone → exactly 1 group")
+        check(groupsA[0].parent.path == "/repos/solo", "j-a: parent is the standalone project")
+        check(groupsA[0].children.isEmpty,             "j-a: standalone has no children")
+
+        // --- Fixture (b): main + 2 worktrees, all three in the project list ---
+        // worktrees[0] is isMain (primary checkout — always first in git output).
+        let mainProj   = proj("/repos/myapp")
+        let wt1Proj    = proj("/repos/myapp-feat-a")
+        let wt2Proj    = proj("/repos/myapp-feat-b")
+
+        let wtMain = GitStatus.Worktree(path: "/repos/myapp",        branch: "main",   isMain: true)
+        let wtA    = GitStatus.Worktree(path: "/repos/myapp-feat-a", branch: "feat-a", isMain: false)
+        let wtB    = GitStatus.Worktree(path: "/repos/myapp-feat-b", branch: "feat-b", isMain: false)
+        let status = makeStatus(worktrees: [wtMain, wtA, wtB])
+
+        // All three projects share the same gitStatus (same repo — scanner returns
+        // the full worktree list from any checkout path).
+        let statuses: [String: GitStatus] = [
+            "/repos/myapp":        status,
+            "/repos/myapp-feat-a": status,
+            "/repos/myapp-feat-b": status,
+        ]
+
+        let groupsB = SidebarView.groupWorktrees([mainProj, wt1Proj, wt2Proj], gitStatuses: statuses)
+        check(groupsB.count == 1,                       "j-b: 3 worktree projects → 1 group")
+        check(groupsB[0].parent.path == "/repos/myapp", "j-b: main checkout is the parent")
+        check(groupsB[0].children.count == 2,           "j-b: 2 children")
+        // Neither child appears in its own group.
+        let allParentPaths = groupsB.map { $0.parent.path }
+        check(!allParentPaths.contains("/repos/myapp-feat-a"), "j-b: feat-a is not a parent")
+        check(!allParentPaths.contains("/repos/myapp-feat-b"), "j-b: feat-b is not a parent")
+
+        // --- Fixture (c): worktree present but main checkout NOT in project list ---
+        // Only the two linked worktrees are scanned; main lives outside the scan roots.
+        let groupsC = SidebarView.groupWorktrees([wt1Proj, wt2Proj], gitStatuses: statuses)
+        check(groupsC.count == 1,     "j-c: main absent → still 1 group (not dropped)")
+        check(!groupsC.isEmpty,       "j-c: group is non-empty")
+        // The fallback parent should be one of the two worktrees (first member).
+        let cParentPath = groupsC[0].parent.path
+        check(cParentPath == "/repos/myapp-feat-a" || cParentPath == "/repos/myapp-feat-b",
+              "j-c: fallback parent is one of the two worktrees (got \(cParentPath))")
+        check(groupsC[0].children.count == 1,
+              "j-c: 1 child under fallback parent (got \(groupsC[0].children.count))")
     }
 
     // MARK: - Check h: migration one-time

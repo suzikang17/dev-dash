@@ -162,25 +162,56 @@ struct SidebarView: View {
 
                     // --- Ungrouped repos under their dev-root folder headers ---
                     let ungrouped = projects.filter { !groupedPaths.contains($0.path) }
-                    let folderGrouped = Dictionary(grouping: ungrouped) {
+                    // Compute worktree groups from the ungrouped set; child worktrees
+                    // are removed from the flat list and nested under their parent.
+                    let wtGroups = Self.groupWorktrees(ungrouped, gitStatuses: store.gitStatuses)
+                    // Only parent rows participate in the folder-header bucketing;
+                    // children are rendered inline under their parent by WorktreeGroupRow.
+                    let topLevel = wtGroups.map { $0.parent }
+                    let folderGrouped = Dictionary(grouping: topLevel) {
                         DevRoots.rootGroup(for: $0.path)
                     }
+                    // Lookup: parent path → WorktreeGroup, only for groups that actually
+                    // have children. Parents with no children render as plain SidebarProjectRows.
+                    let wtByParent = Dictionary(
+                        uniqueKeysWithValues: wtGroups.filter { !$0.children.isEmpty }.map { ($0.parent.path, $0) }
+                    )
                     let folderKeys = folderGrouped.keys.sorted()
                     ForEach(folderKeys, id: \.self) { key in
                         Section {
                             ForEach(folderGrouped[key] ?? []) { proj in
-                                SidebarProjectRow(
-                                    project: proj,
-                                    runningPort: runningPorts[proj.path],
-                                    onNewGroup: {
-                                        pendingGroupProjectPath = proj.path
-                                        showNewGroupSheet = true
-                                    },
-                                    onAddToGroup: { _ in }
-                                )
-                                .tag(Selection.project(path: proj.path))
+                                if let wtGroup = wtByParent[proj.path] {
+                                    // Main checkout of a repo with extra worktrees in the list —
+                                    // render collapsible group. WorktreeGroupRow only shows a
+                                    // disclosure chevron when children.count > 0 (guaranteed here).
+                                    WorktreeGroupRow(
+                                        wtGroup: wtGroup,
+                                        runningPorts: runningPorts,
+                                        onNewGroup: {
+                                            pendingGroupProjectPath = proj.path
+                                            showNewGroupSheet = true
+                                        }
+                                    )
+                                } else {
+                                    SidebarProjectRow(
+                                        project: proj,
+                                        runningPort: runningPorts[proj.path],
+                                        onNewGroup: {
+                                            pendingGroupProjectPath = proj.path
+                                            showNewGroupSheet = true
+                                        },
+                                        onAddToGroup: { _ in }
+                                    )
+                                    .tag(Selection.project(path: proj.path))
+                                }
                             }
                         } header: {
+                            // Count = parents + their nested children so the badge reflects
+                            // the true number of repos under this folder root.
+                            let folderParents = folderGrouped[key] ?? []
+                            let totalCount = folderParents.reduce(0) { acc, proj in
+                                acc + 1 + (wtByParent[proj.path]?.children.count ?? 0)
+                            }
                             HStack(spacing: DSSpace.xs) {
                                 Image(systemName: "folder")
                                     .font(DSFont.micro)
@@ -189,7 +220,7 @@ struct SidebarView: View {
                                     .font(DSFont.mono(.caption2).weight(.semibold))
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(verbatim: String(folderGrouped[key]?.count ?? 0))
+                                Text(verbatim: String(totalCount))
                                     .font(DSFont.monoDigits(.caption2))
                                     .foregroundColor(.secondary)
                             }
@@ -314,6 +345,68 @@ struct SidebarView: View {
             }
         }
     }
+
+    // MARK: - Worktree grouping
+
+    /// A repo's main checkout plus any sibling worktrees that also appear in the
+    /// project list. Purely presentational — no mutation of store data.
+    struct WorktreeGroup: Identifiable {
+        /// The main checkout (isMain == true), or the best stand-in when the
+        /// actual main checkout isn't in the scanned project list.
+        let parent: Project
+        /// Non-main worktree projects belonging to the same repo, in their
+        /// original list order.
+        let children: [Project]
+        var id: String { parent.path }
+    }
+
+    /// Build worktree groups from `projects` + `gitStatuses`.
+    ///
+    /// Algorithm:
+    /// 1. For each project, resolve its repo's main-checkout path from
+    ///    `gitStatuses[project.path].worktrees.first(where:{ $0.isMain })?.path`.
+    ///    Projects with no gitStatus (standalone, no git) map to their own path.
+    /// 2. Group all projects by that main path.
+    /// 3. For each group with >1 member, designate the main project as parent
+    ///    and the rest as children. Single-member groups are standalone (no nesting).
+    /// 4. Return one `WorktreeGroup` per repo. Input order is preserved for parent
+    ///    selection and child ordering so the list is stable across renders.
+    static func groupWorktrees(
+        _ projects: [Project],
+        gitStatuses: [String: GitStatus]
+    ) -> [WorktreeGroup] {
+        // Map each project to the path of its repo's main checkout.
+        func mainPath(for project: Project) -> String {
+            gitStatuses[project.path]?
+                .worktrees
+                .first(where: { $0.isMain })?
+                .path ?? project.path
+        }
+
+        // Collect groups preserving first-seen order of the main path.
+        var order: [String] = []
+        var byMain: [String: [Project]] = [:]
+        for proj in projects {
+            let key = mainPath(for: proj)
+            if byMain[key] == nil { order.append(key) }
+            byMain[key, default: []].append(proj)
+        }
+
+        return order.compactMap { key -> WorktreeGroup? in
+            guard let members = byMain[key], !members.isEmpty else { return nil }
+            if members.count == 1 {
+                // No sibling worktrees in the list — render flat.
+                return WorktreeGroup(parent: members[0], children: [])
+            }
+            // Pick the main checkout as parent; fall back to first member if the
+            // actual main path isn't in our project list.
+            let parent = members.first(where: { $0.path == key }) ?? members[0]
+            let children = members.filter { $0.path != parent.path }
+            return WorktreeGroup(parent: parent, children: children)
+        }
+    }
+
+    // MARK: - Running group helpers
 
     /// A project and the running dev services beneath it, for the RUNNING list.
     struct RunningGroup: Identifiable {
@@ -751,6 +844,71 @@ private struct CollapsibleGroupSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Worktree group row
+
+/// Renders a repo's main checkout as a collapsible parent with its worktree
+/// children indented beneath it. Mirrors the `CollapsibleGroupSection` idiom.
+/// Collapse state is persisted per main-checkout path via raw UserDefaults
+/// (same pattern as CollapsibleGroupSection — read once in init, written on toggle).
+private struct WorktreeGroupRow: View {
+    let wtGroup: SidebarView.WorktreeGroup
+    let runningPorts: [String: Int]
+    var onNewGroup: (() -> Void)? = nil
+
+    @EnvironmentObject var store: DashboardStore
+    @State private var collapsed: Bool
+
+    init(wtGroup: SidebarView.WorktreeGroup, runningPorts: [String: Int], onNewGroup: (() -> Void)? = nil) {
+        self.wtGroup = wtGroup
+        self.runningPorts = runningPorts
+        self.onNewGroup = onNewGroup
+        let key = "devdash.worktreeCollapsed.\(wtGroup.parent.path)"
+        // Default to expanded (false = not collapsed).
+        _collapsed = State(initialValue: UserDefaults.standard.object(forKey: key) != nil
+            ? UserDefaults.standard.bool(forKey: key)
+            : false)
+    }
+
+    var body: some View {
+        // Parent row — always visible, tappable for selection.
+        SidebarProjectRow(
+            project: wtGroup.parent,
+            runningPort: runningPorts[wtGroup.parent.path],
+            onNewGroup: onNewGroup,
+            onAddToGroup: { _ in }
+        )
+        .tag(Selection.project(path: wtGroup.parent.path))
+        .overlay(alignment: .leading) {
+            // Disclosure chevron inset to left edge so it doesn't cover the row content.
+            Button {
+                collapsed.toggle()
+                UserDefaults.standard.set(collapsed,
+                    forKey: "devdash.worktreeCollapsed.\(wtGroup.parent.path)")
+            } label: {
+                Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 14, height: 14)
+            }
+            .buttonStyle(.plain)
+            .offset(x: -16)
+        }
+
+        if !collapsed {
+            ForEach(wtGroup.children) { child in
+                SidebarProjectRow(
+                    project: child,
+                    runningPort: runningPorts[child.path],
+                    onNewGroup: nil,
+                    onAddToGroup: { _ in }
+                )
+                .tag(Selection.project(path: child.path))
+                .padding(.leading, 18)
+            }
+        }
     }
 }
 
