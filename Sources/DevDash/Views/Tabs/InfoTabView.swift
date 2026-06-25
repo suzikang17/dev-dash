@@ -12,6 +12,7 @@ struct InfoTabView: View {
                 VStack(alignment: .leading, spacing: DSSpace.lg) {
                     Text(project.name)
                         .font(DSFont.display)
+                        .auroraText()
 
                     Text(DevRoots.shortenPath(project.path))
                         .font(DSFont.mono(.caption))

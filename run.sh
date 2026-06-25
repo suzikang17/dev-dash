@@ -11,6 +11,10 @@ cp .build/debug/DevDash DevDash.app/Contents/MacOS/DevDash
 mkdir -p DevDash.app/Contents/Resources
 cp .build/debug/DevDash_DevDash.bundle/Resources/alpine.min.js DevDash.app/Contents/Resources/
 cp .build/debug/DevDash_DevDash.bundle/Resources/devdash-components.js DevDash.app/Contents/Resources/
+# Compile Metal shaders into default.metallib so SwiftUI's ShaderLibrary.default
+# (which reads from Bundle.main) finds them in the packaged .app. Requires the
+# Metal Toolchain component: xcodebuild -downloadComponent MetalToolchain
+xcrun metal -o DevDash.app/Contents/Resources/default.metallib Sources/DevDash/Shaders/*.metal
 # Prefer the real Apple Development identity (needed for entitlements /
 # distribution); fall back to ad-hoc signing on machines without it so local
 # debug runs still work.
