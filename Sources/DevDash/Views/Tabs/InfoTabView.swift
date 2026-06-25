@@ -926,9 +926,6 @@ private struct VercelCard: View {
 private struct GitCard: View {
     let project: Project
     @EnvironmentObject var store: DashboardStore
-    @State private var showDiff = false
-    @State private var diffContent: String? = nil
-    @State private var loadingDiff = false
 
     private var status: GitStatus? { store.gitStatus(for: project.path) }
     private var isOp: Bool { store.gitOpInProgress.contains(project.path) }
@@ -1002,20 +999,6 @@ private struct GitCard: View {
                                 .font(DSFont.micro)
                                 .foregroundColor(.secondary)
                         }
-                        Button {
-                            loadingDiff = true
-                            Task {
-                                diffContent = await store.gitDiff(for: project.path)
-                                loadingDiff = false
-                                if diffContent != nil { showDiff = true }
-                            }
-                        } label: {
-                            Label(loadingDiff ? "Loading…" : "Diff", systemImage: "doc.text.magnifyingglass")
-                        }
-                        .buttonStyle(.borderless)
-                        .font(DSFont.micro)
-                        .controlSize(.small)
-                        .disabled(loadingDiff)
                     }
                 } else {
                     HStack(spacing: 5) {
@@ -1083,9 +1066,6 @@ private struct GitCard: View {
         .onChange(of: project.path) { _, _ in
             Task { await store.refreshGitStatus(for: project.path) }
         }
-        .sheet(isPresented: $showDiff) {
-            DiffSheet(diff: diffContent ?? "No changes.")
-        }
     }
 }
 
@@ -1109,60 +1089,3 @@ private struct GitStatusChip: View {
     }
 }
 
-private struct DiffSheet: View {
-    let diff: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Uncommitted Changes")
-                    .font(DSFont.title)
-                Spacer()
-                Button("Close") { dismiss() }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(14)
-            Divider()
-            ScrollView([.vertical, .horizontal]) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(diff.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                        DiffLineView(line: line)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-            }
-        }
-        .frame(minWidth: 700, minHeight: 480)
-    }
-}
-
-private struct DiffLineView: View {
-    let line: String
-
-    var body: some View {
-        Text(verbatim: line.isEmpty ? " " : line)
-            .font(DSFont.mono(.caption))
-            .foregroundColor(foregroundColor)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(backgroundColor)
-    }
-
-    private var foregroundColor: Color {
-        if line.hasPrefix("+") && !line.hasPrefix("+++") { return DSColor.success }
-        if line.hasPrefix("-") && !line.hasPrefix("---") { return Color(red: 1, green: 0.35, blue: 0.35) }
-        if line.hasPrefix("@@") { return .accentColor }
-        if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") {
-            return .secondary
-        }
-        return .primary
-    }
-
-    private var backgroundColor: Color {
-        if line.hasPrefix("+") && !line.hasPrefix("+++") { return DSColor.success.opacity(0.05) }
-        if line.hasPrefix("-") && !line.hasPrefix("---") { return DSColor.danger.opacity(0.05) }
-        return .clear
-    }
-}

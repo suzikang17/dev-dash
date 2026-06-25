@@ -3161,8 +3161,4 @@ final class DashboardStore: ObservableObject {
         gitOpInProgress.remove(path)
         await refreshGitStatus(for: path)
     }
-
-    func gitDiff(for path: String) async -> String? {
-        await GitStatusScanner.diff(path: path)
-    }
 }

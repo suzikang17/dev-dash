@@ -106,10 +106,6 @@ enum GitStatusScanner {
         )
     }
 
-    static func diff(path: String) async -> String? {
-        await runShell("/usr/bin/git", args: ["diff", "HEAD"], cwd: path, timeoutSeconds: 10)
-    }
-
     /// Run a mutating git operation. Returns (combined stdout+stderr, success).
     static func op(_ args: [String], in path: String) async -> (String, Bool) {
         await withCheckedContinuation { cont in
