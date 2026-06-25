@@ -515,6 +515,15 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Run launched tasks in an isolated worktree", isOn: $store.launchInWorktree)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        Text("Each launched task gets its own git branch + worktree under .worktrees/.")
+                            .font(DSFont.micro)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text("Defaults for all projects — override per project below.")
                         .font(DSFont.micro)
                         .foregroundStyle(.tertiary)

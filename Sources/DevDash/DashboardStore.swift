@@ -508,6 +508,13 @@ final class DashboardStore: ObservableObject {
     }() {
         didSet { UserDefaults.standard.set(injectProjectContext, forKey: "devdash.injectProjectContext") }
     }
+    /// Run launched tasks in an isolated git worktree + branch under .worktrees/ (default on).
+    @Published var launchInWorktree: Bool = {
+        UserDefaults.standard.register(defaults: ["devdash.launchInWorktree": true])
+        return UserDefaults.standard.bool(forKey: "devdash.launchInWorktree")
+    }() {
+        didSet { UserDefaults.standard.set(launchInWorktree, forKey: "devdash.launchInWorktree") }
+    }
     /// Per-project overrides for the two global Claude integration behaviors.
     /// Keyed by project path. A missing key means the project inherits the global default.
     /// Persisted as JSON under "devdash.projectHookConfigs".
@@ -2135,6 +2142,34 @@ final class DashboardStore: ObservableObject {
         regenerateRoadmap(for: projectPath)
     }
 
+    /// Remove the git worktree for a task and clear the worktree/branch fields.
+    /// Safe to call when the worktree directory no longer exists (prune-only).
+    /// Never auto-called — always triggered by an explicit user action.
+    func removeWorktreeForTask(projectPath: String, taskId: String) async {
+        guard let task = tasksV2(for: projectPath).first(where: { $0.id == taskId }),
+              let worktreePath = task.worktree,
+              let branch = task.branch
+        else { return }
+
+        // Resolve the main repo from the worktree path or fall back to projectPath.
+        let repoPath = await WorktreeManager.repoPath(forWorktree: worktreePath) ?? projectPath
+
+        _ = await WorktreeManager.remove(
+            repoPath: repoPath,
+            worktreePath: worktreePath,
+            branch: branch,
+            deleteBranch: true
+        )
+
+        // Clear the fields on the task regardless of whether git remove succeeded
+        // (the user pressed the button; don't leave stale paths).
+        await MainActor.run {
+            try? TaskStore.setWorktree(projectPath: projectPath, id: taskId, worktree: nil, branch: nil)
+            projectTasks[projectPath] = TaskStore.read(projectPath)
+            refreshTaskSnapshot(for: projectPath)
+        }
+    }
+
     /// Days since the project's roadmap (if any) was last edited.
     func roadmapAgeDays(for projectPath: String) -> Int? {
         ProjectMetaStore.roadmapAgeDays(in: projectPath)
@@ -2347,10 +2382,80 @@ final class DashboardStore: ObservableObject {
     func launchClaudeForTask(_ task: TaskItem, projectPath: String) {
         guard !projectPath.isEmpty else { return }
 
+        // Check whether this project is a git repo (needed for worktree decision).
+        let isGit = gitStatuses[projectPath] != nil
+            || FileManager.default.fileExists(atPath: "\(projectPath)/.git")
+
+        // [FIX #2] Only create a worktree when the task is file-backed. For non-file-backed
+        // tasks (Linear tasks with UUID ids, no docs/tasks file) TaskStore.setWorktree
+        // silently no-ops, so the worktree would be created but never recorded — orphaning it.
+        // Guard by checking whether the task file exists on disk before we touch git at all.
+        let taskDir = TaskStore.file(for: projectPath)
+        let isFileBacked = TaskStore.findFile(id: task.id, in: taskDir) != nil
+
+        // If the setting is on, this is a git repo, and the task is file-backed,
+        // try to create a worktree first (async); otherwise fall through.
+        if launchInWorktree && isGit && isFileBacked {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let result = await WorktreeManager.create(
+                    repoPath: projectPath,
+                    taskId: task.id,
+                    title: task.title
+                )
+                if let (worktreePath, branch) = result {
+                    // Persist worktree + branch on the task.
+                    try? TaskStore.setWorktree(
+                        projectPath: projectPath,
+                        id: task.id,
+                        worktree: worktreePath,
+                        branch: branch
+                    )
+                    self.projectTasks[projectPath] = TaskStore.read(projectPath)
+                    self.refreshTaskSnapshot(for: projectPath)
+                    self.launchClaudeInDirectory(
+                        task: task,
+                        projectPath: projectPath,
+                        cwd: worktreePath,
+                        branch: branch
+                    )
+                } else {
+                    // Worktree creation failed — fall back to the project directory.
+                    NSLog("WorktreeManager: create failed for task %@ — launching in project dir", task.id)
+                    self.launchClaudeInDirectory(
+                        task: task,
+                        projectPath: projectPath,
+                        cwd: projectPath,
+                        branch: nil
+                    )
+                }
+            }
+            return
+        }
+
+        // Non-worktree path (setting off, or not a git repo).
+        launchClaudeInDirectory(task: task, projectPath: projectPath, cwd: projectPath, branch: nil)
+    }
+
+    /// Core launch: builds the prompt, opens the terminal at `cwd`, sends the claude command.
+    /// `branch` is non-nil only when running in a worktree.
+    private func launchClaudeInDirectory(
+        task: TaskItem,
+        projectPath: String,
+        cwd: String,
+        branch: String?
+    ) {
+        let branchLine: String
+        if let b = branch {
+            branchLine = "\nYou're on branch \(b) in an isolated worktree. When done, open a PR from this branch."
+        } else {
+            branchLine = ""
+        }
+
         let prompt = """
         Task \(task.id): \(task.title)
         Category: \(task.category.label)
-        \(task.notes.map { "Notes:\n\($0)" } ?? "")
+        \(task.notes.map { "Notes:\n\($0)" } ?? "")\(branchLine)
 
         Work on this task in this project.
 
@@ -2385,7 +2490,9 @@ final class DashboardStore: ObservableObject {
         // Ensure the session exists (session(for:) is idempotent — spawns lazily
         // on first call, returns the cached view on subsequent calls). We call it
         // here so the PTY is started before we send the command.
-        _ = terminals.session(for: projectPath)
+        // When cwd != projectPath (worktree), a separate terminal session is created
+        // automatically because TerminalSessionStore keys by path.
+        _ = terminals.session(for: cwd)
 
         // Give the shell a brief moment to finish its login-shell init before
         // the command arrives. 400 ms is enough for a cold PTY; warm sessions
@@ -2393,7 +2500,7 @@ final class DashboardStore: ObservableObject {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 400_000_000)
             let cmd = "claude \"$(cat '\(promptPath)')\"\n"
-            terminals.send(cmd, to: projectPath)
+            self.terminals.send(cmd, to: cwd)
         }
     }
 

@@ -297,6 +297,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var gstackPersonaOverride: String? = nil
     var linkedDocPath: String? = nil
     var pr: String? = nil
+    // Worktree integration fields (set when launched with launchInWorktree=true)
+    var worktree: String? = nil   // absolute path to the worktree, e.g. <repo>/.worktrees/task-0042-foo
+    var branch: String? = nil     // branch name, e.g. task/0042-foo
     // Linear integration fields (nil for non-Linear tasks)
     var linearIssueId: String? = nil
     var linearIdentifier: String? = nil   // e.g. "ENG-123"

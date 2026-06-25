@@ -44,6 +44,9 @@ enum TaskStoreSelfTest {
         checkSetStatusHistory(check)
         checkMigrationOneTime(check)
         checkSetPR(check)
+        checkWorktreeFieldRoundTrip(check)
+        checkWorktreeSlugNaming(check)
+        checkWorktreeCollisionClassifier(check)
         checkWorktreeGrouping(check)
 
         let msg = failures.isEmpty
@@ -521,6 +524,152 @@ enum TaskStoreSelfTest {
             check(!wouldPromote, "i: done task would NOT be promoted by PR gate (aiWorking guard)")
         } else {
             check(false, "i: done task not found after setup")
+        }
+    }
+
+    // MARK: - Check k: worktree field round-trip
+
+    private static func checkWorktreeFieldRoundTrip(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("k")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        // Add a task then set worktree + branch via TaskStore.setWorktree.
+        let t: TaskItem
+        do {
+            t = try TaskStore.add(projectPath: proj, title: "Worktree round-trip task",
+                                  notes: "Some notes")
+        } catch {
+            check(false, "k: add threw \(error)"); return
+        }
+
+        let wt = "/repos/myapp/.worktrees/task-0001-worktree-round-trip"
+        let br = "task/0001-worktree-round-trip"
+        do {
+            try TaskStore.setWorktree(projectPath: proj, id: t.id, worktree: wt, branch: br)
+        } catch {
+            check(false, "k: setWorktree threw \(error)"); return
+        }
+
+        let tasks1 = TaskStore.read(proj)
+        guard let read1 = tasks1.first(where: { $0.id == t.id }) else {
+            check(false, "k: task not found after setWorktree"); return
+        }
+        check(read1.worktree == wt, "k: worktree field round-trips (got \(read1.worktree ?? "nil"))")
+        check(read1.branch == br,   "k: branch field round-trips (got \(read1.branch ?? "nil"))")
+        check(read1.notes == "Some notes", "k: notes preserved after setWorktree")
+        check(read1.title == "Worktree round-trip task", "k: title preserved after setWorktree")
+
+        // Clear via update() round-trip.
+        var modified = read1
+        modified.worktree = nil
+        modified.branch = nil
+        do {
+            try TaskStore.update(projectPath: proj, modified)
+        } catch {
+            check(false, "k: update (clear) threw \(error)"); return
+        }
+
+        let tasks2 = TaskStore.read(proj)
+        guard let read2 = tasks2.first(where: { $0.id == t.id }) else {
+            check(false, "k: task not found after clear"); return
+        }
+        check(read2.worktree == nil, "k: worktree cleared via update (got \(read2.worktree ?? "nil"))")
+        check(read2.branch == nil,   "k: branch cleared via update (got \(read2.branch ?? "nil"))")
+
+        // Also verify setWorktree(nil) path.
+        do {
+            try TaskStore.setWorktree(projectPath: proj, id: t.id, worktree: wt, branch: br)
+            try TaskStore.setWorktree(projectPath: proj, id: t.id, worktree: nil, branch: nil)
+        } catch {
+            check(false, "k: setWorktree(nil) threw \(error)"); return
+        }
+        let tasks3 = TaskStore.read(proj)
+        guard let read3 = tasks3.first(where: { $0.id == t.id }) else {
+            check(false, "k: task not found after setWorktree(nil)"); return
+        }
+        check(read3.worktree == nil, "k: worktree absent after setWorktree(nil)")
+        check(read3.branch == nil,   "k: branch absent after setWorktree(nil)")
+
+        // Raw file must not contain worktree: or branch: keys after clear.
+        let dir = TaskStore.file(for: proj)
+        if let filename = TaskStore.findFile(id: t.id, in: dir),
+           let raw = try? String(contentsOfFile: "\(dir)/\(filename)", encoding: .utf8) {
+            let fm = TaskStore.parseTaskFrontmatter(raw)
+            check(fm["worktree"] == nil, "k: worktree key absent from frontmatter after clear")
+            check(fm["branch"] == nil,   "k: branch key absent from frontmatter after clear")
+        } else {
+            check(false, "k: can't read file for raw verification")
+        }
+    }
+
+    // MARK: - Check l: WorktreeManager slug naming + sanitisation
+
+    private static func checkWorktreeSlugNaming(_ check: (Bool, String) -> Void) {
+        // Pure function — no filesystem I/O.
+        let cases: [(taskId: String, title: String, expectedBranch: String, expectedDir: String)] = [
+            ("0042", "Add user auth",
+             "task/0042-add-user-auth",  "task-0042-add-user-auth"),
+            ("0001", "Fix: the \"weird\" bug / issue #3",
+             "task/0001-fix-the-weird-bug-issue-3", "task-0001-fix-the-weird-bug-issue-3"),
+            ("0007", "  UPPER CASE  ",
+             "task/0007-upper-case", "task-0007-upper-case"),
+            ("0099", String(repeating: "a", count: 80),
+             // slug is capped at 40 chars
+             "task/0099-" + String(repeating: "a", count: 40),
+             "task-0099-" + String(repeating: "a", count: 40)),
+            ("0003", "!!!",
+             // all unsafe chars stripped → slug falls back to "task"
+             "task/0003-task", "task-0003-task"),
+        ]
+
+        for (id, title, expBranch, expDir) in cases {
+            let (branch, dirName) = WorktreeManager.slugBranch(taskId: id, title: title)
+            check(branch == expBranch,
+                  "l: slugBranch branch for '\(title)' → '\(branch)' (expected '\(expBranch)')")
+            check(dirName == expDir,
+                  "l: slugBranch dirName for '\(title)' → '\(dirName)' (expected '\(expDir)')")
+        }
+
+        // makeSlug corner cases.
+        check(WorktreeManager.makeSlug("hello world") == "hello-world",
+              "l: makeSlug 'hello world' → 'hello-world'")
+        check(WorktreeManager.makeSlug("a--b") == "a-b",
+              "l: makeSlug collapses double hyphens")
+        check(WorktreeManager.makeSlug("") == "task",
+              "l: makeSlug empty → 'task'")
+        check(WorktreeManager.makeSlug("-leading-and-trailing-") == "leading-and-trailing",
+              "l: makeSlug trims leading/trailing hyphens")
+    }
+
+    // MARK: - Check m: WorktreeManager.isCollisionError classifier
+
+    /// Pure function — no I/O, no git mutations.
+    private static func checkWorktreeCollisionClassifier(_ check: (Bool, String) -> Void) {
+        // Phrases that ARE name collisions → should retry with uniquified name.
+        let shouldRetry: [(String, String)] = [
+            ("fatal: 'task/0001-foo' already exists", "m: 'already exists' is a collision"),
+            ("error: branch 'task/0001-foo' already exists", "m: branch already exists is a collision"),
+            ("fatal: '/path/.worktrees/task-0001-foo' already checked out", "m: already checked out is a collision"),
+            ("error: worktree '/x' already checked out at '/y'", "m: already checked out (alt form) is a collision"),
+            ("fatal: already used by worktree at '/path'", "m: already used by worktree is a collision"),
+        ]
+        for (msg, label) in shouldRetry {
+            check(WorktreeManager.isCollisionError(msg.lowercased()), label)
+        }
+
+        // Phrases that are NOT collisions → should NOT trigger retry (return nil immediately).
+        let shouldNotRetry: [(String, String)] = [
+            ("fatal: not a git repository", "m: not a git repository is NOT a collision"),
+            ("error: pathspec 'x' did not match any file(s)", "m: pathspec error is NOT a collision"),
+            ("fatal: cannot lock ref 'refs/heads/task/foo'", "m: lock ref error is NOT a collision"),
+            ("fatal: insufficient permission for adding an object", "m: permission error is NOT a collision"),
+            ("error: unable to create file: no space left on device", "m: disk full is NOT a collision"),
+            // 'branch' appearing in a non-collision context must NOT match
+            ("fatal: branch name required", "m: bare 'branch name required' is NOT a collision"),
+            ("error: invalid branch name 'task/foo bar'", "m: invalid branch name is NOT a collision"),
+        ]
+        for (msg, label) in shouldNotRetry {
+            check(!WorktreeManager.isCollisionError(msg.lowercased()), label)
         }
     }
 

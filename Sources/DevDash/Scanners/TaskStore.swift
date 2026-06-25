@@ -201,6 +201,27 @@ enum TaskStore {
         try result.write(toFile: "\(dir)/\(filename)", atomically: true, encoding: .utf8)
     }
 
+    /// Set or clear the `worktree:` and `branch:` frontmatter keys in place.
+    /// Passing nil for both removes both keys.
+    static func setWorktree(projectPath: String, id: String, worktree: String?, branch: String?) throws {
+        let dir = file(for: projectPath)
+        guard let filename = findFile(id: id, in: dir),
+              let raw = try? String(contentsOfFile: "\(dir)/\(filename)", encoding: .utf8)
+        else { return }
+        var result = raw
+        if let wt = worktree, !wt.isEmpty {
+            result = setOrAddFrontmatterKey(in: result, key: "worktree", value: yamlStr(wt))
+        } else {
+            result = removeFrontmatterKey(in: result, key: "worktree")
+        }
+        if let br = branch, !br.isEmpty {
+            result = setOrAddFrontmatterKey(in: result, key: "branch", value: yamlStr(br))
+        } else {
+            result = removeFrontmatterKey(in: result, key: "branch")
+        }
+        try result.write(toFile: "\(dir)/\(filename)", atomically: true, encoding: .utf8)
+    }
+
     static func setPhases(projectPath: String, id: String, phases: [String]) throws {
         let dir = file(for: projectPath)
         guard let filename = findFile(id: id, in: dir),
@@ -346,6 +367,8 @@ enum TaskStore {
         str("persona", t.gstackPersonaOverride)
         str("linkedDoc", t.linkedDocPath)
         str("pr", t.pr)
+        str("worktree", t.worktree)
+        str("branch", t.branch)
         if let pid = t.parentId, !pid.isEmpty { lines.append("parent: \(yamlStr(pid))") }
         lines.append("---")
 
@@ -406,6 +429,8 @@ enum TaskStore {
         setStr("persona", t.gstackPersonaOverride)
         setStr("linkedDoc", t.linkedDocPath)
         setStr("pr", t.pr)
+        setStr("worktree", t.worktree)
+        setStr("branch", t.branch)
         if let pid = t.parentId, !pid.isEmpty {
             doc = setOrAddFrontmatterKey(in: doc, key: "parent", value: yamlStr(pid))
         } else {
@@ -685,7 +710,9 @@ enum TaskStore {
             completedPhases: completedPhases,
             gstackPersonaOverride: fm["persona"].flatMap { $0.isEmpty ? nil : $0 },
             linkedDocPath: fm["linkedDoc"].flatMap { $0.isEmpty ? nil : $0 },
-            pr: fm["pr"].flatMap { $0.isEmpty ? nil : $0 }
+            pr: fm["pr"].flatMap { $0.isEmpty ? nil : $0 },
+            worktree: fm["worktree"].flatMap { $0.isEmpty ? nil : $0 },
+            branch: fm["branch"].flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 

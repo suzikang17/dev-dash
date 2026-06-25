@@ -626,6 +626,20 @@ private struct SidebarProjectRow: View {
                             .frame(width: 6, height: 6)
                             .help("Active Claude session")
                     }
+                    // Worktree count indicator (⊞ N)
+                    let activeWorktreeCount = store.tasksV2(for: project.path)
+                        .filter { $0.worktree != nil }.count
+                    if activeWorktreeCount > 0 {
+                        HStack(spacing: 2) {
+                            Text("⊞")
+                                .font(.system(size: 8))
+                                .foregroundColor(DSColor.info)
+                            Text("\(activeWorktreeCount)")
+                                .font(DSFont.monoDigits(.caption2))
+                                .foregroundColor(DSColor.info)
+                        }
+                        .help("\(activeWorktreeCount) active worktree\(activeWorktreeCount == 1 ? "" : "s")")
+                    }
                 }
                 HStack(spacing: DSSpace.xs) {
                     GitRefLabel(path: project.path, branch: project.branch)

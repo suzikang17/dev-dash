@@ -32,6 +32,10 @@ struct TaskDetailSheet: View {
     }
     @State private var prLoadState: PRLoadState = .idle
 
+    // Worktree removal confirmation
+    @State private var showRemoveWorktreeConfirm = false
+    @State private var isRemovingWorktree = false
+
     private var task: TaskItem? {
         store.tasksV2(for: projectPath).first { $0.id == taskId }
     }
@@ -51,6 +55,7 @@ struct TaskDetailSheet: View {
                     titleEditor
                     metadataRow
                     descriptionEditor
+                    if task?.worktree != nil { worktreeSection }
                     if task?.pr != nil { prCard }
                     personaSection
                     phasesSection
@@ -249,6 +254,88 @@ struct TaskDetailSheet: View {
         }
     }
 
+    // MARK: - Worktree Section
+
+    @ViewBuilder
+    private var worktreeSection: some View {
+        if let t = task, let worktreePath = t.worktree {
+            VStack(alignment: .leading, spacing: DSSpace.xs) {
+                SectionHeader("Worktree")
+                VStack(alignment: .leading, spacing: DSSpace.sm) {
+                    // Branch name row
+                    HStack(spacing: DSSpace.sm) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .foregroundColor(.accentColor)
+                            .font(DSFont.label)
+                        Text(t.branch ?? "unknown branch")
+                            .font(DSFont.mono(.caption2))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+
+                    // Path (truncated)
+                    Text(worktreePath)
+                        .font(DSFont.mono(.caption2))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    // Actions row
+                    HStack(spacing: DSSpace.sm) {
+                        // Open terminal at the worktree path.
+                        Button {
+                            store.selection = .project(path: projectPath)
+                            store.terminalOpen = true
+                            _ = store.terminals.session(for: worktreePath)
+                            dismiss()
+                        } label: {
+                            Label("Open terminal", systemImage: "terminal")
+                                .font(DSFont.micro)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        // Remove worktree (with confirmation).
+                        Button(role: .destructive) {
+                            showRemoveWorktreeConfirm = true
+                        } label: {
+                            Label(isRemovingWorktree ? "Removing…" : "Remove worktree",
+                                  systemImage: "trash")
+                                .font(DSFont.micro)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isRemovingWorktree)
+                        .confirmationDialog(
+                            "Remove worktree?",
+                            isPresented: $showRemoveWorktreeConfirm,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Remove worktree + branch", role: .destructive) {
+                                isRemovingWorktree = true
+                                Task {
+                                    await store.removeWorktreeForTask(
+                                        projectPath: projectPath, taskId: taskId)
+                                    await MainActor.run { isRemovingWorktree = false }
+                                }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("This will run `git worktree remove` and delete branch \(t.branch ?? ""). The task record is kept.")
+                        }
+                    }
+                }
+                .padding(DSSpace.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium))
+                .overlay(RoundedRectangle(cornerRadius: DSRadius.medium)
+                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 0.5))
+            }
+        }
+    }
+
     // MARK: - PR Card
 
     /// Parse a PR number from a GitHub pull URL like `.../pull/42`.
@@ -319,6 +406,26 @@ struct TaskDetailSheet: View {
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                 }
+                            }
+                            // Merge-cleanup prompt: PR is merged AND task has an active worktree.
+                            if detail.state.lowercased() == "merged", task?.worktree != nil {
+                                Button {
+                                    isRemovingWorktree = true
+                                    Task {
+                                        await store.removeWorktreeForTask(
+                                            projectPath: projectPath, taskId: taskId)
+                                        await MainActor.run { isRemovingWorktree = false }
+                                    }
+                                } label: {
+                                    Label(isRemovingWorktree ? "Cleaning up…" : "Clean up worktree (PR merged)",
+                                          systemImage: "trash.circle")
+                                        .font(DSFont.micro)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .tint(Color.purple)
+                                .disabled(isRemovingWorktree)
+                                .padding(.top, DSSpace.xs)
                             }
                         }
                     case .failed:

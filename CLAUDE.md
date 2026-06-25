@@ -44,3 +44,8 @@ Native macOS SwiftUI dashboard app for project/task management, devlogs, and AI-
 - Log a devlog entry in `docs/devlog/` after each session
 - Run `lore reindex devlog` after adding entries
 - Add decisions to `docs/decisions/` when a tool/pattern is chosen
+
+## Worktrees
+
+- dev-dash runs launched tasks in isolated git worktrees created under `.worktrees/` in the repo, on a branch `task/<id>-<slug>`, managed by `WorktreeManager`. `.worktrees/` is added to `.git/info/exclude` — never commit it.
+- Each launched task's worktree path + branch are recorded on the task (lore frontmatter `worktree:` / `branch:`). Remove a worktree from the task's detail panel (or the "clean up" prompt after its PR merges) — don't `git worktree remove` it by hand while the app tracks it.
