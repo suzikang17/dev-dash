@@ -370,6 +370,7 @@ enum TaskStore {
         str("worktree", t.worktree)
         str("branch", t.branch)
         if let pid = t.parentId, !pid.isEmpty { lines.append("parent: \(yamlStr(pid))") }
+        if let tid = t.ticket, !tid.isEmpty { lines.append("ticket: \(yamlStr(tid))") }
         lines.append("---")
 
         let frontmatter = lines.joined(separator: "\n")
@@ -435,6 +436,11 @@ enum TaskStore {
             doc = setOrAddFrontmatterKey(in: doc, key: "parent", value: yamlStr(pid))
         } else {
             doc = removeFrontmatterKey(in: doc, key: "parent")
+        }
+        if let tid = t.ticket, !tid.isEmpty {
+            doc = setOrAddFrontmatterKey(in: doc, key: "ticket", value: yamlStr(tid))
+        } else {
+            doc = removeFrontmatterKey(in: doc, key: "ticket")
         }
 
         // --- Body patch: preserve status-history block, replace notes ---
@@ -712,7 +718,8 @@ enum TaskStore {
             linkedDocPath: fm["linkedDoc"].flatMap { $0.isEmpty ? nil : $0 },
             pr: fm["pr"].flatMap { $0.isEmpty ? nil : $0 },
             worktree: fm["worktree"].flatMap { $0.isEmpty ? nil : $0 },
-            branch: fm["branch"].flatMap { $0.isEmpty ? nil : $0 }
+            branch: fm["branch"].flatMap { $0.isEmpty ? nil : $0 },
+            ticket: fm["ticket"].flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 

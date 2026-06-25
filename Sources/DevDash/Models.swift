@@ -304,6 +304,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var linearIssueId: String? = nil
     var linearIdentifier: String? = nil   // e.g. "ENG-123"
     var linearURL: String? = nil
+    /// Owning ticket id (numeric filename prefix of the ticket doc). Nil for tasks
+    /// that have not yet been associated with a ticket.
+    var ticket: String? = nil
 
     var kanbanColumn: KanbanColumn {
         switch (status, owner, hasAIRun) {
@@ -316,6 +319,26 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case (.open, .none, _):                      return .backlog
         }
     }
+}
+
+// MARK: - Ticket (ADR-0008: deliverable that contains tasks)
+
+/// A ticket is a deliverable — the top-level container for work-step tasks.
+/// Backed by `docs/tickets/*.md` (lore `ticket` type).
+/// `id` is the zero-padded numeric filename prefix (e.g. "0001").
+struct Ticket: Identifiable, Hashable {
+    let id: String
+    var title: String
+    var status: TaskStatus
+    var owner: TaskOwner
+    var category: TaskCategory
+    var pr: String?
+    var createdAt: Date
+    var completedAt: Date?
+    var notes: String?
+    // Optional priority/effort (schema-present but not surfaced in UI yet)
+    var priority: String?
+    var effort: String?
 }
 
 struct LiveFileEvent: Identifiable, Hashable {

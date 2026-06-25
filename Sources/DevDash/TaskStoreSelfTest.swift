@@ -48,6 +48,14 @@ enum TaskStoreSelfTest {
         checkWorktreeSlugNaming(check)
         checkWorktreeCollisionClassifier(check)
         checkWorktreeGrouping(check)
+        checkTicketRoundTrip(check)
+        checkTaskItemTicketField(check)
+        checkTicketMigration(check)
+        checkMigrationInterruptedRerun(check)
+        checkMigrationOrphanParent(check)
+        checkMigrationNonNumericId(check)
+        checkMigrationFourLevelChain(check)
+        checkMigrationUnknownKeysPreserved(check)
 
         let msg = failures.isEmpty
             ? "taskstore-selftest: ALL PASS"
@@ -757,6 +765,315 @@ enum TaskStoreSelfTest {
               "j-c: 1 child under fallback parent (got \(groupsC[0].children.count))")
     }
 
+    // MARK: - Check n: Ticket round-trip
+
+    private static func checkTicketRoundTrip(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("n")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        // Add a ticket.
+        let t: Ticket
+        do {
+            t = try TicketStore.add(
+                projectPath: proj,
+                title: "Round-trip ticket",
+                category: .engineering,
+                owner: .human,
+                notes: "Some ticket notes"
+            )
+        } catch {
+            check(false, "n: TicketStore.add threw \(error)"); return
+        }
+
+        let tickets1 = TicketStore.read(proj)
+        guard let read1 = tickets1.first(where: { $0.id == t.id }) else {
+            check(false, "n: ticket not found after add+read"); return
+        }
+
+        check(read1.title    == "Round-trip ticket", "n: title round-trip")
+        check(read1.notes    == "Some ticket notes",  "n: notes round-trip")
+        check(read1.category == .engineering,          "n: category round-trip")
+        check(read1.owner    == .human,                "n: owner round-trip")
+        check(read1.status   == .open,                 "n: status defaults to open")
+
+        // Update: change status + inject a pr, verify unknown keys survive.
+        // First inject an unknown key directly into the file.
+        let ticketDir = TicketStore.dir(for: proj)
+        guard let fname = TicketStore.findFile(id: t.id, in: ticketDir) else {
+            check(false, "n: can't find ticket file"); return
+        }
+        let path = "\(ticketDir)/\(fname)"
+        guard var raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+            check(false, "n: can't read ticket file"); return
+        }
+        raw = TaskStore.setOrAddFrontmatterKey(in: raw, key: "devdash_test_key",
+                                               value: "\"preserved\"")
+        try? raw.write(toFile: path, atomically: true, encoding: .utf8)
+
+        // update() via TicketStore.update.
+        var modified = read1
+        modified.status = .done
+        modified.pr     = "https://github.com/org/repo/pull/5"
+        do {
+            try TicketStore.update(projectPath: proj, modified)
+        } catch {
+            check(false, "n: TicketStore.update threw \(error)"); return
+        }
+
+        let tickets2 = TicketStore.read(proj)
+        guard let read2 = tickets2.first(where: { $0.id == t.id }) else {
+            check(false, "n: ticket not found after update"); return
+        }
+
+        check(read2.status == .done,                                    "n: status updated to done")
+        check(read2.pr     == "https://github.com/org/repo/pull/5",     "n: pr field set")
+        check(read2.title  == "Round-trip ticket",                       "n: title preserved after update")
+        check(read2.notes  == "Some ticket notes",                       "n: notes preserved after update")
+
+        // Verify unknown key survived update().
+        guard let rawAfterUpdate = try? String(contentsOfFile: path, encoding: .utf8) else {
+            check(false, "n: can't re-read ticket file after update"); return
+        }
+        check(rawAfterUpdate.contains("devdash_test_key"), "n: unknown key preserved after update()")
+        check(rawAfterUpdate.contains("preserved"),        "n: unknown key value preserved after update()")
+
+        // setStatus: open → done → check history sentinel.
+        let proj2 = makeTempProject("n2")
+        defer { try? FileManager.default.removeItem(atPath: proj2) }
+        let t2: Ticket
+        do {
+            t2 = try TicketStore.add(projectPath: proj2, title: "Status history ticket",
+                                     notes: "User notes")
+        } catch {
+            check(false, "n2: add threw \(error)"); return
+        }
+        do {
+            try TicketStore.setStatus(projectPath: proj2, id: t2.id, status: .done)
+        } catch {
+            check(false, "n2: setStatus threw \(error)"); return
+        }
+        let dir2 = TicketStore.dir(for: proj2)
+        if let fname2 = TicketStore.findFile(id: t2.id, in: dir2),
+           let rawAfter = try? String(contentsOfFile: "\(dir2)/\(fname2)", encoding: .utf8) {
+            let fm2 = TaskStore.parseTaskFrontmatter(rawAfter)
+            check(fm2["status"] == "done",                    "n2: status frontmatter == done")
+            check(fm2["completed"] != nil,                    "n2: completed date set")
+            check(rawAfter.contains(TaskStore.statusHistorySentinel),
+                  "n2: sentinel present after setStatus")
+            check(rawAfter.contains("open → done"),           "n2: history entry present")
+        } else {
+            check(false, "n2: can't read ticket file after setStatus")
+        }
+        let tickets3 = TicketStore.read(proj2)
+        guard let read3 = tickets3.first(where: { $0.id == t2.id }) else {
+            check(false, "n2: ticket not found after setStatus+read"); return
+        }
+        check(read3.notes == "User notes", "n2: notes clean after setStatus (sentinel not leaked)")
+    }
+
+    // MARK: - Check o: TaskItem.ticket field round-trip
+
+    private static func checkTaskItemTicketField(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("o")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        var t: TaskItem
+        do {
+            t = try TaskStore.add(projectPath: proj, title: "Task with ticket ref",
+                                  notes: "Some notes")
+        } catch {
+            check(false, "o: add threw \(error)"); return
+        }
+
+        // Set ticket via update().
+        t.ticket = "0007"
+        do {
+            try TaskStore.update(projectPath: proj, t)
+        } catch {
+            check(false, "o: update threw \(error)"); return
+        }
+
+        let tasks1 = TaskStore.read(proj)
+        guard let read1 = tasks1.first(where: { $0.id == t.id }) else {
+            check(false, "o: task not found after update"); return
+        }
+        check(read1.ticket == "0007", "o: ticket field round-trips via update (got \(read1.ticket ?? "nil"))")
+        check(read1.notes  == "Some notes", "o: notes preserved after ticket field set")
+
+        // Clear ticket via update().
+        var modified = read1
+        modified.ticket = nil
+        do {
+            try TaskStore.update(projectPath: proj, modified)
+        } catch {
+            check(false, "o: update (clear) threw \(error)"); return
+        }
+
+        let tasks2 = TaskStore.read(proj)
+        guard let read2 = tasks2.first(where: { $0.id == t.id }) else {
+            check(false, "o: task not found after clear"); return
+        }
+        check(read2.ticket == nil, "o: ticket field cleared after update(nil) (got \(read2.ticket ?? "nil"))")
+
+        // Verify raw file has no ticket: key after clear.
+        let dir = TaskStore.file(for: proj)
+        if let fname = TaskStore.findFile(id: t.id, in: dir),
+           let rawAfter = try? String(contentsOfFile: "\(dir)/\(fname)", encoding: .utf8) {
+            let fm = TaskStore.parseTaskFrontmatter(rawAfter)
+            check(fm["ticket"] == nil, "o: ticket key absent from frontmatter after clear")
+        } else {
+            check(false, "o: can't read file for raw verification")
+        }
+    }
+
+    // MARK: - Check p: TicketMigrator
+
+    private static func checkTicketMigration(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("p")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let tasksDir = TaskStore.file(for: proj)
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir,
+                                                     withIntermediateDirectories: true)
+        } catch {
+            check(false, "p: createDirectory threw \(error)"); return
+        }
+
+        // Build fixture:
+        //  T  (id=0001, top-level task, no parent)
+        //  C  (id=0002, child of T, parent=0001)
+        //  G  (id=0003, grandchild of C, parent=0002)
+        //  S  (id=0004, sibling top-level task, no parent)
+        let tDoc = """
+            ---
+            lore_type: task
+            title: "Top-level task T"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-01
+            ---
+            # Top-level task T
+            """
+        let cDoc = """
+            ---
+            lore_type: task
+            title: "Child of T"
+            status: open
+            owner: ai
+            category: engineering
+            source: local
+            created: 2026-06-02
+            parent: "0001"
+            ---
+            # Child of T
+            """
+        let gDoc = """
+            ---
+            lore_type: task
+            title: "Grandchild of C"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-03
+            parent: "0002"
+            ---
+            # Grandchild of C
+            """
+        let sDoc = """
+            ---
+            lore_type: task
+            title: "Sibling top-level S"
+            status: done
+            owner: human
+            category: design
+            source: local
+            created: 2026-06-04
+            completed: 2026-06-05
+            ---
+            # Sibling top-level S
+            """
+
+        do {
+            try tDoc.write(toFile: "\(tasksDir)/0001-top-level-task-t.md",
+                           atomically: true, encoding: .utf8)
+            try cDoc.write(toFile: "\(tasksDir)/0002-child-of-t.md",
+                           atomically: true, encoding: .utf8)
+            try gDoc.write(toFile: "\(tasksDir)/0003-grandchild-of-c.md",
+                           atomically: true, encoding: .utf8)
+            try sDoc.write(toFile: "\(tasksDir)/0004-sibling-top-level-s.md",
+                           atomically: true, encoding: .utf8)
+        } catch {
+            check(false, "p: writing fixture threw \(error)"); return
+        }
+
+        // Run migration.
+        let result = TicketMigrator.migrate(projectPath: proj)
+        check(!result.skipped, "p: first run is not skipped")
+
+        // 1. T and S became tickets.
+        let tickets = TicketStore.read(proj)
+        check(tickets.count == 2, "p: 2 tickets created (got \(tickets.count))")
+        let ticketT = tickets.first(where: { $0.title == "Top-level task T" })
+        let ticketS = tickets.first(where: { $0.title == "Sibling top-level S" })
+        check(ticketT != nil, "p: ticket for T exists")
+        check(ticketS != nil, "p: ticket for S exists")
+        check(ticketS?.status == .done, "p: S ticket carried done status")
+
+        // 2. Original top-level task docs are removed from tasks/.
+        let remainingTaskFiles = (try? FileManager.default.contentsOfDirectory(atPath: tasksDir)) ?? []
+        let tStillPresent = remainingTaskFiles.contains { fname in
+            guard let raw = try? String(contentsOfFile: "\(tasksDir)/\(fname)", encoding: .utf8) else { return false }
+            return TaskStore.parseTaskFrontmatter(raw)["title"] == "Top-level task T"
+        }
+        let sStillPresent = remainingTaskFiles.contains { fname in
+            guard let raw = try? String(contentsOfFile: "\(tasksDir)/\(fname)", encoding: .utf8) else { return false }
+            return TaskStore.parseTaskFrontmatter(raw)["title"] == "Sibling top-level S"
+        }
+        check(!tStillPresent, "p: original T task doc removed from tasks/")
+        check(!sStillPresent, "p: original S task doc removed from tasks/")
+
+        // 3. Originals backed up.
+        let backupDir = "\(proj)/.devdash/migrated-tasks"
+        let backupFiles = (try? FileManager.default.contentsOfDirectory(atPath: backupDir)) ?? []
+        check(backupFiles.contains("0001-top-level-task-t.md"),
+              "p: T original backed up (got \(backupFiles))")
+        check(backupFiles.contains("0004-sibling-top-level-s.md"),
+              "p: S original backed up (got \(backupFiles))")
+
+        // 4. C: ticket= set to T's ticket id, parent= CLEARED.
+        let tasksAfter = TaskStore.read(proj)
+        guard let cTask = tasksAfter.first(where: { $0.title == "Child of T" }) else {
+            check(false, "p: child task C not found after migration"); return
+        }
+        check(cTask.ticket != nil,   "p: C has ticket field set")
+        check(cTask.ticket == ticketT?.id, "p: C ticket points to T's ticket (got \(cTask.ticket ?? "nil"), expected \(ticketT?.id ?? "nil"))")
+        check(cTask.parentId == nil, "p: C parent cleared (was top-level T's child)")
+
+        // 5. G: ticket= set to T's ticket id, parent= C (preserved).
+        guard let gTask = tasksAfter.first(where: { $0.title == "Grandchild of C" }) else {
+            check(false, "p: grandchild task G not found after migration"); return
+        }
+        check(gTask.ticket != nil,        "p: G has ticket field set")
+        check(gTask.ticket == ticketT?.id, "p: G ticket points to T's ticket")
+        check(gTask.parentId != nil,       "p: G parent preserved (non-top parent)")
+        check(TaskStore.numEq(gTask.parentId ?? "", cTask.id),
+              "p: G parent is C (got \(gTask.parentId ?? "nil"), C.id=\(cTask.id))")
+
+        // 6. Marker written.
+        let markerPath = "\(proj)/.devdash/.tickets-migrated"
+        check(FileManager.default.fileExists(atPath: markerPath), "p: marker written")
+
+        // 7. Idempotent: running again skips.
+        let result2 = TicketMigrator.migrate(projectPath: proj)
+        check(result2.skipped, "p: second run is skipped (marker present)")
+        let tickets2 = TicketStore.read(proj)
+        check(tickets2.count == 2, "p: no duplicate tickets after second run (got \(tickets2.count))")
+    }
+
     // MARK: - Check h: migration one-time
 
     private static func checkMigrationOneTime(_ check: (Bool, String) -> Void) {
@@ -826,5 +1143,416 @@ enum TaskStoreSelfTest {
         // Second read — no duplicates.
         let tasks2 = TaskStore.read(proj)
         check(tasks2.count == 2, "h: second read produces no duplicates (got \(tasks2.count))")
+    }
+
+    // MARK: - Check q: interrupted re-run safety
+    // Simulates a partial migration: a child already has parent cleared + ticket set,
+    // AND the original top-level task doc is still present.
+    // Invariant: re-running must NOT promote the child to a ticket, and must NOT
+    // create a second ticket for the original top-level task.
+
+    private static func checkMigrationInterruptedRerun(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("q")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let tasksDir = TaskStore.file(for: proj)
+        let ticketDir = TicketStore.dir(for: proj)
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(atPath: ticketDir, withIntermediateDirectories: true)
+        } catch {
+            check(false, "q: createDirectory threw \(error)"); return
+        }
+
+        // Write the ticket that was already created on the first (incomplete) run.
+        // It carries migrated_from: "0001" so the migrator knows it was made from T.
+        let existingTicketDoc = """
+            ---
+            lore_type: ticket
+            title: "Top-level task T"
+            status: open
+            owner: human
+            category: engineering
+            migrated_from: "0001"
+            created: 2026-06-01
+            ---
+            # Top-level task T
+            """
+        do {
+            try existingTicketDoc.write(toFile: "\(ticketDir)/0001-top-level-task-t.md",
+                                        atomically: true, encoding: .utf8)
+        } catch {
+            check(false, "q: writing existing ticket threw \(error)"); return
+        }
+
+        // Original top-level task doc still present (interrupted before removal).
+        let tDoc = """
+            ---
+            lore_type: task
+            title: "Top-level task T"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-01
+            ---
+            # Top-level task T
+            """
+        // Child: parent already cleared, ticket already set (migration completed for this child).
+        let cDoc = """
+            ---
+            lore_type: task
+            title: "Child of T"
+            status: open
+            owner: ai
+            category: engineering
+            source: local
+            created: 2026-06-02
+            ticket: "0001"
+            ---
+            # Child of T
+            """
+        do {
+            try tDoc.write(toFile: "\(tasksDir)/0001-top-level-task-t.md",
+                           atomically: true, encoding: .utf8)
+            try cDoc.write(toFile: "\(tasksDir)/0002-child-of-t.md",
+                           atomically: true, encoding: .utf8)
+        } catch {
+            check(false, "q: writing task fixtures threw \(error)"); return
+        }
+
+        let result = TicketMigrator.migrate(projectPath: proj)
+        check(!result.skipped, "q: re-run is not skipped (no marker yet)")
+
+        // Exactly 1 ticket must exist — the already-created one, no duplicate.
+        let tickets = TicketStore.read(proj)
+        check(tickets.count == 1, "q: exactly 1 ticket after interrupted re-run (got \(tickets.count))")
+
+        // Child must NOT have been promoted to a ticket (it has ticket: set → not topLevel).
+        let childAsTicket = tickets.first(where: { $0.title == "Child of T" })
+        check(childAsTicket == nil, "q: child with ticket: set was NOT promoted to a ticket")
+
+        // Child task must still exist in tasks/ with ticket field intact.
+        let tasksAfter = TaskStore.read(proj)
+        let child = tasksAfter.first(where: { $0.title == "Child of T" })
+        check(child != nil,           "q: child task still present in tasks/")
+        check(child?.ticket == "0001", "q: child ticket field preserved (got \(child?.ticket ?? "nil"))")
+        check(child?.parentId == nil,  "q: child parent still cleared")
+    }
+
+    // MARK: - Check r: orphan parent → promoted to ticket, dangling parent cleared
+
+    private static func checkMigrationOrphanParent(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("r")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let tasksDir = TaskStore.file(for: proj)
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+        } catch {
+            check(false, "r: createDirectory threw \(error)"); return
+        }
+
+        // O references parent 9999 which doesn't exist → orphan root.
+        let oDoc = """
+            ---
+            lore_type: task
+            title: "Orphan task"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-01
+            parent: "9999"
+            ---
+            # Orphan task
+            """
+        do {
+            try oDoc.write(toFile: "\(tasksDir)/0001-orphan-task.md",
+                           atomically: true, encoding: .utf8)
+        } catch {
+            check(false, "r: writing fixture threw \(error)"); return
+        }
+
+        let result = TicketMigrator.migrate(projectPath: proj)
+        check(!result.skipped, "r: not skipped")
+        check(result.ticketsCreated == 1, "r: 1 ticket created for orphan (got \(result.ticketsCreated))")
+
+        // Orphan became a ticket.
+        let tickets = TicketStore.read(proj)
+        check(tickets.count == 1, "r: exactly 1 ticket (got \(tickets.count))")
+        check(tickets.first?.title == "Orphan task", "r: orphan title carried to ticket")
+
+        // The ticket doc must NOT have a parent: key (dangling parent cleared).
+        let ticketDir = TicketStore.dir(for: proj)
+        if let fname = TicketStore.findFile(id: tickets.first?.id ?? "", in: ticketDir),
+           let rawTicket = try? String(contentsOfFile: "\(ticketDir)/\(fname)", encoding: .utf8) {
+            let fm = TaskStore.parseTaskFrontmatter(rawTicket)
+            check(fm["parent"] == nil, "r: dangling parent cleared on ticket doc")
+            check(fm["migrated_from"] != nil, "r: migrated_from set on orphan ticket")
+        } else {
+            check(false, "r: can't read ticket file")
+        }
+
+        // Original orphan task doc removed from tasks/.
+        let tasksAfter = TaskStore.read(proj)
+        check(tasksAfter.isEmpty, "r: orphan task doc removed from tasks/ (got \(tasksAfter.count))")
+    }
+
+    // MARK: - Check s: non-numeric top-level id → child's parent cleared
+
+    private static func checkMigrationNonNumericId(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("s")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let tasksDir = TaskStore.file(for: proj)
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+        } catch {
+            check(false, "s: createDirectory threw \(error)"); return
+        }
+
+        // Top-level task with a numeric id (normal) — child uses string form "1".
+        let tDoc = """
+            ---
+            lore_type: task
+            title: "Non-padded parent"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-01
+            ---
+            # Non-padded parent
+            """
+        // Child uses the un-padded "1" form of the parent id (as lore CLI writes it).
+        let cDoc = """
+            ---
+            lore_type: task
+            title: "Child of non-padded"
+            status: open
+            owner: ai
+            category: engineering
+            source: local
+            created: 2026-06-02
+            parent: "1"
+            ---
+            # Child of non-padded
+            """
+        do {
+            // Use non-zero-padded filenames as lore CLI would write.
+            try tDoc.write(toFile: "\(tasksDir)/1-non-padded-parent.md",
+                           atomically: true, encoding: .utf8)
+            try cDoc.write(toFile: "\(tasksDir)/2-child-of-non-padded.md",
+                           atomically: true, encoding: .utf8)
+        } catch {
+            check(false, "s: writing fixtures threw \(error)"); return
+        }
+
+        _ = TicketMigrator.migrate(projectPath: proj)
+
+        // Child's parent must be cleared (parent "1" was the top-level task).
+        let tasksAfter = TaskStore.read(proj)
+        guard let child = tasksAfter.first(where: { $0.title == "Child of non-padded" }) else {
+            check(false, "s: child task not found after migration"); return
+        }
+        check(child.parentId == nil, "s: child parent cleared for non-padded parent id")
+        check(child.ticket != nil,   "s: child ticket field set for non-padded parent id")
+
+        // Exactly 1 ticket created.
+        let tickets = TicketStore.read(proj)
+        check(tickets.count == 1, "s: 1 ticket created (got \(tickets.count))")
+        check(tickets.first?.title == "Non-padded parent", "s: correct ticket title")
+    }
+
+    // MARK: - Check t: 4-level chain re-points correctly
+    // ticket > task > subtask > sub-subtask
+
+    private static func checkMigrationFourLevelChain(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("t-chain")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let tasksDir = TaskStore.file(for: proj)
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+        } catch {
+            check(false, "t: createDirectory threw \(error)"); return
+        }
+
+        // T (0001, top-level) → C (0002, parent=0001) → G (0003, parent=0002) → GG (0004, parent=0003)
+        let docs: [(String, String)] = [
+            ("0001-root.md", """
+            ---
+            lore_type: task
+            title: "Root"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-01
+            ---
+            # Root
+            """),
+            ("0002-level1.md", """
+            ---
+            lore_type: task
+            title: "Level 1"
+            status: open
+            owner: ai
+            category: engineering
+            source: local
+            created: 2026-06-01
+            parent: "0001"
+            ---
+            # Level 1
+            """),
+            ("0003-level2.md", """
+            ---
+            lore_type: task
+            title: "Level 2"
+            status: open
+            owner: ai
+            category: engineering
+            source: local
+            created: 2026-06-01
+            parent: "0002"
+            ---
+            # Level 2
+            """),
+            ("0004-level3.md", """
+            ---
+            lore_type: task
+            title: "Level 3"
+            status: open
+            owner: human
+            category: engineering
+            source: local
+            created: 2026-06-01
+            parent: "0003"
+            ---
+            # Level 3
+            """),
+        ]
+        for (fname, content) in docs {
+            do {
+                try content.write(toFile: "\(tasksDir)/\(fname)", atomically: true, encoding: .utf8)
+            } catch {
+                check(false, "t: writing \(fname) threw \(error)"); return
+            }
+        }
+
+        _ = TicketMigrator.migrate(projectPath: proj)
+
+        // 1 ticket from Root.
+        let tickets = TicketStore.read(proj)
+        check(tickets.count == 1, "t: 1 ticket created (got \(tickets.count))")
+        let ticketId = tickets.first?.id ?? ""
+
+        let tasksAfter = TaskStore.read(proj)
+
+        // Level 1 (direct child of Root): parent cleared, ticket set.
+        guard let l1 = tasksAfter.first(where: { $0.title == "Level 1" }) else {
+            check(false, "t: Level 1 not found"); return
+        }
+        check(l1.parentId == nil,      "t: Level 1 parent cleared")
+        check(l1.ticket == ticketId,   "t: Level 1 ticket set (got \(l1.ticket ?? "nil"))")
+
+        // Level 2 (child of Level 1, a non-top task): parent preserved, ticket set.
+        guard let l2 = tasksAfter.first(where: { $0.title == "Level 2" }) else {
+            check(false, "t: Level 2 not found"); return
+        }
+        check(l2.parentId != nil,       "t: Level 2 parent preserved")
+        check(TaskStore.numEq(l2.parentId ?? "", l1.id),
+              "t: Level 2 parent is Level 1 (got \(l2.parentId ?? "nil"), expected \(l1.id))")
+        check(l2.ticket == ticketId,    "t: Level 2 ticket set (got \(l2.ticket ?? "nil"))")
+
+        // Level 3: parent is Level 2 (non-top) → preserved, ticket set.
+        guard let l3 = tasksAfter.first(where: { $0.title == "Level 3" }) else {
+            check(false, "t: Level 3 not found"); return
+        }
+        check(l3.parentId != nil,       "t: Level 3 parent preserved")
+        check(TaskStore.numEq(l3.parentId ?? "", l2.id),
+              "t: Level 3 parent is Level 2 (got \(l3.parentId ?? "nil"), expected \(l2.id))")
+        check(l3.ticket == ticketId,    "t: Level 3 ticket set (got \(l3.ticket ?? "nil"))")
+    }
+
+    // MARK: - Check u: unknown keys + status history preserved on ticket after migration
+
+    private static func checkMigrationUnknownKeysPreserved(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("u")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let tasksDir = TaskStore.file(for: proj)
+        do {
+            try FileManager.default.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+        } catch {
+            check(false, "u: createDirectory threw \(error)"); return
+        }
+
+        // Top-level task carrying: worktree, devdash_id, ai_run, phases, and a
+        // sentinel-delimited status history block.
+        let tDoc = """
+            ---
+            lore_type: task
+            title: "Rich task"
+            status: done
+            owner: ai
+            category: engineering
+            source: local
+            created: 2026-06-01
+            completed: 2026-06-10
+            devdash_id: "uuid-rich-001"
+            worktree: "/repos/myapp/.worktrees/task-0001-rich"
+            branch: "task/0001-rich-task"
+            ai_run: true
+            pr: "https://github.com/org/repo/pull/99"
+            phases: "[\"Phase 1\",\"Phase 2\"]"
+            ---
+            # Rich task
+
+            Some user notes here.
+            <!-- devdash:status-history -->
+            ## Status history
+            - 2026-06-05T10:00 open → in_progress
+            - 2026-06-10T12:00 in_progress → done
+            """
+        do {
+            try tDoc.write(toFile: "\(tasksDir)/0001-rich-task.md",
+                           atomically: true, encoding: .utf8)
+        } catch {
+            check(false, "u: writing fixture threw \(error)"); return
+        }
+
+        _ = TicketMigrator.migrate(projectPath: proj)
+
+        // Read the resulting ticket raw file.
+        let ticketDir = TicketStore.dir(for: proj)
+        let tickets = TicketStore.read(proj)
+        guard let ticket = tickets.first else {
+            check(false, "u: no ticket created"); return
+        }
+        guard let fname = TicketStore.findFile(id: ticket.id, in: ticketDir),
+              let rawTicket = try? String(contentsOfFile: "\(ticketDir)/\(fname)", encoding: .utf8)
+        else {
+            check(false, "u: can't read ticket file"); return
+        }
+
+        let fm = TaskStore.parseTaskFrontmatter(rawTicket)
+
+        check(fm["lore_type"] == "ticket",                 "u: lore_type changed to ticket")
+        check(fm["migrated_from"] == "0001",               "u: migrated_from set")
+        check(fm["title"] == "Rich task",                  "u: title preserved")
+        check(fm["status"] == "done",                      "u: status preserved")
+        check(fm["owner"] == "ai",                         "u: owner preserved")
+        check(fm["devdash_id"] == "uuid-rich-001",         "u: devdash_id preserved")
+        check(fm["worktree"]?.contains("task-0001-rich") == true, "u: worktree preserved")
+        check(fm["branch"] == "task/0001-rich-task",       "u: branch preserved")
+        check(fm["ai_run"] == "true",                      "u: ai_run preserved")
+        check(fm["pr"]?.contains("pull/99") == true,       "u: pr preserved")
+        check(fm["phases"] != nil,                         "u: phases preserved")
+        check(rawTicket.contains(TaskStore.statusHistorySentinel),
+              "u: status history sentinel preserved in ticket body")
+        check(rawTicket.contains("open → in_progress"),    "u: status history entries preserved")
+        check(rawTicket.contains("Some user notes here"),  "u: user notes preserved")
     }
 }
