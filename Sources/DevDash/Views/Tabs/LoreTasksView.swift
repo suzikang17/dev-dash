@@ -411,7 +411,7 @@ struct LoreTasksView: View {
                 Divider()
             }
         } header: {
-            ticketHeader(ticket, taskCount: ticketTasks.count, isExpanded: isExpanded)
+            ticketHeader(ticket, ticketTasks: ticketTasks, isExpanded: isExpanded)
         }
     }
 
@@ -480,8 +480,25 @@ struct LoreTasksView: View {
         }
     }
 
-    private func ticketHeader(_ ticket: Ticket, taskCount: Int, isExpanded: Bool) -> some View {
-        Button {
+    /// Compute a rollup status for a ticket from its child tasks (display-only).
+    /// Returns nil when the ticket has no tasks (caller shows stored status instead).
+    private func ticketRollupStatus(ticketId: String) -> TaskStatus? {
+        let ticketTasks = tasks.filter { loreNumEq($0.ticketId, ticketId) }
+        guard !ticketTasks.isEmpty else { return nil }
+        if ticketTasks.allSatisfy({ $0.status == "done" || $0.status == "skipped" }) { return .done }
+        if ticketTasks.contains(where: { $0.status == "blocked" }) { return .blocked }
+        if ticketTasks.contains(where: { $0.status == "open" && $0.owner == "ai" || $0.status == "in_progress" }) {
+            return .inProgress
+        }
+        return .open
+    }
+
+    private func ticketHeader(_ ticket: Ticket, ticketTasks: [LoreTaskItem], isExpanded: Bool) -> some View {
+        let doneCount = ticketTasks.filter { $0.status == "done" || $0.status == "skipped" }.count
+        let rollup = ticketRollupStatus(ticketId: ticket.id)
+        let displayStatus = rollup ?? ticket.status
+
+        return Button {
             withAnimation(.easeInOut(duration: 0.12)) {
                 if expandedTickets.contains(ticket.id) {
                     expandedTickets.remove(ticket.id)
@@ -493,7 +510,7 @@ struct LoreTasksView: View {
             HStack(spacing: 6) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 9)).foregroundColor(.secondary)
-                ticketStatusDot(ticket.status)
+                ticketStatusDot(displayStatus)
                 Text(ticket.title)
                     .font(DSFont.sectionHeader).foregroundColor(.primary)
                     .lineLimit(1)
@@ -505,14 +522,30 @@ struct LoreTasksView: View {
                     TicketPRBadge(number: n)
                 }
                 Spacer()
-                Text(verbatim: "\(taskCount)")
-                    .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                // Progress count when tasks exist, raw count otherwise
+                if !ticketTasks.isEmpty {
+                    Text(verbatim: "\(doneCount)/\(ticketTasks.count)")
+                        .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                } else {
+                    Text(verbatim: "\(ticketTasks.count)")
+                        .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                }
             }
             .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
             .background(Color(NSColor.windowBackgroundColor))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Section("Claude") {
+                Button {
+                    store.launchClaudeForTicket(ticketId: ticket.id, projectPath: projectPath)
+                    reload()
+                } label: {
+                    Label("Launch with Claude", systemImage: "play.circle")
+                }
+            }
+        }
     }
 
     private func ticketStatusDot(_ status: TaskStatus) -> some View {

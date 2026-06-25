@@ -838,7 +838,7 @@ final class DashboardStore: ObservableObject {
                    let path = liveSessions[sid]?.projectPath {
                     scheduleGitRefresh(for: path)
                 }
-                // PR opened → move linked task to Review & QA.
+                // PR opened → mark work task done + create a review Task under its ticket.
                 if Self.isGHPRCreate(cmd),
                    let session = liveSessions[sid],
                    let taskId = session.linkedTaskId,
@@ -846,21 +846,80 @@ final class DashboardStore: ObservableObject {
                     let prURL = (ev.raw["tool_output"] as? String).flatMap {
                         Self.parsePRURL(from: $0)
                     }
-                    // Only promote from aiWorking → reviewQA. This is correctly idempotent
-                    // (after the move the column becomes .reviewQA, not .aiWorking, so a
-                    // second event is a no-op) AND leaves done/blocked/other-state tasks
-                    // completely untouched.
+                    // Only act from aiWorking state. This is the source-state guard that
+                    // makes the block idempotent: once the work task is .done its
+                    // kanbanColumn != .aiWorking, so a second event is a no-op.
                     let current = TaskStore.read(projPath).first { $0.id == taskId }
                     if current?.kanbanColumn == .aiWorking {
-                        if let url = prURL {
-                            try? TaskStore.setPR(projectPath: projPath, id: taskId, url: url)
-                        }
-                        try? TaskStore.setHasAIRun(projectPath: projPath, id: taskId)
-                        try? TaskStore.setOwner(projectPath: projPath, id: taskId, owner: .human)
-                        reloadTasksAndNotifyForProject(projPath)
-                        if enableNotifications {
-                            let title = current?.title ?? taskId
-                            Notifier.post(title: "PR opened → Review & QA", body: title)
+                        // Mark the work task done (coding complete).
+                        try? TaskStore.setStatus(projectPath: projPath, id: taskId, status: .done)
+
+                        if let ticketId = current?.ticket, !ticketId.isEmpty {
+                            // Ticket-aware path: create a review task under the ticket.
+                            // Idempotency: skip if a review task with this PR already exists.
+                            let existingTasks = TaskStore.read(projPath)
+                            let alreadyExists = prURL.map { url in
+                                existingTasks.contains { t in
+                                    TaskStore.numEq(t.ticket ?? "", ticketId) && t.pr == url
+                                }
+                            } ?? false
+
+                            if !alreadyExists {
+                                // Derive a review title from the ticket (looked up from store).
+                                let ticketTitle = (projectTickets[projPath] ?? [])
+                                    .first { TicketStore.numEq($0.id, ticketId) }?.title
+                                let reviewTitle: String
+                                if let prURL, let n = Self.prNumberFromURL(from: prURL) {
+                                    reviewTitle = "Review PR #\(n)"
+                                } else if let tt = ticketTitle {
+                                    reviewTitle = "Review: \(tt)"
+                                } else {
+                                    reviewTitle = "Review PR"
+                                }
+
+                                do {
+                                    let reviewTask = try TaskStore.add(
+                                        projectPath: projPath,
+                                        title: reviewTitle,
+                                        category: .qa,
+                                        source: .local
+                                    )
+                                    // Set ticket + owner + pr in-place.
+                                    let dir = TaskStore.file(for: projPath)
+                                    if let fname = TaskStore.findFile(id: reviewTask.id, in: dir),
+                                       let raw = try? String(contentsOfFile: "\(dir)/\(fname)", encoding: .utf8) {
+                                        var patched = TaskStore.setOrAddFrontmatterKey(
+                                            in: raw, key: "ticket", value: TaskStore.yamlStr(ticketId))
+                                        patched = TaskStore.setOrAddFrontmatterKey(
+                                            in: patched, key: "owner", value: TaskOwner.human.rawValue)
+                                        if let url = prURL {
+                                            patched = TaskStore.setOrAddFrontmatterKey(
+                                                in: patched, key: "pr", value: TaskStore.yamlStr(url))
+                                        }
+                                        try? patched.write(toFile: "\(dir)/\(fname)", atomically: true, encoding: .utf8)
+                                    }
+                                } catch {
+                                    NSLog("DashboardStore: failed to create review task: %@", error.localizedDescription)
+                                }
+
+                                reloadTasksAndNotifyForProject(projPath)
+                                if enableNotifications {
+                                    let body = ticketTitle ?? (current?.title ?? taskId)
+                                    Notifier.post(title: "PR opened → review task created", body: body)
+                                }
+                            }
+                        } else {
+                            // Legacy fallback (no ticket): move work task to Review & QA.
+                            if let url = prURL {
+                                try? TaskStore.setPR(projectPath: projPath, id: taskId, url: url)
+                            }
+                            try? TaskStore.setHasAIRun(projectPath: projPath, id: taskId)
+                            try? TaskStore.setOwner(projectPath: projPath, id: taskId, owner: .human)
+                            reloadTasksAndNotifyForProject(projPath)
+                            if enableNotifications {
+                                let title = current?.title ?? taskId
+                                Notifier.post(title: "PR opened → Review & QA", body: title)
+                            }
                         }
                     }
                 }
@@ -958,6 +1017,19 @@ final class DashboardStore: ObservableObject {
             guard words.count >= 3 else { return false }
             return words[0] == "gh" && words[1] == "pr" && words[2] == "create"
         }
+    }
+
+    /// Extract the PR number from a GitHub-style PR URL, e.g.
+    /// `https://github.com/org/repo/pull/42` → 42. Returns nil if not matched.
+    nonisolated static func prNumberFromURL(from url: String) -> Int? {
+        let pattern = "/pull/([0-9]+)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(url.startIndex..., in: url)
+        guard let match = regex.firstMatch(in: url, range: range),
+              match.numberOfRanges >= 2,
+              let swiftRange = Range(match.range(at: 1), in: url)
+        else { return nil }
+        return Int(url[swiftRange])
     }
 
     /// Extract the first GitHub-style PR URL from `gh pr create` output.
@@ -2149,6 +2221,74 @@ final class DashboardStore: ObservableObject {
     func launchClaudeForTask(taskId: String, projectPath: String) {
         guard let t = TaskStore.read(projectPath).first(where: { loreIdEq($0.id, taskId) }) else { return }
         launchClaudeForTask(t, projectPath: projectPath)
+    }
+
+    /// Launch Claude for a ticket by creating a work Task under that ticket and
+    /// then calling the existing `launchClaudeForTask` path (worktree + terminal +
+    /// seeded prompt). The new task is owned by AI so the kanban column reads
+    /// .aiWorking immediately.
+    ///
+    /// Idempotent: if the ticket already has an active (.aiWorking) work task,
+    /// re-launches that task instead of creating a duplicate.
+    func launchClaudeForTicket(ticketId: String, projectPath: String) {
+        // Re-use an existing active work task if one exists for this ticket.
+        let existingActive = TaskStore.read(projectPath).first { t in
+            guard let tid = t.ticket else { return false }
+            return TicketStore.numEq(tid, ticketId) && t.kanbanColumn == .aiWorking
+        }
+        if let active = existingActive {
+            launchClaudeForTask(active, projectPath: projectPath)
+            return
+        }
+
+        // Resolve the ticket title for the seeded prompt.
+        let ticket = (projectTickets[projectPath] ?? [])
+            .first { TicketStore.numEq($0.id, ticketId) }
+        let ticketTitle = ticket?.title ?? "ticket \(ticketId)"
+
+        // Create the work task with owner=.ai so it lands in aiWorking.
+        let dir = TaskStore.file(for: projectPath)
+        do {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        } catch {
+            NSLog("launchClaudeForTicket: createDirectory failed: %@", error.localizedDescription)
+            return
+        }
+
+        var workTask: TaskItem
+        do {
+            workTask = try TaskStore.add(
+                projectPath: projectPath,
+                title: ticketTitle,
+                category: ticket?.category ?? .other,
+                source: .local
+            )
+        } catch {
+            NSLog("launchClaudeForTicket: TaskStore.add failed: %@", error.localizedDescription)
+            return
+        }
+
+        // Set ticket + owner=.ai in-place so the task is linked and the kanban
+        // column reflects aiWorking before launchClaudeForTask runs.
+        if let fname = TaskStore.findFile(id: workTask.id, in: dir),
+           let raw = try? String(contentsOfFile: "\(dir)/\(fname)", encoding: .utf8) {
+            var patched = TaskStore.setOrAddFrontmatterKey(
+                in: raw, key: "ticket", value: TaskStore.yamlStr(ticketId))
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "owner", value: TaskOwner.ai.rawValue)
+            try? patched.write(toFile: "\(dir)/\(fname)", atomically: true, encoding: .utf8)
+        }
+        workTask.ticket = ticketId
+        workTask.owner = .ai
+
+        // Refresh in-memory state before launching so the task is visible.
+        projectTasks[projectPath] = TaskStore.read(projectPath)
+        refreshTaskSnapshot(for: projectPath)
+        reloadTickets(for: projectPath)
+
+        // Re-read the task to pick up the persisted ticket/owner fields, then launch.
+        let persisted = TaskStore.read(projectPath).first { $0.id == workTask.id } ?? workTask
+        launchClaudeForTask(persisted, projectPath: projectPath)
     }
 
     func runForTask(taskId: String, projectPath: String, allowEdits: Bool) async {

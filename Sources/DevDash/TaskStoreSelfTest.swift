@@ -89,6 +89,8 @@ enum TaskStoreSelfTest {
         checkMigrationNonNumericId(check)
         checkMigrationFourLevelChain(check)
         checkMigrationUnknownKeysPreserved(check)
+        checkPRReviewTaskCreation(check)
+        checkPRNumberFromURL(check)
 
         let msg = failures.isEmpty
             ? "taskstore-selftest: ALL PASS"
@@ -1587,5 +1589,244 @@ enum TaskStoreSelfTest {
               "u: status history sentinel preserved in ticket body")
         check(rawTicket.contains("open → in_progress"),    "u: status history entries preserved")
         check(rawTicket.contains("Some user notes here"),  "u: user notes preserved")
+    }
+
+    // MARK: - Check v: PR→review-task creation logic
+
+    /// Pure filesystem test: given a work task with a ticket field in .aiWorking state,
+    /// simulates the PostToolUse handler logic and asserts:
+    ///   1. Work task is marked done.
+    ///   2. A review task is created under the ticket with the PR URL.
+    ///   3. Second call (same PR URL) does not create a duplicate.
+    ///   4. Legacy path (no ticket): no review task created, work task moves to Review & QA.
+    private static func checkPRReviewTaskCreation(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("v")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        // --- Setup: ticket + work task with owner=.ai (kanbanColumn == .aiWorking) ---
+        let ticket: Ticket
+        do {
+            ticket = try TicketStore.add(projectPath: proj, title: "Implement login",
+                                         category: .engineering, owner: .human)
+        } catch {
+            check(false, "v: TicketStore.add threw \(error)"); return
+        }
+
+        var workTask: TaskItem
+        do {
+            workTask = try TaskStore.add(projectPath: proj, title: "Implement login",
+                                          category: .engineering, source: .local)
+        } catch {
+            check(false, "v: TaskStore.add threw \(error)"); return
+        }
+
+        // Set ticket + owner=.ai in-place (mirrors launchClaudeForTicket).
+        let dir = TaskStore.file(for: proj)
+        if let fname = TaskStore.findFile(id: workTask.id, in: dir),
+           let raw = try? String(contentsOfFile: "\(dir)/\(fname)", encoding: .utf8) {
+            var patched = TaskStore.setOrAddFrontmatterKey(
+                in: raw, key: "ticket", value: TaskStore.yamlStr(ticket.id))
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "owner", value: TaskOwner.ai.rawValue)
+            try? patched.write(toFile: "\(dir)/\(fname)", atomically: true, encoding: .utf8)
+        }
+        workTask.ticket = ticket.id
+        workTask.owner = .ai
+
+        // Verify the work task is in .aiWorking before we simulate the handler.
+        let tasks0 = TaskStore.read(proj)
+        guard let wt0 = tasks0.first(where: { $0.id == workTask.id }) else {
+            check(false, "v: work task not found before handler"); return
+        }
+        check(wt0.kanbanColumn == .aiWorking, "v: work task starts in aiWorking (got \(wt0.kanbanColumn))")
+
+        // --- Simulate the PostToolUse handler (first call) ---
+        let prURL = "https://github.com/org/repo/pull/7"
+        simulatePRHandler(proj: proj, workTaskId: workTask.id, ticketId: ticket.id, prURL: prURL)
+
+        // 1. Work task is now done.
+        let tasks1 = TaskStore.read(proj)
+        guard let wt1 = tasks1.first(where: { $0.id == workTask.id }) else {
+            check(false, "v: work task not found after first handler"); return
+        }
+        check(wt1.status == .done, "v: work task marked done after PR (got \(wt1.status))")
+
+        // 2. A review task was created with the ticket + PR URL.
+        let reviewTasks = tasks1.filter { t in
+            guard let tid = t.ticket else { return false }
+            return TicketStore.numEq(tid, ticket.id) && t.pr == prURL && t.owner == .human
+        }
+        check(reviewTasks.count == 1, "v: exactly 1 review task created (got \(reviewTasks.count))")
+        check(reviewTasks.first?.owner == .human, "v: review task owner is human")
+
+        // 3. Idempotency: second call with the same PR URL must not create a duplicate.
+        simulatePRHandler(proj: proj, workTaskId: workTask.id, ticketId: ticket.id, prURL: prURL)
+        let tasks2 = TaskStore.read(proj)
+        let reviewTasks2 = tasks2.filter { t in
+            guard let tid = t.ticket else { return false }
+            return TicketStore.numEq(tid, ticket.id) && t.pr == prURL && t.owner == .human
+        }
+        check(reviewTasks2.count == 1,
+              "v: idempotent — still exactly 1 review task after second call (got \(reviewTasks2.count))")
+
+        // 3b. alreadyExists branch: work task is still .aiWorking (not yet done) but
+        //     a review task with the same ticket+PR already exists. The handler must
+        //     not create a second review task even though it has a new work task to act on.
+        let projDedup = makeTempProject("v-dedup")
+        defer { try? FileManager.default.removeItem(atPath: projDedup) }
+
+        // Create a new work task (still aiWorking).
+        var dedupWork: TaskItem
+        do {
+            dedupWork = try TaskStore.add(projectPath: projDedup, title: "Dedup work", source: .local)
+        } catch {
+            check(false, "v-dedup: add threw \(error)"); return
+        }
+        let dedupTicket: Ticket
+        do {
+            dedupTicket = try TicketStore.add(projectPath: projDedup, title: "Dedup ticket",
+                                               category: .engineering, owner: .human)
+        } catch {
+            check(false, "v-dedup: TicketStore.add threw \(error)"); return
+        }
+        let dedupDir = TaskStore.file(for: projDedup)
+        if let fname = TaskStore.findFile(id: dedupWork.id, in: dedupDir),
+           let raw = try? String(contentsOfFile: "\(dedupDir)/\(fname)", encoding: .utf8) {
+            var patched = TaskStore.setOrAddFrontmatterKey(
+                in: raw, key: "ticket", value: TaskStore.yamlStr(dedupTicket.id))
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "owner", value: TaskOwner.ai.rawValue)
+            try? patched.write(toFile: "\(dedupDir)/\(fname)", atomically: true, encoding: .utf8)
+        }
+        dedupWork.ticket = dedupTicket.id
+        dedupWork.owner = .ai
+
+        let dedupPRURL = "https://github.com/org/repo/pull/99"
+
+        // Pre-seed a review task so alreadyExists == true before calling the handler.
+        guard var preExisting = try? TaskStore.add(
+            projectPath: projDedup, title: "Review PR #99", category: .qa, source: .local) else {
+            check(false, "v-dedup: pre-existing review task add failed"); return
+        }
+        if let fname = TaskStore.findFile(id: preExisting.id, in: dedupDir),
+           let raw = try? String(contentsOfFile: "\(dedupDir)/\(fname)", encoding: .utf8) {
+            var patched = TaskStore.setOrAddFrontmatterKey(
+                in: raw, key: "ticket", value: TaskStore.yamlStr(dedupTicket.id))
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "owner", value: TaskOwner.human.rawValue)
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "pr", value: TaskStore.yamlStr(dedupPRURL))
+            try? patched.write(toFile: "\(dedupDir)/\(fname)", atomically: true, encoding: .utf8)
+        }
+        preExisting.ticket = dedupTicket.id
+        preExisting.owner = .human
+
+        // Confirm the work task is still aiWorking before calling the handler.
+        let dedupTasks0 = TaskStore.read(projDedup)
+        guard let dw0 = dedupTasks0.first(where: { $0.id == dedupWork.id }) else {
+            check(false, "v-dedup: work task not found"); return
+        }
+        check(dw0.kanbanColumn == .aiWorking, "v-dedup: work task starts in aiWorking")
+        let dedupReview0 = dedupTasks0.filter { t in
+            guard let tid = t.ticket else { return false }
+            return TicketStore.numEq(tid, dedupTicket.id) && t.pr == dedupPRURL
+        }
+        check(dedupReview0.count == 1, "v-dedup: 1 review task pre-seeded (got \(dedupReview0.count))")
+
+        // Call handler — alreadyExists guard should prevent a second review task.
+        simulatePRHandler(proj: projDedup, workTaskId: dedupWork.id,
+                          ticketId: dedupTicket.id, prURL: dedupPRURL)
+        let dedupTasks1 = TaskStore.read(projDedup)
+        let dedupReview1 = dedupTasks1.filter { t in
+            guard let tid = t.ticket else { return false }
+            return TicketStore.numEq(tid, dedupTicket.id) && t.pr == dedupPRURL
+        }
+        check(dedupReview1.count == 1,
+              "v-dedup: alreadyExists branch — still exactly 1 review task (got \(dedupReview1.count))")
+
+        // 4. Legacy path: work task without a ticket → no review task, work task → reviewQA.
+        let projLegacy = makeTempProject("v-legacy")
+        defer { try? FileManager.default.removeItem(atPath: projLegacy) }
+
+        var legacyTask: TaskItem
+        do {
+            legacyTask = try TaskStore.add(projectPath: projLegacy, title: "Legacy work", source: .local)
+        } catch {
+            check(false, "v-legacy: add threw \(error)"); return
+        }
+        // owner=.ai, no ticket → kanbanColumn == .aiWorking.
+        try? TaskStore.setOwner(projectPath: projLegacy, id: legacyTask.id, owner: .ai)
+        legacyTask.owner = .ai
+        legacyTask.ticket = nil
+
+        let legacyTasks0 = TaskStore.read(projLegacy)
+        guard let lt0 = legacyTasks0.first(where: { $0.id == legacyTask.id }) else {
+            check(false, "v-legacy: task not found"); return
+        }
+        check(lt0.kanbanColumn == .aiWorking, "v-legacy: starts in aiWorking")
+
+        // Legacy handler: setPR + setHasAIRun + setOwner(.human) — mirrors old code path.
+        try? TaskStore.setPR(projectPath: projLegacy, id: legacyTask.id, url: prURL)
+        try? TaskStore.setHasAIRun(projectPath: projLegacy, id: legacyTask.id)
+        try? TaskStore.setOwner(projectPath: projLegacy, id: legacyTask.id, owner: .human)
+
+        let legacyTasks1 = TaskStore.read(projLegacy)
+        guard let lt1 = legacyTasks1.first(where: { $0.id == legacyTask.id }) else {
+            check(false, "v-legacy: task not found after legacy handler"); return
+        }
+        check(lt1.kanbanColumn == .reviewQA, "v-legacy: work task moved to reviewQA (got \(lt1.kanbanColumn))")
+        check(lt1.pr == prURL, "v-legacy: pr field set (got \(lt1.pr ?? "nil"))")
+        // No review task created in legacy path.
+        let legacyAll = legacyTasks1.filter { $0.pr == prURL }
+        check(legacyAll.count == 1, "v-legacy: only 1 task has the PR URL — no spurious review task")
+    }
+
+    /// Helper: simulate the new PostToolUse PR handler logic (ticket-aware path).
+    /// Pure file I/O — no DashboardStore, no main actor, safe in tests.
+    private static func simulatePRHandler(proj: String, workTaskId: String, ticketId: String, prURL: String) {
+        let tasks = TaskStore.read(proj)
+        guard let current = tasks.first(where: { $0.id == workTaskId }),
+              current.kanbanColumn == .aiWorking
+        else { return }
+
+        // Mark work task done.
+        try? TaskStore.setStatus(projectPath: proj, id: workTaskId, status: .done)
+
+        // Idempotency: skip if a review task with this PR already exists under the ticket.
+        let alreadyExists = tasks.contains { t in
+            guard let tid = t.ticket else { return false }
+            return TicketStore.numEq(tid, ticketId) && t.pr == prURL
+        }
+        guard !alreadyExists else { return }
+
+        // Create review task.
+        guard let reviewTask = try? TaskStore.add(
+            projectPath: proj, title: "Review PR #7", category: .qa, source: .local) else { return }
+        let dir = TaskStore.file(for: proj)
+        if let fname = TaskStore.findFile(id: reviewTask.id, in: dir),
+           let raw = try? String(contentsOfFile: "\(dir)/\(fname)", encoding: .utf8) {
+            var patched = TaskStore.setOrAddFrontmatterKey(
+                in: raw, key: "ticket", value: TaskStore.yamlStr(ticketId))
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "owner", value: TaskOwner.human.rawValue)
+            patched = TaskStore.setOrAddFrontmatterKey(
+                in: patched, key: "pr", value: TaskStore.yamlStr(prURL))
+            try? patched.write(toFile: "\(dir)/\(fname)", atomically: true, encoding: .utf8)
+        }
+    }
+
+    // MARK: - Check w: DashboardStore.prNumberFromURL
+
+    private static func checkPRNumberFromURL(_ check: (Bool, String) -> Void) {
+        check(DashboardStore.prNumberFromURL(from: "https://github.com/org/repo/pull/42") == 42,
+              "w: prNumberFromURL extracts 42 from standard URL")
+        check(DashboardStore.prNumberFromURL(from: "https://github.example.com/org/repo/pull/100") == 100,
+              "w: prNumberFromURL works with enterprise host")
+        check(DashboardStore.prNumberFromURL(from: "https://github.com/org/repo/pull/1") == 1,
+              "w: prNumberFromURL works with single-digit PR number")
+        check(DashboardStore.prNumberFromURL(from: "no url here") == nil,
+              "w: prNumberFromURL returns nil for non-URL string")
+        check(DashboardStore.prNumberFromURL(from: "https://github.com/org/repo/issues/42") == nil,
+              "w: prNumberFromURL returns nil for issue URL (not /pull/)")
     }
 }
