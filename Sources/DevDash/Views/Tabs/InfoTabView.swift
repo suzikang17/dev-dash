@@ -112,6 +112,7 @@ struct InfoTabView: View {
             Text("Select a project to see info")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(NebulaBackground())
         }
     }
 }

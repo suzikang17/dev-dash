@@ -608,6 +608,7 @@ private struct SidebarProjectRow: View {
                 Image(systemName: healthIcon)
                     .font(.system(size: 9))
                     .foregroundColor(healthColor)
+                    .healthAura(healthColor, active: project.health == .stale)
             }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: DSSpace.xs) {

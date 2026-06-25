@@ -42,9 +42,13 @@ struct DiffRowsView: View {
 
     @ViewBuilder
     private var rows: some View {
+        // The gutter glow is a per-cell Metal colorEffect — cheap on a normal
+        // diff, but on a huge one it's GPU cost the eye can't register at gutter
+        // scale. Fall back to a flat fill past a threshold.
+        let glow = diff.rows.count <= 400
         let stack = LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(diff.rows.enumerated()), id: \.offset) { idx, row in
-                DiffRowView(row: row, language: language).id(idx)
+                DiffRowView(row: row, language: language, glow: glow).id(idx)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -67,6 +71,7 @@ struct DiffRowsView: View {
 private struct DiffRowView: View {
     let row: DiffRow
     let language: SyntaxHighlighter.Language
+    var glow: Bool = true
 
     var body: some View {
         switch row.kind {
@@ -110,12 +115,26 @@ private struct DiffRowView: View {
         .background(rowBackground(side: side))
     }
 
-    private func rowBackground(side: Side) -> Color {
-        switch row.kind {
-        case .added:    return side == .right ? DSColor.success.opacity(0.12) : .clear
-        case .removed:  return side == .left  ? DSColor.danger.opacity(0.12)  : .clear
-        case .modified: return side == .left  ? DSColor.danger.opacity(0.10)  : DSColor.success.opacity(0.10)
-        default:        return .clear
+    /// Static gutter-anchored glow for changed sides; clear for context/unchanged.
+    /// On large diffs (`glow == false`) it falls back to a flat fill — same
+    /// tint, no per-cell shader.
+    @ViewBuilder
+    private func rowBackground(side: Side) -> some View {
+        switch (row.kind, side) {
+        case (.added, .right):  changedFill(DSColor.success, opacity: 0.12)
+        case (.removed, .left): changedFill(DSColor.danger, opacity: 0.12)
+        case (.modified, .left):  changedFill(DSColor.danger, opacity: 0.10)
+        case (.modified, .right): changedFill(DSColor.success, opacity: 0.10)
+        default:                Color.clear
+        }
+    }
+
+    @ViewBuilder
+    private func changedFill(_ tint: Color, opacity: Double) -> some View {
+        if glow {
+            DiffGlowBackground(tint: tint)
+        } else {
+            tint.opacity(opacity)
         }
     }
 

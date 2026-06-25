@@ -244,6 +244,7 @@ struct LoreTasksView: View {
                     }
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(NebulaBackground())
                 }
             }
             .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
@@ -1068,6 +1069,7 @@ private struct LoreTaskRow: View {
             }
             .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .workingShimmer(active: task.kanbanColumn == .aiWorking)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
