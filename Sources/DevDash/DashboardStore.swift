@@ -112,6 +112,9 @@ final class DashboardStore: ObservableObject {
     /// store so switching tabs doesn't republish this (large) store and
     /// re-render the sidebar. See `TabStore`.
     let tabStore = TabStore()
+    /// Per-project freeform canvas layouts + mode, split out like `TabStore` so
+    /// panel drags don't republish this store. See `CanvasStore`.
+    let canvasStore = CanvasStore()
     @Published var pinnedProjects: Set<String> = Set(
         UserDefaults.standard.stringArray(forKey: "devdash.pinnedProjects") ?? []
     )

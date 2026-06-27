@@ -20,6 +20,7 @@ struct DevDashApp: App {
                 .environmentObject(store)
                 .environmentObject(store.serverStore)
                 .environmentObject(store.tabStore)
+                .environmentObject(store.canvasStore)
                 .frame(minWidth: 900, minHeight: 600)
                 .preferredColorScheme(store.appTheme.colorScheme)
                 .overlay {

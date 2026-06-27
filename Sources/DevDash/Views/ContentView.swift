@@ -4,6 +4,7 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var store: DashboardStore
     @EnvironmentObject var tabStore: TabStore
+    @EnvironmentObject var canvasStore: CanvasStore
     @StateObject private var cmd = CommandBarModel()
     @FocusState private var cmdFocused: Bool
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -161,13 +162,33 @@ struct ContentView: View {
         }
         ToolbarItem(placement: .principal) {
             if let sel = store.selection, sel != .home, sel != .simulator {
-                Picker("Mode", selection: $tabStore.detailTab) {
-                    ForEach(DetailTab.allCases) { tab in
-                        Label(tab.label, systemImage: tab.systemImage).tag(tab)
+                let project = store.project(for: sel)
+                let canvasOn = project.map { canvasStore.isCanvasMode($0.path) } ?? false
+                HStack(spacing: DSSpace.sm) {
+                    if canvasOn {
+                        Label("Canvas", systemImage: "rectangle.3.group")
+                            .font(DSFont.bodyEmphasized)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("Mode", selection: $tabStore.detailTab) {
+                            ForEach(DetailTab.allCases) { tab in
+                                Label(tab.label, systemImage: tab.systemImage).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 460)
+                    }
+                    if let project {
+                        Button {
+                            canvasStore.toggleCanvasMode(project.path)
+                        } label: {
+                            Image(systemName: canvasOn ? "rectangle.3.group.fill" : "rectangle.3.group")
+                                .foregroundStyle(canvasOn ? Color.accentColor : .secondary)
+                        }
+                        .help(canvasOn ? "Exit Canvas" : "Open Canvas")
+                        .accessibilityLabel(canvasOn ? "Exit Canvas" : "Open Canvas")
                     }
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 460)
             }
         }
         ToolbarItem(placement: .primaryAction) {
