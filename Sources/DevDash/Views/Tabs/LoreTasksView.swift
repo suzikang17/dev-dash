@@ -103,6 +103,15 @@ struct LoreTasksView: View {
     @State private var expandedTasksForSubtasks: Set<String> = []
     @State private var addTaskForTicket: String? = nil   // ticketId to add task under
     @State private var newTicketTaskTitle = ""
+    // Suggestion checklist state
+    struct SuggestedDraft: Identifiable {
+        let id = UUID()
+        var title: String
+        var checked: Bool = true
+    }
+    @State private var ticketSuggestions: [String: [SuggestedDraft]] = [:]
+    @State private var suggestingTicketId: String? = nil
+    @State private var suggestRunId: UUID? = nil
 
     private var filtered: [LoreTaskItem] {
         guard !search.isEmpty else { return tasks }
@@ -356,6 +365,41 @@ struct LoreTasksView: View {
 
         Section {
             if isExpanded {
+                if suggestingTicketId == ticket.id {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Suggesting tasks…").font(DSFont.micro).foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                } else if let drafts = ticketSuggestions[ticket.id] {
+                    VStack(alignment: .leading, spacing: DSSpace.xs) {
+                        Text("Suggested tasks (Claude)").font(DSFont.micro).foregroundColor(.secondary)
+                        if drafts.isEmpty {
+                            Text("No tasks suggested — try \"read code\" mode or add manually.")
+                                .font(DSFont.micro).foregroundColor(.secondary)
+                        } else {
+                            ForEach(Array(drafts.enumerated()), id: \.element.id) { idx, _ in
+                                HStack(spacing: 6) {
+                                    Toggle("", isOn: Binding(
+                                        get: { ticketSuggestions[ticket.id]?[idx].checked ?? false },
+                                        set: { ticketSuggestions[ticket.id]?[idx].checked = $0 }
+                                    )).labelsHidden().toggleStyle(.checkbox)
+                                    TextField("Task title", text: Binding(
+                                        get: { ticketSuggestions[ticket.id]?[idx].title ?? "" },
+                                        set: { ticketSuggestions[ticket.id]?[idx].title = $0 }
+                                    )).textFieldStyle(.plain).font(DSFont.micro)
+                                }
+                            }
+                        }
+                        HStack(spacing: DSSpace.sm) {
+                            let n = drafts.filter { $0.checked }.count
+                            Button("Add \(n) task\(n == 1 ? "" : "s")") { acceptSuggestions(ticketId: ticket.id) }
+                                .disabled(n == 0)
+                            Button("Cancel") { ticketSuggestions[ticket.id] = nil }
+                        }
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                }
                 if ticketTasks.isEmpty {
                     HStack(spacing: DSSpace.sm) {
                         Color.clear.frame(width: 20)
@@ -551,6 +595,14 @@ struct LoreTasksView: View {
                     Label("Launch with Claude", systemImage: "play.circle")
                 }
             }
+            Section("Break down") {
+                Button {
+                    startBreakdown(ticketId: ticket.id, deep: false)
+                } label: { Label("Break into tasks", systemImage: "list.bullet.indent") }
+                Button {
+                    startBreakdown(ticketId: ticket.id, deep: true)
+                } label: { Label("Break into tasks (read code)", systemImage: "doc.text.magnifyingglass") }
+            }
             // Manual status only when there's nothing to roll up from. Once a
             // ticket has tasks, its status is derived (see ticketRollupStatus).
             if ticketTasks.isEmpty {
@@ -608,6 +660,34 @@ struct LoreTasksView: View {
         store.addTask(projectPath: projectPath, title: title, ticket: ticketId)
         newTicketTaskTitle = ""
         addTaskForTicket = nil
+        reload()
+    }
+
+    private func startBreakdown(ticketId: String, deep: Bool) {
+        suggestingTicketId = ticketId
+        ticketSuggestions[ticketId] = nil
+        expandedTickets.insert(ticketId)
+        Task {
+            await store.suggestTasksForTicket(ticketId: ticketId, projectPath: projectPath, deep: deep)
+            // runClaude is awaited, so the run has finished. Pick the most recent
+            // task-suggestion run by kind (robust against other concurrent runs).
+            let runs = store.claudeTasks[projectPath] ?? []
+            guard let run = runs.last(where: { $0.kind == .taskSuggestion && $0.status == .completed }) else {
+                suggestingTicketId = nil; return
+            }
+            let titles = store.parseSuggestedTasks(from: run.id, projectPath: projectPath)
+            ticketSuggestions[ticketId] = titles.map { SuggestedDraft(title: $0) }
+            suggestingTicketId = nil
+        }
+    }
+
+    private func acceptSuggestions(ticketId: String) {
+        let drafts = (ticketSuggestions[ticketId] ?? []).filter { $0.checked }
+        for d in drafts where !d.title.trimmingCharacters(in: .whitespaces).isEmpty {
+            store.addTask(projectPath: projectPath, title: d.title, ticket: ticketId)
+        }
+        ticketSuggestions[ticketId] = nil
+        store.reloadTickets(for: projectPath)
         reload()
     }
 
