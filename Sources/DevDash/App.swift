@@ -12,6 +12,7 @@ struct DevDashApp: App {
         DocRegenCLI.runIfRequested()        // exits early when launched with --regen <projectPath>
         DailySelfTest.runIfRequested()      // exits early when launched with --daily-selftest
         TaskStoreSelfTest.runIfRequested()  // exits early when launched with --selftest-taskstore
+        PolicySelfTest.runIfRequested()     // exits early when launched with --selftest-policy
     }
 
     var body: some Scene {
