@@ -2728,8 +2728,16 @@ final class DashboardStore: ObservableObject {
             branchLine = ""
         }
 
+        let policyPreamble: String
+        if task.ticket != nil {
+            let text = ticketPolicyText(projectPath: projectPath, trigger: "on_work")
+            policyPreamble = text.isEmpty ? "" : text + "\n\n"
+        } else {
+            policyPreamble = ""
+        }
+
         let prompt = """
-        Task \(task.id): \(task.title)
+        \(policyPreamble)Task \(task.id): \(task.title)
         Category: \(task.category.label)
         \(task.notes.map { "Notes:\n\($0)" } ?? "")\(branchLine)
 
@@ -2815,6 +2823,25 @@ final class DashboardStore: ObservableObject {
         on its own line as exactly: `TASK: <title>` (so the UI can parse them).
         """
         await runClaude(prompt: prompt, projectPath: projectPath, allowEdits: false, kind: .taskSuggestion)
+    }
+
+    /// Ask claude -p to suggest child tasks for a ticket, guided by the active
+    /// ticket-breakdown policy. Output is `TASK: <title>` lines parsed later by
+    /// `parseSuggestedTasks`. `deep` invites the agent to read code first.
+    func suggestTasksForTicket(ticketId: String, projectPath: String, deep: Bool) async {
+        guard let ticket = (projectTickets[projectPath] ?? [])
+            .first(where: { TicketStore.numEq($0.id, ticketId) }) else { return }
+
+        let existingTitles = tasksV2(for: projectPath)
+            .filter { t in (t.ticket).map { TicketStore.numEq($0, ticketId) } ?? false }
+            .map { $0.title }
+
+        let prompt = buildTicketBreakdownPrompt(
+            ticket: ticket, existingTaskTitles: existingTitles,
+            projectPath: projectPath, deep: deep)
+
+        await runClaude(prompt: prompt, projectPath: projectPath,
+                        allowEdits: false, kind: .taskSuggestion)
     }
 
     /// Ask claude -p for a suggested roadmap diff given the current roadmap +
