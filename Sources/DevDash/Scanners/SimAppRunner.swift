@@ -32,17 +32,56 @@ struct XcodeProject: Identifiable, Hashable {
 
     /// Scan `rootPath` for a .xcworkspace or .xcodeproj and return an
     /// XcodeProject if found.  Workspace takes priority.
+    ///
+    /// Many repos (e.g. a Next.js app with a native companion) keep the Xcode
+    /// project in a subdirectory rather than the repo root, so when the root
+    /// has nothing we scan one level deep, preferring conventional native dirs
+    /// (`ios`, `App`, …) and skipping dependency/build noise.  The returned
+    /// `rootPath` points at the directory that actually contains the project,
+    /// so `xcodebuild`'s cwd and the derived-data slug stay correct.
     static func discover(name: String, rootPath: String) -> XcodeProject? {
+        // 1. Repo root — preserves the original behavior.
+        if let target = buildTarget(in: rootPath) {
+            return XcodeProject(name: name, rootPath: rootPath, buildTarget: target)
+        }
+
+        // 2. One level deep, conventional native dirs first.
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: rootPath) else { return nil }
+        let preferred = ["ios", "App", "app", "apple", "macos", "Sources"]
+        let skip: Set<String> = ["node_modules", "Pods", "DerivedData",
+                                  ".build", ".git", ".worktrees", "build"]
+        let subdirs = entries.filter { entry in
+            guard !entry.hasPrefix("."), !skip.contains(entry) else { return false }
+            var isDir: ObjCBool = false
+            return fm.fileExists(atPath: "\(rootPath)/\(entry)", isDirectory: &isDir) && isDir.boolValue
+        }
+        // Conventional names first, then the rest alphabetically — deterministic.
+        let ordered = subdirs.sorted { a, b in
+            let ai = preferred.firstIndex(of: a) ?? Int.max
+            let bi = preferred.firstIndex(of: b) ?? Int.max
+            return ai != bi ? ai < bi : a < b
+        }
+        for sub in ordered {
+            let subPath = "\(rootPath)/\(sub)"
+            if let target = buildTarget(in: subPath) {
+                return XcodeProject(name: name, rootPath: subPath, buildTarget: target)
+            }
+        }
+        return nil
+    }
+
+    /// Return the build target for an Xcode workspace/project directly inside
+    /// `dir` (non-recursive), preferring a standalone `.xcworkspace`.
+    private static func buildTarget(in dir: String) -> BuildTarget? {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return nil }
         // Prefer workspace (covers CocoaPods / SPM-generated setups).
         if let ws = entries.first(where: { $0.hasSuffix(".xcworkspace") }) {
-            return XcodeProject(name: name, rootPath: rootPath,
-                                buildTarget: .workspace("\(rootPath)/\(ws)"))
+            return .workspace("\(dir)/\(ws)")
         }
         if let proj = entries.first(where: { $0.hasSuffix(".xcodeproj") }) {
-            return XcodeProject(name: name, rootPath: rootPath,
-                                buildTarget: .project("\(rootPath)/\(proj)"))
+            return .project("\(dir)/\(proj)")
         }
         return nil
     }

@@ -312,6 +312,19 @@ struct SidebarView: View {
                         }
                         Spacer()
                         Button {
+                            store.previewDockOpen.toggle()
+                        } label: {
+                            Image(systemName: store.previewDockOpen ? "sidebar.right" : "sidebar.squares.right")
+                                .foregroundColor(store.previewDockOpen ? .accentColor : .secondary)
+                                .font(DSFont.body)
+                        }
+                        .buttonStyle(.plain)
+                        .dsHitTarget()
+                        .disabled(store.project(for: store.selection) == nil)
+                        .help("Toggle Preview dock (⌘P)")
+                        .accessibilityLabel("Toggle Preview dock")
+
+                        Button {
                             store.terminalOpen.toggle()
                         } label: {
                             Image(systemName: "terminal")

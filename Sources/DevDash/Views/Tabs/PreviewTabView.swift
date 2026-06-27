@@ -1,6 +1,9 @@
 import SwiftUI
 import AppKit
 
+/// Which surface the Preview tab is showing for a project that has more than one.
+enum PreviewMode: String { case web, ios }
+
 struct PreviewTabView: View {
     @EnvironmentObject var store: DashboardStore
     @StateObject private var holder = WebViewHolder()
@@ -8,23 +11,99 @@ struct PreviewTabView: View {
     @State private var diffResult: SnapshotDiffResult?
     @State private var toastMessage: String?
     @State private var showingProduction = false
+    /// Web | iOS selection, when the project supports both. Resolved/persisted per project.
+    @State private var previewMode: PreviewMode = .web
+    /// The current project's iOS Xcode project, if any. Resolved off the body
+    /// (disk I/O) in a `.task` keyed on the selection.
+    @State private var iosXcode: XcodeProject? = nil
 
     private func isAppleProject(_ project: Project) -> Bool {
         ["macOS App", "iOS App", "Swift Package", "Xcode"].contains(project.framework)
     }
 
+    /// The iOS-simulator-buildable Xcode project for `project`, if one applies.
+    ///
+    /// Heuristic (no `xcodebuild` platform probe): an Xcode project is treated as
+    /// iOS when the scanner already classified the repo as an iOS App, or when the
+    /// project was discovered in a subdirectory (e.g. `ios/`) rather than the repo
+    /// root — a root-level `.xcodeproj` on a non-iOS repo is more likely a macOS app.
+    private func iosProject(for project: Project) -> XcodeProject? {
+        guard let xp = XcodeProject.discover(name: project.name, rootPath: project.path) else { return nil }
+        if project.framework == "iOS App" { return xp }
+        if xp.rootPath != project.path { return xp }   // found in a subdir like ios/
+        return nil
+    }
+
+    // MARK: Per-project mode memory
+
+    private static let modeMemoryKey = "devdash.previewMode"
+
+    private func savedMode(for path: String) -> PreviewMode? {
+        (UserDefaults.standard.dictionary(forKey: Self.modeMemoryKey) as? [String: String])?[path]
+            .flatMap { PreviewMode(rawValue: $0) }
+    }
+
+    private func saveMode(_ mode: PreviewMode, for path: String) {
+        var m = (UserDefaults.standard.dictionary(forKey: Self.modeMemoryKey) as? [String: String]) ?? [:]
+        m[path] = mode.rawValue
+        UserDefaults.standard.set(m, forKey: Self.modeMemoryKey)
+    }
+
     var body: some View {
         let proj = store.project(for: store.selection)
-        let projectServices: [Service] = proj.map { store.services(for: $0.path) } ?? []
         let svc: Service? = store.service(for: store.selection)
         let customURL: URL? = proj.flatMap { URL(string: store.meta(for: $0.path).customDevServerURL ?? "") }
         let effectiveURL: URL? = customURL ?? svc.flatMap { URL(string: $0.url ?? "") }
+        let hasWeb = effectiveURL != nil
+        let hasIOS = iosXcode != nil
 
-        if let proj = proj, isAppleProject(proj), svc == nil {
+        VStack(spacing: 0) {
+            if let proj, hasIOS, hasWeb {
+                PreviewModeSwitcher(mode: $previewMode)
+                    .onChange(of: previewMode) { _, m in saveMode(m, for: proj.path) }
+                Divider()
+            }
+            routedContent(proj: proj, svc: svc, effectiveURL: effectiveURL,
+                          hasWeb: hasWeb, hasIOS: hasIOS)
+        }
+        // Resolve the iOS project + restore the saved mode off the body, re-running
+        // whenever the selected project changes.
+        .task(id: proj?.path) {
+            let resolved = proj.flatMap { iosProject(for: $0) }
+            iosXcode = resolved
+            if let proj {
+                previewMode = savedMode(for: proj.path) ?? (effectiveURL != nil ? .web : .ios)
+            }
+        }
+    }
+
+    /// Routes to the iOS embed, web preview, Apple buttons view, or empty states.
+    @ViewBuilder
+    private func routedContent(proj: Project?, svc: Service?, effectiveURL: URL?,
+                               hasWeb: Bool, hasIOS: Bool) -> some View {
+        if let proj, hasIOS, !(hasWeb && previewMode == .web) {
+            // iOS app, and either there's no web to show or the user picked iOS.
+            SimulatorEmbedView(fixedProject: proj)
+                .environmentObject(store)
+        } else if let proj, isAppleProject(proj), svc == nil, !hasWeb {
+            // macOS / Swift Package Apple project (iOS handled above).
             AppleAppPreview(project: proj)
                 .environmentObject(store)
         } else if let url = effectiveURL {
-            let slug = VisualSnapshotStore.slugify(url)
+            webPreview(proj: proj, svc: svc, url: url)
+        } else if let proj {
+            NotRunningView(project: proj)
+        } else {
+            Text("No preview available")
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func webPreview(proj: Project?, svc: Service?, url: URL) -> some View {
+        let projectServices: [Service] = proj.map { store.services(for: $0.path) } ?? []
+        let slug = VisualSnapshotStore.slugify(url)
             let vp = holder.viewport.rawValue
             let projectPath = proj?.path ?? ""
             let doSnapshot: (() -> Void)? = svc != nil ? {
@@ -178,13 +257,42 @@ struct PreviewTabView: View {
                 holder.webView.load(URLRequest(url: target))
             }
             .onChange(of: store.selection) { _, _ in showingProduction = false }
-        } else if let proj = proj {
-            NotRunningView(project: proj)
-        } else {
-            Text("No preview available")
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Preview mode switcher (Web | iOS)
+
+/// Segmented Web | iOS toggle shown at the top of the Preview tab when the
+/// selected project has both a web preview and an iOS app.
+private struct PreviewModeSwitcher: View {
+    @Binding var mode: PreviewMode
+
+    var body: some View {
+        HStack(spacing: DSSpace.sm) {
+            pill(label: "Web", systemImage: "globe", active: mode == .web) { mode = .web }
+            pill(label: "iOS", systemImage: "iphone", active: mode == .ios) { mode = .ios }
+            Spacer()
         }
+        .padding(.horizontal, DSSpace.lg)
+        .padding(.vertical, DSSpace.xs)
+        .background(.bar)
+    }
+
+    private func pill(label: String, systemImage: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(DSFont.micro)
+                Text(label)
+                    .font(DSFont.micro.weight(.medium))
+            }
+            .padding(.horizontal, DSSpace.sm)
+            .padding(.vertical, DSSpace.xs)
+            .background(active ? Color.accentColor.opacity(0.20) : Color.secondary.opacity(0.10))
+            .foregroundColor(active ? .accentColor : .secondary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct DetailPaneView: View {
     @EnvironmentObject var store: DashboardStore
     @EnvironmentObject var tabStore: TabStore
+    @EnvironmentObject var canvasStore: CanvasStore
 
     var body: some View {
         let project = store.terminalOpen ? store.project(for: store.selection) : nil
@@ -41,15 +42,20 @@ struct DetailPaneView: View {
             case .some(.simulator):
                 SimulatorView()
             case .some:
-                switch tabStore.detailTab {
-                case .preview: PreviewTabView()
-                case .logs: LogsTabView()
-                case .claude: ClaudeTabView()
-                case .tasks: TasksTabView()
-                case .info: InfoTabView()
-                case .product: ProductTabView()
-                case .changes: ChangesTabView()
-                case .daily: DailyTabView()
+                // Canvas mode replaces the tab body for a project that's in it.
+                if let project = store.project(for: store.selection),
+                   canvasStore.isCanvasMode(project.path) {
+                    CanvasView(project: project)
+                } else {
+                    switch tabStore.detailTab {
+                    case .logs: LogsTabView()
+                    case .claude: ClaudeTabView()
+                    case .tasks: TasksTabView()
+                    case .info: InfoTabView()
+                    case .product: ProductTabView()
+                    case .changes: ChangesTabView()
+                    case .daily: DailyTabView()
+                    }
                 }
             }
         }

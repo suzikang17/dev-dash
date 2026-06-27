@@ -160,7 +160,7 @@ private struct RunningServiceCard: View {
     var body: some View {
         Button {
             store.selection = .service(serviceID: service.id)
-            store.tabStore.detailTab = .preview
+            store.previewDockOpen = true
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.sm) {
                 HStack(spacing: DSSpace.xs) {
@@ -205,7 +205,8 @@ private struct RecentProjectCard: View {
     var body: some View {
         Button {
             store.selection = .project(path: project.path)
-            store.tabStore.detailTab = runningPort != nil ? .preview : .info
+            store.tabStore.detailTab = .info
+            if runningPort != nil { store.previewDockOpen = true }
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.xs) {
                 HStack(spacing: DSSpace.xs) {
@@ -254,7 +255,8 @@ private struct HeatmapCard: View {
 
         Button {
             store.selection = .project(path: project.path)
-            store.tabStore.detailTab = runningPort != nil ? .preview : .info
+            store.tabStore.detailTab = .info
+            if runningPort != nil { store.previewDockOpen = true }
         } label: {
             VStack(alignment: .leading, spacing: DSSpace.xs) {
                 HStack(spacing: DSSpace.xs) {
