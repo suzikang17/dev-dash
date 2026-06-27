@@ -26,6 +26,7 @@ struct ContentView: View {
             .toolbar { toolbarContent }
             .background { tabShortcuts }
             .background { commandShortcut }
+            .background { previewDockShortcut }
             // Results drop from the top bar as a same-window overlay (not a popover)
             // so the toolbar field keeps key focus while you type and navigate.
             .overlay(alignment: .topTrailing) {
@@ -53,14 +54,27 @@ struct ContentView: View {
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: store.lastHookBanner)
 
-            // Side terminal lives BESIDE the split view (not inside the detail), so it
-            // can't starve the toolbar/detail and collapse the sidebar.
-            if store.terminalOpen, store.terminalPlacement == .side,
-               let project = store.project(for: store.selection) {
+            // Preview dock lives BESIDE the split view (not inside the detail), so it
+            // can't starve the toolbar/detail and collapse the sidebar. Resizable from
+            // narrow up to nearly full-width; follows the current project selection.
+            if store.previewDockOpen, store.project(for: store.selection) != nil {
                 Divider()
-                SideTerminalContainer(project: project, initialWidth: store.terminalWidth)
+                PreviewDockContainer(initialWidth: store.previewDockWidth)
             }
         }
+    }
+
+    /// Hidden ⌘P button toggling the right-side Preview dock (only when a
+    /// project/service is selected — Preview is project-scoped).
+    private var previewDockShortcut: some View {
+        Button("") {
+            if store.project(for: store.selection) != nil {
+                store.previewDockOpen.toggle()
+            }
+        }
+        .keyboardShortcut("p", modifiers: .command)
+        .frame(width: 0, height: 0)
+        .opacity(0)
     }
 
     /// Hidden buttons binding ⌘1–9 to the nine detail tabs (only while a
@@ -240,6 +254,42 @@ struct ContentView: View {
         case .project(let path):
             return store.projects.first { $0.path == path }?.name ?? "Project"
         }
+    }
+}
+
+// MARK: - Preview dock
+
+/// Right-side resizable dock hosting the project's Preview surface (`PreviewTabView`).
+/// Mirrors the old side-terminal container: a leading `ResizeHandle` writes the width
+/// back to the store, and a lightweight placeholder stands in during the drag so the
+/// embedded WebView/simulator isn't relaid out every frame.
+struct PreviewDockContainer: View {
+    @EnvironmentObject var store: DashboardStore
+    @State private var width: CGFloat
+    @State private var dragStart: CGFloat?
+
+    init(initialWidth: CGFloat) {
+        _width = State(initialValue: initialWidth)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ResizeHandle(edge: .leading) { delta in
+                let start = dragStart ?? width
+                if dragStart == nil { dragStart = start }
+                // Min keeps the panel usable; max lets it grow to nearly full-width.
+                width = min(2000, max(360, start + delta))
+            } onEnded: {
+                dragStart = nil
+                store.previewDockWidth = width
+            }
+            // Keep PreviewTabView mounted across the resize — swapping it out for a
+            // placeholder (the terminal's trick) would tear down the simulator's
+            // BaguetteRunner and stop the server on every drag. Only the width changes.
+            PreviewTabView()
+        }
+        .frame(width: width)
+        .onDisappear { store.previewDockWidth = width }
     }
 }
 

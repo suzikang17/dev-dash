@@ -229,7 +229,7 @@ private extension View {
 
 /// Shown in place of the live terminal during a resize drag so SwiftTerm isn't
 /// forced to redraw every frame; the real terminal returns (one reflow) on end.
-private struct TerminalResizePlaceholder: View {
+struct TerminalResizePlaceholder: View {
     let label: String
     var body: some View {
         Color(NSColor.windowBackgroundColor)
@@ -242,7 +242,7 @@ private struct TerminalResizePlaceholder: View {
 }
 
 /// A thin draggable edge. `edge` picks cursor + which translation drives the delta.
-private struct ResizeHandle: View {
+struct ResizeHandle: View {
     enum Edge { case top, leading, bottom }
     let edge: Edge
     let onChanged: (CGFloat) -> Void   // signed delta in points (positive = grow)
@@ -303,40 +303,6 @@ struct BottomTerminalContainer: View {
         }
         .frame(height: height)
         .onDisappear { store.terminalHeight = height }
-    }
-}
-
-// MARK: - Side
-
-struct SideTerminalContainer: View {
-    @EnvironmentObject var store: DashboardStore
-    let project: Project
-    @State private var width: CGFloat
-    @State private var dragStart: CGFloat?
-
-    init(project: Project, initialWidth: CGFloat) {
-        self.project = project
-        _width = State(initialValue: initialWidth)
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ResizeHandle(edge: .leading) { delta in
-                let start = dragStart ?? width
-                if dragStart == nil { dragStart = start }
-                width = min(900, max(320, start + delta))
-            } onEnded: {
-                dragStart = nil
-                store.terminalWidth = width
-            }
-            if dragStart != nil {
-                TerminalResizePlaceholder(label: "\(Int(width)) pt")
-            } else {
-                TerminalPanel(project: project)
-            }
-        }
-        .frame(width: width)
-        .onDisappear { store.terminalWidth = width }
     }
 }
 

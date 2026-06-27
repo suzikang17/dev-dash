@@ -637,13 +637,14 @@ enum Selection: Hashable {
 }
 
 enum DetailTab: String, CaseIterable, Identifiable {
-    case info, preview, claude, tasks, product, changes, logs, daily
+    // `preview` was removed from the main tab strip — Preview now lives in the
+    // right-side dock (toggle with ⌘P).
+    case info, claude, tasks, product, changes, logs, daily
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .info: return "Info"
-        case .preview: return "Preview"
         case .claude: return "Claude"
         case .tasks: return "Tasks"
         case .product: return "Product"
@@ -656,7 +657,6 @@ enum DetailTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .info: return "info.circle"
-        case .preview: return "globe"
         case .claude: return "sparkles"
         case .tasks: return "checklist"
         case .product: return "doc.richtext"

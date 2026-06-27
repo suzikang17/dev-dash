@@ -14,20 +14,19 @@ enum AppTheme: String, CaseIterable {
 }
 
 /// Where the embedded terminal renders. Persisted under `devdash.terminal.placement`.
+/// (The right-`side` placement was removed — the right edge is now the Preview dock.)
 enum TerminalPlacement: String, CaseIterable {
-    case bottom, side, floating
+    case bottom, floating
 
     var label: String {
         switch self {
         case .bottom: return "Bottom"
-        case .side: return "Side"
         case .floating: return "Floating"
         }
     }
     var icon: String {
         switch self {
         case .bottom: return "rectangle.bottomthird.inset.filled"
-        case .side: return "rectangle.rightthird.inset.filled"
         case .floating: return "macwindow"
         }
     }
@@ -228,6 +227,11 @@ final class DashboardStore: ObservableObject {
         TerminalPlacement(rawValue: UserDefaults.standard.string(forKey: "devdash.terminal.placement") ?? "") ?? .bottom {
         didSet { UserDefaults.standard.set(terminalPlacement.rawValue, forKey: "devdash.terminal.placement") }
     }
+
+    // Preview dock (right-side, resizable; hosts the project's Preview surface).
+    @Published var previewDockOpen: Bool = UserDefaults.standard.bool(forKey: "devdash.previewDock.open") {
+        didSet { UserDefaults.standard.set(previewDockOpen, forKey: "devdash.previewDock.open") }
+    }
     @Published var terminalFontSize: Double =
         UserDefaults.standard.object(forKey: "devdash.terminal.fontSize") as? Double ?? 13 {
         didSet {
@@ -410,6 +414,10 @@ final class DashboardStore: ObservableObject {
     var terminalWidth: CGFloat {
         get { CGFloat(UserDefaults.standard.object(forKey: "devdash.terminal.width") as? Double ?? 420) }
         set { UserDefaults.standard.set(Double(newValue), forKey: "devdash.terminal.width") }
+    }
+    var previewDockWidth: CGFloat {
+        get { CGFloat(UserDefaults.standard.object(forKey: "devdash.previewDock.width") as? Double ?? 480) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "devdash.previewDock.width") }
     }
     var terminalFloatingFrame: CGRect {
         get {

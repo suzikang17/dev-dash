@@ -42,7 +42,6 @@ struct DetailPaneView: View {
                 SimulatorView()
             case .some:
                 switch tabStore.detailTab {
-                case .preview: PreviewTabView()
                 case .logs: LogsTabView()
                 case .claude: ClaudeTabView()
                 case .tasks: TasksTabView()

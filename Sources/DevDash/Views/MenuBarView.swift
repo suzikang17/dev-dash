@@ -143,7 +143,7 @@ private struct MenuBarServiceRow: View {
 
                 Button {
                     store.selection = .service(serviceID: service.id)
-                    store.tabStore.detailTab = .preview
+                    store.previewDockOpen = true
                     openMain()
                 } label: {
                     Image(systemName: "macwindow")
@@ -173,7 +173,7 @@ private struct MenuBarServiceRow: View {
         .onHover { hover = $0 }
         .onTapGesture {
             store.selection = .service(serviceID: service.id)
-            store.tabStore.detailTab = .preview
+            store.previewDockOpen = true
             openMain()
         }
     }
