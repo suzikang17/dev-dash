@@ -925,7 +925,7 @@ private struct ArtifactBodySheet: View {
 }
 
 /// Parse a PR number from a GitHub pull URL (e.g. `.../pull/42` → 42).
-/// Shared by TaskDetailSheet and TasksTabView so the two can't drift.
+/// Shared by TaskDetailSheet and LoreTasksView so the two can't drift.
 func prNumberFromURL(_ url: String) -> Int? {
     guard let u = URL(string: url),
           let comps = URLComponents(url: u, resolvingAgainstBaseURL: false) else { return nil }

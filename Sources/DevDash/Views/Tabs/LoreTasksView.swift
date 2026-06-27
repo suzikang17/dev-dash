@@ -1744,7 +1744,7 @@ private struct LoreIdeaDetailPane: View {
     }
 }
 
-// MARK: - Ticket PR badge (reuses the same visual as PRBadge in TasksTabView)
+// MARK: - Ticket PR badge
 
 private struct TicketPRBadge: View {
     let number: Int
