@@ -19,6 +19,7 @@ enum PolicySelfTest {
 
         checkPolicyReadRoundTrip(check)
         checkPolicyQuery(check)
+        checkBreakdownPrompt(check)
 
         let msg = failures.isEmpty
             ? "policy-selftest: ALL PASS"
@@ -131,5 +132,46 @@ enum PolicySelfTest {
 
         let onWork = store.policies(for: proj, appliesTo: "ticket", trigger: "on_work")
         check(onWork.map { $0.id } == ["0002"], "query: on_work matches only B")
+    }
+
+    @MainActor
+    private static func checkBreakdownPrompt(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("prompt")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        writePolicy(proj, filename: "0001-breakdown.md", contents: """
+        ---
+        lore_type: policy
+        title: Break tickets into tasks
+        applies_to: [ticket]
+        trigger: [on_demand, on_work]
+        status: active
+        ---
+        POLICY_MARKER produce 3-6 tasks. Output each as: `TASK: <title>`
+        """)
+
+        let store = DashboardStore()
+        store.reloadPolicies(for: proj)
+
+        let ticket = Ticket(
+            id: "0007", title: "Implement login", status: .open, owner: .none,
+            category: .engineering, pr: nil, createdAt: Date(), completedAt: nil,
+            notes: "Email + password.", priority: nil, effort: nil
+        )
+
+        let quick = store.buildTicketBreakdownPrompt(
+            ticket: ticket, existingTaskTitles: ["Add form UI"], projectPath: proj, deep: false)
+        check(quick.contains("POLICY_MARKER"),        "prompt: injects policy body")
+        check(quick.contains("Implement login"),       "prompt: includes ticket title")
+        check(quick.contains("Email + password."),     "prompt: includes ticket notes")
+        check(quick.contains("Add form UI"),           "prompt: lists existing tasks (dedupe)")
+        check(quick.contains("TASK:"),                 "prompt: carries TASK: instruction")
+
+        let deep = store.buildTicketBreakdownPrompt(
+            ticket: ticket, existingTaskTitles: [], projectPath: proj, deep: true)
+        check(deep.lowercased().contains("read"),      "prompt: deep mode invites reading code")
+
+        let policyText = store.ticketPolicyText(projectPath: proj, trigger: "on_work")
+        check(policyText.contains("POLICY_MARKER"),    "policyText: on_work returns body")
     }
 }

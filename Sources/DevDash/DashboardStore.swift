@@ -1753,6 +1753,43 @@ final class DashboardStore: ObservableObject {
             }
     }
 
+    /// Joined bodies of active `ticket`-scoped policies for a trigger.
+    /// Empty string when none match.
+    func ticketPolicyText(projectPath: String, trigger: String) -> String {
+        policies(for: projectPath, appliesTo: "ticket", trigger: trigger)
+            .map { $0.body }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+    }
+
+    /// Build the on-demand ticket-breakdown prompt. Policy text first, then
+    /// ticket context, then existing tasks to avoid duplicates. Launch-template
+    /// is intentionally not included.
+    func buildTicketBreakdownPrompt(ticket: Ticket,
+                                    existingTaskTitles: [String],
+                                    projectPath: String,
+                                    deep: Bool) -> String {
+        let policy = ticketPolicyText(projectPath: projectPath, trigger: "on_demand")
+        let existing = existingTaskTitles.isEmpty
+            ? "(none yet)"
+            : existingTaskTitles.map { "- \($0)" }.joined(separator: "\n")
+        let deepLine = deep
+            ? "\nFirst read the relevant code in this project to ground your suggestions.\n"
+            : ""
+        return """
+        \(policy.isEmpty ? "Break this ticket into concrete child tasks." : policy)
+        \(deepLine)
+        Ticket: \(ticket.title)
+        Category: \(ticket.category.rawValue)
+        Notes: \(ticket.notes ?? "(none)")
+
+        Existing tasks on this ticket (don't duplicate these):
+        \(existing)
+
+        Output each suggested task on its own line as exactly: `TASK: <title>`
+        """
+    }
+
     func applyTemplate(_ template: LaunchTemplate, to projectPath: String) {
         do {
             try ProjectMetaStore.applyTemplate(template, to: projectPath)
