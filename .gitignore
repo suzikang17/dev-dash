@@ -12,7 +12,11 @@ DerivedData/
 
 # oh-my-claudecode state
 .omc/
-.claude/
+# override the global ~/.gitignore_global rule that excludes the whole .claude/ dir
+!.claude/
+.claude/*
+# but track shared project settings (hooks/permissions installed by HookInstaller)
+!.claude/settings.json
 
 # DevDash.app — track Info.plist only; ignore binary + generated files
 DevDash.app/Contents/MacOS/DevDash
