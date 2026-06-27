@@ -212,6 +212,7 @@ final class DashboardStore: ObservableObject {
     @Published var projectMeta: [String: ProjectMeta] = [:]   // path → meta
     @Published var projectTasks: [String: [TaskItem]] = [:]   // path → tasks
     @Published var projectTickets: [String: [Ticket]] = [:]   // path → tickets
+    @Published var projectPolicies: [String: [Policy]] = [:]   // path → policies
     @Published var projectGroups: [ProjectGroup] = []         // all groups (global)
     @Published var groupLinearTasks: [String: [TaskItem]] = [:] // groupId → Linear tasks
     @Published var projectProviders: [String: [Provider]] = [:]   // path → providers
@@ -307,6 +308,9 @@ final class DashboardStore: ObservableObject {
             // — Tickets (silent reload — no notifications) —
             let freshTickets = TicketStore.read(path)
             projectTickets[path] = freshTickets.isEmpty ? nil : freshTickets
+
+            // — Policies (silent reload) —
+            reloadPolicies(for: path)
 
             // — Tasks —
             let fresh = TaskStore.read(path)
@@ -1728,6 +1732,27 @@ final class DashboardStore: ObservableObject {
         projectTickets[projectPath] = tickets.isEmpty ? nil : tickets
     }
 
+    /// Re-read policy docs for a project into `projectPolicies`.
+    func reloadPolicies(for projectPath: String) {
+        projectPolicies[projectPath] = PolicyStore.read(projectPath)
+    }
+
+    /// Active policies whose scope contains `scope` (or "any") and whose
+    /// trigger list contains `trigger`, ordered by (priority ?? max, numeric id).
+    func policies(for projectPath: String, appliesTo scope: String, trigger: String) -> [Policy] {
+        let all = projectPolicies[projectPath] ?? PolicyStore.read(projectPath)
+        return all
+            .filter { $0.status == .active }
+            .filter { $0.appliesTo.contains(scope) || $0.appliesTo.contains("any") }
+            .filter { $0.trigger.contains(trigger) }
+            .sorted { lhs, rhs in
+                let lp = lhs.priority ?? Int.max
+                let rp = rhs.priority ?? Int.max
+                if lp != rp { return lp < rp }
+                return (Int(lhs.id) ?? 0) < (Int(rhs.id) ?? 0)
+            }
+    }
+
     func applyTemplate(_ template: LaunchTemplate, to projectPath: String) {
         do {
             try ProjectMetaStore.applyTemplate(template, to: projectPath)
@@ -1868,6 +1893,7 @@ final class DashboardStore: ObservableObject {
                 category: category, owner: owner, notes: notes
             )
             reloadTickets(for: projectPath)
+            reloadPolicies(for: projectPath)
             todoError = nil
         } catch {
             todoError = "Couldn't add ticket: \(error.localizedDescription)"
@@ -1878,12 +1904,14 @@ final class DashboardStore: ObservableObject {
     func setTicketStatus(projectPath: String, id: String, status: TaskStatus) {
         try? TicketStore.setStatus(projectPath: projectPath, id: id, status: status)
         reloadTickets(for: projectPath)
+        reloadPolicies(for: projectPath)
     }
 
     /// Set owner on a ticket by id, then refresh tickets.
     func setTicketOwner(projectPath: String, id: String, owner: TaskOwner) {
         try? TicketStore.setOwner(projectPath: projectPath, id: id, owner: owner)
         reloadTickets(for: projectPath)
+        reloadPolicies(for: projectPath)
     }
 
     func setTaskParent(projectPath: String, id: String, newParentId: String?) {
@@ -2285,6 +2313,7 @@ final class DashboardStore: ObservableObject {
         projectTasks[projectPath] = TaskStore.read(projectPath)
         refreshTaskSnapshot(for: projectPath)
         reloadTickets(for: projectPath)
+        reloadPolicies(for: projectPath)
 
         // Re-read the task to pick up the persisted ticket/owner fields, then launch.
         let persisted = TaskStore.read(projectPath).first { $0.id == workTask.id } ?? workTask

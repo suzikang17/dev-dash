@@ -6,6 +6,11 @@ import Foundation
 enum PolicySelfTest {
     static func runIfRequested() {
         guard CommandLine.arguments.contains("--selftest-policy") else { return }
+        MainActor.assumeIsolated { run() }
+    }
+
+    @MainActor
+    private static func run() -> Never {
         var failures: [String] = []
         func check(_ cond: Bool, _ label: String) {
             if cond { print("  ok   \(label)") }
@@ -13,6 +18,7 @@ enum PolicySelfTest {
         }
 
         checkPolicyReadRoundTrip(check)
+        checkPolicyQuery(check)
 
         let msg = failures.isEmpty
             ? "policy-selftest: ALL PASS"
@@ -61,5 +67,69 @@ enum PolicySelfTest {
         check(p.status == .active,                    "read: status parsed")
         check(p.priority == 10,                       "read: priority parsed")
         check(p.body.contains("TASK: <title>"),       "read: body captured")
+    }
+
+    @MainActor
+    private static func checkPolicyQuery(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("query")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        // active ticket policy, priority 20
+        writePolicy(proj, filename: "0001-a.md", contents: """
+        ---
+        lore_type: policy
+        title: A
+        applies_to: [ticket]
+        trigger: [on_demand]
+        status: active
+        priority: 20
+        ---
+        body A
+        """)
+        // active ticket policy, priority 5 (should sort first)
+        writePolicy(proj, filename: "0002-b.md", contents: """
+        ---
+        lore_type: policy
+        title: B
+        applies_to: [any]
+        trigger: [on_demand, on_work]
+        status: active
+        priority: 5
+        ---
+        body B
+        """)
+        // draft — must be excluded
+        writePolicy(proj, filename: "0003-c.md", contents: """
+        ---
+        lore_type: policy
+        title: C
+        applies_to: [ticket]
+        trigger: [on_demand]
+        status: draft
+        ---
+        body C
+        """)
+        // wrong trigger — excluded for on_demand
+        writePolicy(proj, filename: "0004-d.md", contents: """
+        ---
+        lore_type: policy
+        title: D
+        applies_to: [ticket]
+        trigger: [always]
+        status: active
+        ---
+        body D
+        """)
+
+        let store = DashboardStore()
+        let onDemand = store.policies(for: proj, appliesTo: "ticket", trigger: "on_demand")
+        check(onDemand.map { $0.id } == ["0002", "0001"],
+              "query: active+scope+trigger, ordered by priority (B before A)")
+        check(!onDemand.contains { $0.id == "0003" }, "query: draft excluded")
+        check(!onDemand.contains { $0.id == "0004" }, "query: wrong-trigger excluded")
+        check(onDemand.contains { $0.id == "0002" },  "query: 'any' scope matches ticket")
+
+        let onWork = store.policies(for: proj, appliesTo: "ticket", trigger: "on_work")
+        check(onWork.map { $0.id } == ["0002"], "query: on_work matches only B")
     }
 }
