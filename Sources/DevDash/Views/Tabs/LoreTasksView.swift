@@ -522,13 +522,19 @@ struct LoreTasksView: View {
                     TicketPRBadge(number: n)
                 }
                 Spacer()
-                // Progress count when tasks exist, raw count otherwise
+                // Progress count when tasks exist; "draft" pill (or manual status)
+                // when the ticket has no tasks to roll up from.
                 if !ticketTasks.isEmpty {
                     Text(verbatim: "\(doneCount)/\(ticketTasks.count)")
                         .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                } else if ticket.status == .open {
+                    Text("draft")
+                        .font(DSFont.micro).foregroundColor(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(Color.secondary.opacity(0.12)))
                 } else {
-                    Text(verbatim: "\(ticketTasks.count)")
-                        .font(DSFont.monoDigits(.caption2)).foregroundColor(.secondary)
+                    Text(ticket.status.label.lowercased())
+                        .font(DSFont.micro).foregroundColor(.secondary)
                 }
             }
             .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
@@ -545,7 +551,30 @@ struct LoreTasksView: View {
                     Label("Launch with Claude", systemImage: "play.circle")
                 }
             }
+            // Manual status only when there's nothing to roll up from. Once a
+            // ticket has tasks, its status is derived (see ticketRollupStatus).
+            if ticketTasks.isEmpty {
+                Section("Status") {
+                    Picker("Status", selection: Binding(
+                        get: { ticket.status },
+                        set: { store.setTicketStatus(projectPath: projectPath, id: ticket.id, status: $0) }
+                    )) {
+                        ForEach(ticketManualStatuses, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                }
+            } else {
+                Section {
+                    Label("Status rolls up from tasks", systemImage: "arrow.triangle.merge")
+                }
+                .disabled(true)
+            }
         }
+    }
+
+    /// Statuses a user may set manually on a task-less ("draft") ticket.
+    private var ticketManualStatuses: [TaskStatus] {
+        [.open, .inProgress, .blocked, .done, .skipped]
     }
 
     private func ticketStatusDot(_ status: TaskStatus) -> some View {
