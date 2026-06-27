@@ -41,10 +41,10 @@ body: free
 groupBy: { field: status, order: [active, draft, deprecated] }
 frontmatter:
   - { name: title,      type: string,  required: true }
-  - { name: applies_to, type: list,    required: true }   # lore types or scopes: ticket, task, project, pr, release, session, any
-  - { name: trigger,    type: list }                       # core wired: on_demand, on_work, always
+  - { name: applies_to, type: string,  required: true }   # comma-separated: ticket, task, project, pr, release, session, any
+  - { name: trigger,    type: string }                    # comma-separated: on_demand, on_work, always
   - { name: status,     type: enum, values: [draft, active, deprecated], required: true }
-  - { name: priority,   type: int }
+  - { name: priority,   type: string }                    # integer-as-string (lore has no list/int type; mirrors task.schema phases convention)
 index:
   - { header: "#", source: id }
   - { header: Policy, source: title, link: true }
@@ -61,8 +61,8 @@ Create `docs/policies/0001-ticket-breakdown.md`:
 ---
 lore_type: policy
 title: Break tickets into tasks
-applies_to: [ticket]
-trigger: [on_demand, on_work]
+applies_to: ticket
+trigger: on_demand, on_work
 status: active
 ---
 Break a ticket into child tasks when it implies more than one distinct
@@ -155,8 +155,8 @@ enum PolicySelfTest {
         ---
         lore_type: policy
         title: Break tickets into tasks
-        applies_to: [ticket, task]
-        trigger: [on_demand, on_work]
+        applies_to: ticket, task
+        trigger: on_demand, on_work
         status: active
         priority: 10
         ---
@@ -169,8 +169,8 @@ enum PolicySelfTest {
             check(false, "read: policy 0001 not found"); return
         }
         check(p.title == "Break tickets into tasks", "read: title round-trip")
-        check(p.appliesTo == ["ticket", "task"],     "read: applies_to list parsed")
-        check(p.trigger == ["on_demand", "on_work"], "read: trigger list parsed")
+        check(p.appliesTo == ["ticket", "task"],     "read: applies_to comma-list parsed")
+        check(p.trigger == ["on_demand", "on_work"], "read: trigger comma-list parsed")
         check(p.status == .active,                    "read: status parsed")
         check(p.priority == 10,                       "read: priority parsed")
         check(p.body.contains("TASK: <title>"),       "read: body captured")
@@ -208,8 +208,9 @@ enum PolicyStatus: String, Codable, Hashable {
 /// (`docs/policies/<id>-<slug>.md`). `id` is the numeric filename prefix.
 ///
 /// Mirrors `TicketStore`'s lore-adapter pattern: same frontmatter helpers,
-/// numeric-id tolerance. `applies_to` / `trigger` are inline YAML lists
-/// (`[a, b]`) parsed by `parseList` below.
+/// numeric-id tolerance. `applies_to` / `trigger` are comma-separated string
+/// values (lore has no list type; mirrors task.schema's `phases` convention),
+/// parsed by `parseList` below.
 struct Policy: Identifiable, Hashable {
     let id: String
     let title: String
@@ -243,8 +244,9 @@ enum PolicyStore {
             }
     }
 
-    /// Parse an inline YAML list value (`[a, b, c]`) into trimmed, non-empty
-    /// strings. Tolerates a bare scalar (`a`) → `["a"]`.
+    /// Parse a comma-separated value (`a, b, c`) into trimmed, non-empty
+    /// strings. Tolerates a bare scalar (`a`) → `["a"]` and legacy bracket
+    /// form (`[a, b]`).
     static func parseList(_ rawValue: String?) -> [String] {
         guard var v = rawValue?.trimmingCharacters(in: .whitespaces), !v.isEmpty else { return [] }
         if v.hasPrefix("[") && v.hasSuffix("]") {

@@ -52,10 +52,15 @@ body: free
 groupBy: { field: status, order: [active, draft, deprecated] }
 frontmatter:
   - { name: title,      type: string,  required: true }
-  - { name: applies_to, type: list,    required: true }   # lore types or scopes: ticket, task, project, pr, release, session, any
-  - { name: trigger,    type: list }                       # core wired now: on_demand, on_work, always; others declarable-but-not-enforced
+  - { name: applies_to, type: string,  required: true }   # comma-separated scopes: ticket, task, project, pr, release, session, any
+  - { name: trigger,    type: string }                    # comma-separated; wired now: on_demand, on_work, always; others declarable
   - { name: status,     type: enum, values: [draft, active, deprecated], required: true }
-  - { name: priority,   type: int }                        # optional; lower = injected first
+  - { name: priority,   type: string }                    # integer-as-string; optional; lower = injected first
+
+# NOTE: lore has no `list`/`int` field type — multi-value fields are stored as
+# comma-separated strings (same convention as task.schema's `phases`), parsed
+# app-side by PolicyStore.parseList. Frontmatter values are bare comma lists
+# (`applies_to: ticket, task`), NOT YAML brackets, so lore string-validation passes.
 index:
   - { header: "#", source: id }
   - { header: Policy, source: title, link: true }
@@ -66,10 +71,10 @@ index:
 
 ### Field semantics
 
-- **`applies_to`** — open list of scope strings. App matching is membership:
+- **`applies_to`** — comma-separated scope strings. App matching is membership:
   a policy matches a context if `applies_to` contains that scope (or `any`).
   Validated loosely (any string allowed); no schema change to add a scope.
-- **`trigger`** — open list. Only `on_demand`, `on_work`, `always` are *wired*
+- **`trigger`** — comma-separated. Only `on_demand`, `on_work`, `always` are *wired*
   in this spec. Others (`on_start`, `before_done`, `before_merge`,
   `on_session_end`, `on_release`, `scheduled`) are declarable for future
   policies but are not consumed by any code yet.
@@ -85,8 +90,8 @@ index:
 ---
 lore_type: policy
 title: Break tickets into tasks
-applies_to: [ticket]
-trigger: [on_demand, on_work]
+applies_to: ticket
+trigger: on_demand, on_work
 status: active
 ---
 Break a ticket into child tasks when it implies more than one distinct
