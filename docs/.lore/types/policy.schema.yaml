@@ -1,0 +1,18 @@
+name: policy
+dir: policies
+heading: Policies
+id: { strategy: sequential, pad: 4 }
+body: free
+groupBy: { field: status, order: [active, draft, deprecated] }
+frontmatter:
+  - { name: title,      type: string,  required: true }
+  - { name: applies_to, type: string,  required: true }   # comma-separated: ticket, task, project, pr, release, session, any
+  - { name: trigger,    type: string }                    # comma-separated: on_demand, on_work, always
+  - { name: status,     type: enum, values: [draft, active, deprecated], required: true }
+  - { name: priority,   type: string }
+index:
+  - { header: "#", source: id }
+  - { header: Policy, source: title, link: true }
+  - { header: Applies to, source: applies_to }
+  - { header: Trigger, source: trigger }
+  - { header: Status, source: status }
