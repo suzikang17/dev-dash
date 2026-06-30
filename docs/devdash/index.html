@@ -6,9 +6,9 @@
 <title>dev-dash — Product</title>
 <style>
   :root {
-    --h: 75; --ca: 0.13;
-    --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-    --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --h: 130; --ca: 0.085;
+    --font-display: Optima, "Avenir Next", system-ui, sans-serif;
+    --font-body: "Avenir Next", Optima, system-ui, sans-serif;
     --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
     /* Dark — warm charcoal; neutrals carry a whisper of the brand hue */
@@ -351,7 +351,7 @@
 <body x-data="{}">
   <div class="wrap">
     <h1>dev-dash</h1>
-    <div class="crumbs">Methodology: <strong>Personal Tool</strong> · Stage: <strong>Refine the parts that hurt</strong></div>
+    <div class="crumbs">Methodology: <strong>Personal Tool</strong> · Stage: <strong>Live with it</strong></div>
     <nav class="tabs" role="tablist" aria-label="Document sections">
       <button class="tab active" data-tab="overview" role="tab" id="tab-btn-overview" aria-controls="tab-overview" aria-selected="true" tabindex="0">Overview</button>
       <button class="tab" data-tab="notes" role="tab" id="tab-btn-notes" aria-controls="tab-notes" aria-selected="false" tabindex="-1">Notes</button>
@@ -371,10 +371,10 @@
     <span class="status-title">Snapshot</span>
     <span class="status-tag">swift</span>
   </div>
-  <div class="status-row"><span class="status-k">Last session</span><span class="status-v">Jun 21 Outliner everywhere: editable backlinks, tasks pane, delete, perf</span></div>
-  <div class="status-row"><span class="status-k">Tasks</span><span class="status-v">2 active</span></div>
-  <div class="status-row"><span class="status-k">Recent decision</span><span class="status-v">One StackedDiffView for commits, PRs, and Claude Code sessions</span></div>
-  <div class="status-row"><span class="status-k">Commits / 7d</span><span class="status-v">110</span></div>
+  <div class="status-row"><span class="status-k">Last session</span><span class="status-v">Jun 24 Day 8 — isolated worktree task workflow: launch → branch → PR → Review &amp; QA → cleanup</span></div>
+  <div class="status-row"><span class="status-k">Tasks</span><span class="status-v">6 active</span></div>
+  <div class="status-row"><span class="status-k">Recent decision</span><span class="status-v">Native Metal shaders for UI accents via a precompiled metallib</span></div>
+  <div class="status-row"><span class="status-k">Commits / 7d</span><span class="status-v">131</span></div>
   <div class="status-row"><span class="status-k">Running</span><span class="status-v">none</span></div>
   <div class="status-row"><span class="status-k">Health</span><span class="status-v">Active</span></div>
 </div><p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="overview" type="button">+ new Overview</button> &nbsp; ⚙ Engine: <code>lore</code> · 7 overview read live from <code>docs/overview/*.md</code></p>
@@ -527,8 +527,8 @@ _Key risks — likelihood, impact, mitigation._</textarea>
 <ul class="progress">
 <li><span class="pill done">Done</span> <strong>Identify the itch</strong> <span class="meta">0/3 exit criteria</span></li>
 <li><span class="pill done">Done</span> <strong>Sketch the smallest version</strong> <span class="meta">0/3 exit criteria</span></li>
-<li><span class="pill done">Done</span> <strong>Live with it</strong> <span class="meta">0/3 exit criteria</span></li>
-<li><span class="pill current">Current</span> <strong>Refine the parts that hurt</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill current">Current</span> <strong>Live with it</strong> <span class="meta">0/3 exit criteria</span></li>
+<li><span class="pill pending">Pending</span> <strong>Refine the parts that hurt</strong> <span class="meta">0/3 exit criteria</span></li>
 <li><span class="pill pending">Pending</span> <strong>Maybe share it</strong> <span class="meta">0/3 exit criteria</span></li>
 </ul>
 <div class="card">
@@ -576,7 +576,7 @@ _Key risks — likelihood, impact, mitigation._</textarea>
 </ul>
 </div>
 <div class="card">
-<h3>Live with it <span class="pill done">Done</span></h3>
+<h3>Live with it <span class="pill current">Current</span></h3>
 <p>Use it. Daily. Resist the urge to polish or feature-add until you actually feel the friction in real use.</p>
 <blockquote>Don't open the editor for 1-2 weeks. Just use it. Take notes when something annoys you. The notes become the refine list.</blockquote>
 <h4>Questions <span class="meta">(0/4 answered)</span></h4>
@@ -596,7 +596,7 @@ _Key risks — likelihood, impact, mitigation._</textarea>
 </ul>
 </div>
 <div class="card">
-<h3>Refine the parts that hurt <span class="pill current">Current</span></h3>
+<h3>Refine the parts that hurt <span class="pill pending">Pending</span></h3>
 <p>Fix the things you actually felt. Skip the things you only thought about. Resist scope creep.</p>
 <blockquote>Sort the friction list by frequency × pain. Fix the top 3. Stop. Use it again.</blockquote>
 <h4>Questions <span class="meta">(0/4 answered)</span></h4>
@@ -642,7 +642,941 @@ _Key risks — likelihood, impact, mitigation._</textarea>
     <p class="empty">No initiatives yet. Top-level tasks with children become initiatives — group related tasks under a parent in the Tasks tab.</p>
   </section>
   <section id="tab-lore-decisions" class="tab-pane" role="tabpanel" aria-labelledby="tab-btn-lore-decisions" tabindex="0">
-    <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="decision" type="button">+ new Decisions</button> &nbsp; ⚙ Engine: <code>lore</code> · 3 decisions read live from <code>docs/decisions/*.md</code></p>
+    <p class="doc-status"><button class="lore-new" data-action="lore-new" data-lore-type="decision" type="button">+ new Decisions</button> &nbsp; ⚙ Engine: <code>lore</code> · 11 decisions read live from <code>docs/decisions/*.md</code></p>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0011-native-metal-shaders-for-ui-accents-via-precompiled-metallib.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-25 · tooling</span>
+    <span class="lore-warn">⚠ missing section: Options considered, Tradeoffs</span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0011-native-metal-shaders-for-ui-accents-via-precompiled-metallib.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>We wanted GPU-driven visual accents — an animated gradient title, a "this agent is working" shimmer, a stale-project aura, a diff-gutter glow, drifting empty-state fields. SwiftUI exposes Metal fragment shaders directly through <code>.colorEffect</code>/<code>.layerEffect</code>/<code>.distortionEffect</code> (macOS 14+), which is the elegant path: a <code>[[stitchable]]</code> function in a <code>.metal</code> file plus a thin <code>.someEffect()</code> modifier.</p>
+<p>The catch is <strong>compile timing</strong>. SwiftUI's <code>ShaderLibrary.default</code> resolves functions from a <strong>precompiled</strong> <code>default.metallib</code> in <code>Bundle.main</code>. Two facts forced the decision:</p>
+<ol>
+<li><strong>SwiftPM does not compile <code>.metal</code> files.</strong> <code>swift build</code> silently ignores them — no metallib is produced.</li>
+<li><strong><code>xcrun metal</code> is a stub in current Xcode.</strong> The real offline compiler ships as a separate ~688MB "Metal Toolchain" component (<code>xcodebuild -downloadComponent MetalToolchain</code>).</li>
+</ol>
+<p>The alternative — compiling shader <em>source</em> at runtime via <code>MTLDevice.makeLibrary(source:)</code> — needs no toolchain download, but SwiftUI's <code>ShaderLibrary</code> only accepts precompiled libraries, so it would mean dropping out of SwiftUI into a hand-rolled <code>MTKView</code> for every effect.</p>
+<p>We chose the precompiled-metallib path: keep the clean SwiftUI call sites, pay the one-time toolchain cost, and own the compile step in our build scripts.</p>
+<h2>Decision</h2>
+<ol>
+<li>**Shaders live in <code>Sources/DevDash/Shaders/*.metal</code>** (<code>Aurora.metal</code>, <code>Effects.metal</code>), each a <code>[[stitchable]]</code> fragment function. They are <em>not</em> part of the SwiftPM target's compiled sources.</li>
+<li><strong><code>run.sh</code> and <code>dist.sh</code> compile them into the app bundle</strong>: <code>xcrun metal -o DevDash.app/Contents/Resources/default.metallib Sources/DevDash/Shaders/*.metal</code>, run <strong>before</strong> <code>codesign</code> so the metallib is signed in. This is consistent with the existing "cp binary into <code>.app</code>" packaging trick where <code>Bundle.main</code> is the <code>.app</code>.</li>
+<li><strong>SwiftUI wraps each effect in a thin modifier/view</strong> in <code>ShaderEffects.swift</code> (<code>.auroraText()</code>, <code>.workingShimmer(active:)</code>, <code>.healthAura(_:active:)</code>, <code>DiffGlowBackground</code>, <code>NebulaBackground</code>). Adding an effect is "append a function to a <code>.metal</code> file + a small modifier" — no new build wiring.</li>
+<li><strong>Effects are signal-carrying and self-throttling.</strong> Animated effects (<code>TimelineView(.animation)</code>) are gated by an <code>if active</code>/branch so the animation is never built when idle; the GPU is only driven while the relevant state is on screen. Shaders that don't need motion (the diff glow) are static.</li>
+<li><strong>Shaders never go on dense lists unguarded.</strong> The diff-gutter glow falls back to a flat fill past 400 rows, because a per-cell <code>colorEffect</code> on a thousand-row diff is real GPU cost with no perceptible payoff at gutter scale.</li>
+</ol>
+<h2>Consequences</h2>
+<ul>
+<li><strong>Build dependency:</strong> producing a correct build now requires the Metal Toolchain component. A plain <code>swift build</code> (or a build on a machine without the toolchain) yields a binary with <strong>no metallib</strong> — effects degrade gracefully to no-ops (solid color / no glow), they do not crash. Documented in both build scripts' comments.</li>
+<li><strong>Graceful degradation is load-bearing:</strong> <code>ShaderLibrary.default.&lt;fn&gt;</code> resolves lazily and fails soft, so a missing/partial metallib is a cosmetic loss, not a runtime error.</li>
+<li><strong>One shared metallib:</strong> all shaders compile into a single <code>default.metallib</code>; adding functions is cheap and needs no per-shader plumbing.</li>
+</ul>
+<h2>Alternatives considered</h2>
+<ul>
+<li><strong>Runtime-compiled <code>MTKView</code></strong> — no toolchain download, but abandons SwiftUI's shader API and adds an <code>NSViewRepresentable</code> + full render pipeline per effect. Rejected: far more code, loses the one-line call sites.</li>
+<li><strong>Let SwiftPM compile <code>.metal</code> into the resource bundle</strong> — doesn't work (SwiftPM ignores <code>.metal</code>), and the resource bundle isn't <code>Bundle.main</code> under our packaging trick anyway.</li>
+<li><strong>No shaders / fake it with stacked SwiftUI gradients on the CPU</strong> — janky for the animated cases and can't express the per-pixel effects at all.</li>
+</ul>
+<h2>Revisit if</h2>
+<p>The toolchain dependency becomes a CI/onboarding burden, Apple changes how <code>metal</code>/metallibs ship, or the accents stop earning their cost (battery, distraction). At that point, reconsider runtime compilation or dropping the purely-decorative effects.</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+We wanted GPU-driven visual accents — an animated gradient title, a &quot;this agent is working&quot; shimmer, a stale-project aura, a diff-gutter glow, drifting empty-state fields. SwiftUI exposes Metal fragment shaders directly through `.colorEffect`/`.layerEffect`/`.distortionEffect` (macOS 14+), which is the elegant path: a `[[stitchable]]` function in a `.metal` file plus a thin `.someEffect()` modifier.
+
+The catch is **compile timing**. SwiftUI's `ShaderLibrary.default` resolves functions from a **precompiled** `default.metallib` in `Bundle.main`. Two facts forced the decision:
+
+1. **SwiftPM does not compile `.metal` files.** `swift build` silently ignores them — no metallib is produced.
+2. **`xcrun metal` is a stub in current Xcode.** The real offline compiler ships as a separate ~688MB &quot;Metal Toolchain&quot; component (`xcodebuild -downloadComponent MetalToolchain`).
+
+The alternative — compiling shader *source* at runtime via `MTLDevice.makeLibrary(source:)` — needs no toolchain download, but SwiftUI's `ShaderLibrary` only accepts precompiled libraries, so it would mean dropping out of SwiftUI into a hand-rolled `MTKView` for every effect.
+
+We chose the precompiled-metallib path: keep the clean SwiftUI call sites, pay the one-time toolchain cost, and own the compile step in our build scripts.
+
+## Decision
+
+1. **Shaders live in `Sources/DevDash/Shaders/*.metal`** (`Aurora.metal`, `Effects.metal`), each a `[[stitchable]]` fragment function. They are *not* part of the SwiftPM target's compiled sources.
+2. **`run.sh` and `dist.sh` compile them into the app bundle**: `xcrun metal -o DevDash.app/Contents/Resources/default.metallib Sources/DevDash/Shaders/*.metal`, run **before** `codesign` so the metallib is signed in. This is consistent with the existing &quot;cp binary into `.app`&quot; packaging trick where `Bundle.main` is the `.app`.
+3. **SwiftUI wraps each effect in a thin modifier/view** in `ShaderEffects.swift` (`.auroraText()`, `.workingShimmer(active:)`, `.healthAura(_:active:)`, `DiffGlowBackground`, `NebulaBackground`). Adding an effect is &quot;append a function to a `.metal` file + a small modifier&quot; — no new build wiring.
+4. **Effects are signal-carrying and self-throttling.** Animated effects (`TimelineView(.animation)`) are gated by an `if active`/branch so the animation is never built when idle; the GPU is only driven while the relevant state is on screen. Shaders that don't need motion (the diff glow) are static.
+5. **Shaders never go on dense lists unguarded.** The diff-gutter glow falls back to a flat fill past 400 rows, because a per-cell `colorEffect` on a thousand-row diff is real GPU cost with no perceptible payoff at gutter scale.
+
+## Consequences
+
+- **Build dependency:** producing a correct build now requires the Metal Toolchain component. A plain `swift build` (or a build on a machine without the toolchain) yields a binary with **no metallib** — effects degrade gracefully to no-ops (solid color / no glow), they do not crash. Documented in both build scripts' comments.
+- **Graceful degradation is load-bearing:** `ShaderLibrary.default.&lt;fn&gt;` resolves lazily and fails soft, so a missing/partial metallib is a cosmetic loss, not a runtime error.
+- **One shared metallib:** all shaders compile into a single `default.metallib`; adding functions is cheap and needs no per-shader plumbing.
+
+## Alternatives considered
+
+- **Runtime-compiled `MTKView`** — no toolchain download, but abandons SwiftUI's shader API and adds an `NSViewRepresentable` + full render pipeline per effect. Rejected: far more code, loses the one-line call sites.
+- **Let SwiftPM compile `.metal` into the resource bundle** — doesn't work (SwiftPM ignores `.metal`), and the resource bundle isn't `Bundle.main` under our packaging trick anyway.
+- **No shaders / fake it with stacked SwiftUI gradients on the CPU** — janky for the animated cases and can't express the per-pixel effects at all.
+
+## Revisit if
+
+The toolchain dependency becomes a CI/onboarding burden, Apple changes how `metal`/metallibs ship, or the accents stop earning their cost (battery, distraction). At that point, reconsider runtime compilation or dropping the purely-decorative effects.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0010-tickets-contain-tasks.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-25 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0010-tickets-contain-tasks.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>The agent-native work (<a class="lore-link" data-lore-target="decisions/0005-agent-native-task-actions.md">0005-agent-native-task-actions</a>) and the worktree workflow<br>exposed a missing layer. A unit like "Add auth" is a <em>deliverable</em>; the steps inside<br>it — write the code, review the PR, QA — are distinct pieces of work, often done by<br>different actors (a human, or a specific AI agent) on different clocks. Modelling all<br>of that as one flat "task" with a single owner and a single status column can't express<br>"the code is written (AI) but the review is pending (you or a review-agent)".</p>
+<p>So: a <strong>Ticket</strong> is the deliverable (≈ a Linear issue / a PR's worth of work). A<br><strong>Task</strong> is a work step inside a ticket, with its OWN owner (human or a named agent)<br>and its own state. Tasks nest (a Task can have child Tasks = <strong>Subtasks</strong>), giving<br>arbitrary depth. This makes "review" a first-class Task — orthogonal to the code Task,<br>routable to a human OR an agent, and surfaced in a per-owner queue ("everything a human<br>needs to do" = all Tasks owned by human).</p>
+<h2>Decision (chosen: Ticket-on-top, keep Task as the work item)</h2>
+<ul>
+<li><strong>New lore <code>ticket</code> type</strong> = the container (<code>docs/tickets/*.md</code>). Mirrors the task</li>
+</ul>
+<p>  schema (title, status, owner?, category, pr, created, …). <code>lore add ticket</code>.</p>
+<ul>
+<li><strong>Existing <code>task</code> type stays</strong> = the work item (<code>docs/tasks/*.md</code>). Unchanged so the</li>
+</ul>
+<p>  whole agent-native loop (<code>lore add task</code>, PR→review, artifacts) keeps working. A Task<br>  gains a <code>ticket:</code> frontmatter field (the owning ticket id); <code>parent:</code> continues to<br>  mean a parent <em>task</em> (for Subtasks). <code>lore add task --field ticket=&lt;id&gt;</code>.</p>
+<ul>
+<li><strong>Migration</strong>: today's top-level task docs (the current to-dos) migrate to tickets</li>
+</ul>
+<p>  (<code>docs/tasks/&lt;n&gt;</code> → <code>docs/tickets/&lt;n&gt;</code>), carrying their fields. Existing child tasks<br>  keep <code>parent:</code> and gain <code>ticket:</code> pointing at the migrated ticket. Idempotent,<br>  self-tested, non-destructive (originals backed up); leaves a marker so it runs once.</p>
+<ul>
+<li><strong>dev-dash</strong>: a <code>TicketStore</code> (reads/writes <code>docs/tickets/*.md</code>, same lore-adapter</li>
+</ul>
+<p>  discipline as <code>TaskStore</code>). The UI shows Tickets at the top level; expanding a ticket<br>  shows its Tasks (and Subtasks). Per-owner queue aggregates Tasks by owner.</p>
+<ul>
+<li><strong>Agent-native mapping</strong>: launch is at the <strong>Task</strong> level (a work step under a</li>
+</ul>
+<p>  ticket). <code>gh pr create</code> creates a <strong>review Task</strong> under the ticket (instead of moving<br>  the ticket's column). Artifacts link to a Task. Worktrees attach to a Task.</p>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Ticket-on-top, keep Task (chosen)</strong> — preserves the agent-native <code>task</code> machinery,</li>
+</ul>
+<p>  cleaner vocabulary (Claude works on Tasks; Tasks live in Tickets); cost is a new type</p>
+<ul>
+<li>a scoped migration of top-level tasks → tickets.</li>
+<li><strong>Rename the single type task→ticket</strong> (rejected) — simplest structure but ripples</li>
+</ul>
+<p>  task→ticket through every agent-native command, the launch prompt, artifact links, and<br>  the 109-check self-test, and the CLI would say "ticket" at every depth.</p>
+<ul>
+<li><strong>UI labels only</strong> (rejected earlier) — cheapest, but the user wants the storage/CLI</li>
+</ul>
+<p>  to reflect the two levels.</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: the model the workflow actually needs — review (and any step) as a first-class,</li>
+</ul>
+<p>  separately-owned Task; per-owner queues; clean Subtask headroom; Tickets map to Linear<br>  issues.</p>
+<ul>
+<li>Give up: a second store/type and a second data migration right after the lore-adapter</li>
+</ul>
+<p>  one; more concepts; the agent-native loop must learn the Ticket↔Task relationship.</p>
+<ul>
+<li>Risk (revisit): scope creep into a generic workflow engine. Keep it to two types +</li>
+</ul>
+<p>  nesting; evolve, don't pre-build.</p>
+<h2>Build stages</h2>
+<ol>
+<li>lore <code>ticket</code> type + dev-dash <code>TicketStore</code> (lore-adapter style) + migration of</li>
+</ol>
+<p>   top-level tasks → tickets (children re-pointed via <code>ticket:</code>), with self-test.<br>2. UI — Tickets as the top level; Tasks/Subtasks nested within; per-owner queue.<br>3. Agent-native re-wire — launch at the Task level under a ticket; PR→review creates a<br>   review Task; artifacts/worktrees attach to Tasks; the Ticket reflects rollup state.</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+The agent-native work ([[0005-agent-native-task-actions]]) and the worktree workflow
+exposed a missing layer. A unit like &quot;Add auth&quot; is a *deliverable*; the steps inside
+it — write the code, review the PR, QA — are distinct pieces of work, often done by
+different actors (a human, or a specific AI agent) on different clocks. Modelling all
+of that as one flat &quot;task&quot; with a single owner and a single status column can't express
+&quot;the code is written (AI) but the review is pending (you or a review-agent)&quot;.
+
+So: a **Ticket** is the deliverable (≈ a Linear issue / a PR's worth of work). A
+**Task** is a work step inside a ticket, with its OWN owner (human or a named agent)
+and its own state. Tasks nest (a Task can have child Tasks = **Subtasks**), giving
+arbitrary depth. This makes &quot;review&quot; a first-class Task — orthogonal to the code Task,
+routable to a human OR an agent, and surfaced in a per-owner queue (&quot;everything a human
+needs to do&quot; = all Tasks owned by human).
+
+## Decision (chosen: Ticket-on-top, keep Task as the work item)
+
+- **New lore `ticket` type** = the container (`docs/tickets/*.md`). Mirrors the task
+  schema (title, status, owner?, category, pr, created, …). `lore add ticket`.
+- **Existing `task` type stays** = the work item (`docs/tasks/*.md`). Unchanged so the
+  whole agent-native loop (`lore add task`, PR→review, artifacts) keeps working. A Task
+  gains a `ticket:` frontmatter field (the owning ticket id); `parent:` continues to
+  mean a parent *task* (for Subtasks). `lore add task --field ticket=&lt;id&gt;`.
+- **Migration**: today's top-level task docs (the current to-dos) migrate to tickets
+  (`docs/tasks/&lt;n&gt;` → `docs/tickets/&lt;n&gt;`), carrying their fields. Existing child tasks
+  keep `parent:` and gain `ticket:` pointing at the migrated ticket. Idempotent,
+  self-tested, non-destructive (originals backed up); leaves a marker so it runs once.
+- **dev-dash**: a `TicketStore` (reads/writes `docs/tickets/*.md`, same lore-adapter
+  discipline as `TaskStore`). The UI shows Tickets at the top level; expanding a ticket
+  shows its Tasks (and Subtasks). Per-owner queue aggregates Tasks by owner.
+- **Agent-native mapping**: launch is at the **Task** level (a work step under a
+  ticket). `gh pr create` creates a **review Task** under the ticket (instead of moving
+  the ticket's column). Artifacts link to a Task. Worktrees attach to a Task.
+
+## Options considered
+
+- **Ticket-on-top, keep Task (chosen)** — preserves the agent-native `task` machinery,
+  cleaner vocabulary (Claude works on Tasks; Tasks live in Tickets); cost is a new type
+  + a scoped migration of top-level tasks → tickets.
+- **Rename the single type task→ticket** (rejected) — simplest structure but ripples
+  task→ticket through every agent-native command, the launch prompt, artifact links, and
+  the 109-check self-test, and the CLI would say &quot;ticket&quot; at every depth.
+- **UI labels only** (rejected earlier) — cheapest, but the user wants the storage/CLI
+  to reflect the two levels.
+
+## Tradeoffs
+
+- Gain: the model the workflow actually needs — review (and any step) as a first-class,
+  separately-owned Task; per-owner queues; clean Subtask headroom; Tickets map to Linear
+  issues.
+- Give up: a second store/type and a second data migration right after the lore-adapter
+  one; more concepts; the agent-native loop must learn the Ticket↔Task relationship.
+- Risk (revisit): scope creep into a generic workflow engine. Keep it to two types +
+  nesting; evolve, don't pre-build.
+
+## Build stages
+
+1. lore `ticket` type + dev-dash `TicketStore` (lore-adapter style) + migration of
+   top-level tasks → tickets (children re-pointed via `ticket:`), with self-test.
+2. UI — Tickets as the top level; Tasks/Subtasks nested within; per-owner queue.
+3. Agent-native re-wire — launch at the Task level under a ticket; PR→review creates a
+   review Task; artifacts/worktrees attach to Tasks; the Ticket reflects rollup state.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0009-bundle-lore-for-app-compatibility.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-25 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0009-bundle-lore-for-app-compatibility.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>dev-dash and lore must agree on the doc format. The agreement has two sides:</p>
+<ul>
+<li><strong>dev-dash's Swift doc-adapters</strong> (<code>TaskStore</code>, <code>TicketStore</code>, <code>ArtifactStore</code>) — compiled INTO the app, so they're always the app's version.</li>
+<li><strong>the <code>lore</code> CLI the launched Claude sessions run</strong> (<code>lore add ticket</code>, <code>set-status</code>, …) — whatever is on <code>PATH</code>, which can drift from the app.</li>
+</ul>
+<p>Compatibility breaks only when the <code>lore</code> on PATH differs from the version the app was built/tested against (e.g. a shipped app on a machine with an old or absent lore). So the fix is to let the app <strong>control which lore the agent runs</strong> by shipping a matched copy.</p>
+<p>This is NOT a Swift runtime dependency. lore stays a portable Node CLI the agent invokes; the app just owns the copy. (lore is JS — bundle the built <code>dist</code>, assume <code>node</code> is present; do not ship a Node runtime.)</p>
+<h2>Decision</h2>
+<ol>
+<li><strong><code>dist.sh</code> bundles lore's built <code>dist/</code> into <code>DevDash.app/Contents/Resources/lore</code></strong> — a snapshot of the exact version the app was built/tested against.</li>
+<li><strong>dev-dash resolves <code>lore</code> to the bundled copy</strong> — extend <code>LoreRunner</code>'s binary resolver to prefer <code>Bundle…/Resources/lore/bin/lore.js</code>, and <strong>prepend its dir to the embedded terminal's <code>PATH</code></strong> so launched <code>claude</code> sessions run that lore.</li>
+<li><strong>Version stamp + compat check</strong> — record the bundled lore version; surface it (Settings/Info) and warn if a different <code>lore</code> shadows it, so drift is visible.</li>
+<li><strong>Dev stays live</strong> — <code>run.sh</code> keeps using the <code>~/dev/lore</code> symlink so both repos are edited in lockstep; only <code>dist.sh</code> snapshots the bundle.</li>
+</ol>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Bundle the CLI + app resolves to it (chosen)</strong> — guarantees the agent's lore matches the app's Swift adapters; no Node Swift dependency.</li>
+<li><strong>Make lore a Swift/runtime dependency / rewrite in Swift</strong> (rejected) — heavy, and the agent needs a portable CLI on PATH regardless; dev-dash already does its own doc ops in Swift, so it doesn't need lore at runtime.</li>
+<li><strong>Keep lore fully separate, global only (status quo)</strong> (rejected for ship) — fine while both repos are local, but offers no compatibility guarantee once distributed.</li>
+</ul>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: app and the agent's lore ship as a matched pair — no drift after distribution; zero separate-install step for users.</li>
+<li>Give up: <code>dist.sh</code> complexity; still assumes <code>node</code> present; two implementations of the doc format remain (Swift adapters + lore JS) — bundling pins the CLI version but doesn't collapse the dual implementation (managed via the schema-as-contract + the <code>--selftest-taskstore</code> guard on the Swift side).</li>
+</ul>
+<h2>Timing</h2>
+<p>This bites only at <strong>distribution / running where <code>~/dev/lore</code> isn't</strong> — not in the current dual-local-repo dev setup, which is already lockstep. Build it as part of packaging. The cheap interim, buildable anytime: the <strong>version-compat check</strong> (record expected lore version, warn on mismatch) so drift is at least visible immediately.</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+dev-dash and lore must agree on the doc format. The agreement has two sides:
+- **dev-dash's Swift doc-adapters** (`TaskStore`, `TicketStore`, `ArtifactStore`) — compiled INTO the app, so they're always the app's version.
+- **the `lore` CLI the launched Claude sessions run** (`lore add ticket`, `set-status`, …) — whatever is on `PATH`, which can drift from the app.
+
+Compatibility breaks only when the `lore` on PATH differs from the version the app was built/tested against (e.g. a shipped app on a machine with an old or absent lore). So the fix is to let the app **control which lore the agent runs** by shipping a matched copy.
+
+This is NOT a Swift runtime dependency. lore stays a portable Node CLI the agent invokes; the app just owns the copy. (lore is JS — bundle the built `dist`, assume `node` is present; do not ship a Node runtime.)
+
+## Decision
+
+1. **`dist.sh` bundles lore's built `dist/` into `DevDash.app/Contents/Resources/lore`** — a snapshot of the exact version the app was built/tested against.
+2. **dev-dash resolves `lore` to the bundled copy** — extend `LoreRunner`'s binary resolver to prefer `Bundle…/Resources/lore/bin/lore.js`, and **prepend its dir to the embedded terminal's `PATH`** so launched `claude` sessions run that lore.
+3. **Version stamp + compat check** — record the bundled lore version; surface it (Settings/Info) and warn if a different `lore` shadows it, so drift is visible.
+4. **Dev stays live** — `run.sh` keeps using the `~/dev/lore` symlink so both repos are edited in lockstep; only `dist.sh` snapshots the bundle.
+
+## Options considered
+
+- **Bundle the CLI + app resolves to it (chosen)** — guarantees the agent's lore matches the app's Swift adapters; no Node Swift dependency.
+- **Make lore a Swift/runtime dependency / rewrite in Swift** (rejected) — heavy, and the agent needs a portable CLI on PATH regardless; dev-dash already does its own doc ops in Swift, so it doesn't need lore at runtime.
+- **Keep lore fully separate, global only (status quo)** (rejected for ship) — fine while both repos are local, but offers no compatibility guarantee once distributed.
+
+## Tradeoffs
+
+- Gain: app and the agent's lore ship as a matched pair — no drift after distribution; zero separate-install step for users.
+- Give up: `dist.sh` complexity; still assumes `node` present; two implementations of the doc format remain (Swift adapters + lore JS) — bundling pins the CLI version but doesn't collapse the dual implementation (managed via the schema-as-contract + the `--selftest-taskstore` guard on the Swift side).
+
+## Timing
+
+This bites only at **distribution / running where `~/dev/lore` isn't** — not in the current dual-local-repo dev setup, which is already lockstep. Build it as part of packaging. The cheap interim, buildable anytime: the **version-compat check** (record expected lore version, warn on mismatch) so drift is at least visible immediately.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0008-linear-integration.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-24 · architecture</span>
+    <span class="lore-warn">⚠ missing section: Options considered, Tradeoffs</span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0008-linear-integration.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>Dev-dash needs to surface Linear issues alongside local tasks without requiring a<br>separate OAuth dance or a server-side component. A personal API key stored in the<br>macOS Keychain satisfies the auth requirement with zero infrastructure, matching<br>how the Vercel integration piggybacks on the CLI token.</p>
+<p>Two-way sync is preferred over read-only because status changes made in dev-dash<br>(kanban drag, mark done) are real decisions that should propagate back — otherwise<br>Linear becomes an out-of-date shadow of the local state.</p>
+<p>Linear teams and projects naturally span multiple repos (e.g. a "Platform" Linear<br>project covers both the API and the CLI repos). Binding Linear at the <strong>group</strong><br>level rather than per-repo eliminates duplicate issue fetches and keeps the sidebar<br>hierarchy legible.</p>
+<h2>Decision</h2>
+<ul>
+<li><strong>Auth</strong>: a single personal API key per user, stored under service</li>
+</ul>
+<p>  <code>com.suki.devdash.linear</code> / account <code>personal-api-key</code> via <code>SecItemAdd</code> /<br>  <code>SecItemUpdate</code>. No OAuth, no server.</p>
+<ul>
+<li><strong>Project Groups</strong>: <code>ProjectGroup</code> (persisted at <code>~/.devdash/groups.json</code>) is the</li>
+</ul>
+<p>  unit of Linear binding. Each group has one optional Linear team + optional project<br>  filter, and a set of repo paths. One repo belongs to at most one group.</p>
+<ul>
+<li><strong>Group task cache</strong>: fetched Linear issues are stored per-group at</li>
+</ul>
+<p>  <code>~/.devdash/group-tasks/&lt;groupId&gt;.json</code> (not per-repo). <code>GroupStore</code> manages<br>  reads, writes, and deletes with atomic file writes.</p>
+<ul>
+<li><strong>Read path</strong>: <code>LinearScanner.fetchIssues(teamId:projectId:)</code> hits the GraphQL</li>
+</ul>
+<p>  endpoint and returns up to 100 issues. Issues are merged (upsert by <code>linearIssueId</code>)<br>  into the group cache; the cache is never destructively cleared.</p>
+<ul>
+<li><strong>Display path</strong>: <code>DashboardStore.tasksForDisplay(projectPath:)</code> merges the</li>
+</ul>
+<p>  repo's own local tasks with the group's shared Linear task cache. The sidebar<br>  and kanban boards call this method instead of the raw <code>projectTasks</code> map.</p>
+<ul>
+<li><strong>Write path</strong>: <code>DashboardStore.setTaskStatus</code> routes <code>.linear</code> tasks through</li>
+</ul>
+<p>  the group that owns them, fires a detached <code>Task</code> to resolve the workflow-state<br>  ID and call <code>issueUpdate</code>. The UI is never blocked; local state wins on failure.<br>  A <code>pendingLinearPush</code> guard prevents remote status from overwriting a locally<br>  pending change during the next sync cycle.</p>
+<ul>
+<li><strong>Migration</strong>: at init, <code>migratePerRepoLinearBindings()</code> scans <code>projectMeta</code> for</li>
+</ul>
+<p>  any legacy per-repo <code>linearTeamId</code> fields, creates matching groups (keyed on<br>  <code>linearProjectId ?? linearTeamId</code> to deduplicate), migrates repo paths into<br>  those groups, and clears the per-repo fields. One-time, idempotent.</p>
+<h2>Sidebar &amp; settings</h2>
+<ul>
+<li>The <code>.projects</code> sidebar tab shows groups first (sorted by creation date), each</li>
+</ul>
+<p>  as a collapsible <code>CollapsibleGroupSection</code> with a Linear badge when bound. Repos<br>  not in any group appear underneath as ungrouped folder sections.</p>
+<ul>
+<li><code>LinearSettingsView</code> replaces the old per-project <code>ProjectBindingRow</code> with a</li>
+</ul>
+<p>  <code>groupsSection</code> listing all groups. Each <code>GroupSettingsRow</code> supports inline<br>  rename, Linear binding (team + optional project picker), and per-member removal.</p>
+<h2>Workflow-state type mapping</h2>
+<p>Linear's <code>type</code> field on workflow states is mapped to <code>TaskStatus</code> as follows:</p>
+<p>| Linear type | TaskStatus    |<br>|-------------|---------------|<br>| <code>triage</code>    | <code>.open</code>       |<br>| <code>backlog</code>   | <code>.open</code>       |<br>| <code>unstarted</code> | <code>.open</code>       |<br>| <code>started</code>   | <code>.inProgress</code> |<br>| <code>completed</code> | <code>.done</code>       |<br>| <code>canceled</code>  | <code>.skipped</code>    |</p>
+<p>For the reverse mapping (TaskStatus → Linear state), the lowest-<code>position</code> state<br>of the matching type wins. <code>.open</code> prefers <code>unstarted</code> over <code>backlog</code> over <code>triage</code>.<br><code>.blocked</code> maps to <code>started</code> (Linear has no blocked type; this keeps the issue<br>in an active column).</p>
+<h2>Rate-limit / caching rationale</h2>
+<p>Linear personal keys are limited to ~1 500 req/hr. Workflow states are cached in<br><code>LinearStateCache</code> (actor, 5-min TTL) because they change rarely and are fetched<br>on every status push-back. Issue fetches run once per group during <code>refreshAll()</code>'s<br>fan-out (default 15-second poll) — not per-repo, not on every render. Teams and<br>projects are fetched on-demand from the Settings UI only.</p>
+<h2>Known limitations / follow-ups</h2>
+<ul>
+<li>A permanently-failing Linear status push (network error, permission denied) leaves its <code>pendingLinearPush</code> entry indefinitely with no retry or expiry, masking the remote status for that task until relaunch. Acceptable for now; retry-or-expiry is a follow-up.</li>
+</ul></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+Dev-dash needs to surface Linear issues alongside local tasks without requiring a
+separate OAuth dance or a server-side component. A personal API key stored in the
+macOS Keychain satisfies the auth requirement with zero infrastructure, matching
+how the Vercel integration piggybacks on the CLI token.
+
+Two-way sync is preferred over read-only because status changes made in dev-dash
+(kanban drag, mark done) are real decisions that should propagate back — otherwise
+Linear becomes an out-of-date shadow of the local state.
+
+Linear teams and projects naturally span multiple repos (e.g. a &quot;Platform&quot; Linear
+project covers both the API and the CLI repos). Binding Linear at the **group**
+level rather than per-repo eliminates duplicate issue fetches and keeps the sidebar
+hierarchy legible.
+
+## Decision
+
+- **Auth**: a single personal API key per user, stored under service
+  `com.suki.devdash.linear` / account `personal-api-key` via `SecItemAdd` /
+  `SecItemUpdate`. No OAuth, no server.
+- **Project Groups**: `ProjectGroup` (persisted at `~/.devdash/groups.json`) is the
+  unit of Linear binding. Each group has one optional Linear team + optional project
+  filter, and a set of repo paths. One repo belongs to at most one group.
+- **Group task cache**: fetched Linear issues are stored per-group at
+  `~/.devdash/group-tasks/&lt;groupId&gt;.json` (not per-repo). `GroupStore` manages
+  reads, writes, and deletes with atomic file writes.
+- **Read path**: `LinearScanner.fetchIssues(teamId:projectId:)` hits the GraphQL
+  endpoint and returns up to 100 issues. Issues are merged (upsert by `linearIssueId`)
+  into the group cache; the cache is never destructively cleared.
+- **Display path**: `DashboardStore.tasksForDisplay(projectPath:)` merges the
+  repo's own local tasks with the group's shared Linear task cache. The sidebar
+  and kanban boards call this method instead of the raw `projectTasks` map.
+- **Write path**: `DashboardStore.setTaskStatus` routes `.linear` tasks through
+  the group that owns them, fires a detached `Task` to resolve the workflow-state
+  ID and call `issueUpdate`. The UI is never blocked; local state wins on failure.
+  A `pendingLinearPush` guard prevents remote status from overwriting a locally
+  pending change during the next sync cycle.
+- **Migration**: at init, `migratePerRepoLinearBindings()` scans `projectMeta` for
+  any legacy per-repo `linearTeamId` fields, creates matching groups (keyed on
+  `linearProjectId ?? linearTeamId` to deduplicate), migrates repo paths into
+  those groups, and clears the per-repo fields. One-time, idempotent.
+
+## Sidebar &amp; settings
+
+- The `.projects` sidebar tab shows groups first (sorted by creation date), each
+  as a collapsible `CollapsibleGroupSection` with a Linear badge when bound. Repos
+  not in any group appear underneath as ungrouped folder sections.
+- `LinearSettingsView` replaces the old per-project `ProjectBindingRow` with a
+  `groupsSection` listing all groups. Each `GroupSettingsRow` supports inline
+  rename, Linear binding (team + optional project picker), and per-member removal.
+
+## Workflow-state type mapping
+
+Linear's `type` field on workflow states is mapped to `TaskStatus` as follows:
+
+| Linear type | TaskStatus    |
+|-------------|---------------|
+| `triage`    | `.open`       |
+| `backlog`   | `.open`       |
+| `unstarted` | `.open`       |
+| `started`   | `.inProgress` |
+| `completed` | `.done`       |
+| `canceled`  | `.skipped`    |
+
+For the reverse mapping (TaskStatus → Linear state), the lowest-`position` state
+of the matching type wins. `.open` prefers `unstarted` over `backlog` over `triage`.
+`.blocked` maps to `started` (Linear has no blocked type; this keeps the issue
+in an active column).
+
+## Rate-limit / caching rationale
+
+Linear personal keys are limited to ~1 500 req/hr. Workflow states are cached in
+`LinearStateCache` (actor, 5-min TTL) because they change rarely and are fetched
+on every status push-back. Issue fetches run once per group during `refreshAll()`'s
+fan-out (default 15-second poll) — not per-repo, not on every render. Teams and
+projects are fetched on-demand from the Settings UI only.
+
+## Known limitations / follow-ups
+
+- A permanently-failing Linear status push (network error, permission denied) leaves its `pendingLinearPush` entry indefinitely with no retry or expiry, masking the remote status for that task until relaunch. Acceptable for now; retry-or-expiry is a follow-up.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0007-embed-ios-simulator-via-baguette.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-24 · tooling</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0007-embed-ios-simulator-via-baguette.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>dev-dash should let you watch and drive an iOS Simulator — and run your app on it —<br>without leaving the dashboard. The simulator screen is an <code>IOSurface</code> (a GPU framebuffer<br>readable across process boundaries), so embedding is technically possible, but every path<br>runs through Apple's <strong>private</strong> CoreSimulator/SimulatorKit frameworks, and input<br>injection broke on iOS 26: the old 5-argument <code>IOHIDEvent</code> signature most tools use<br>silently drops events or crashes <code>backboardd</code>; Xcode 26 needs the 9-argument digitizer<br>path.</p>
+<p><code>baguette</code> (Homebrew, Apache-2.0) already solves the hard parts — 60fps IOSurface<br>streaming over WebSocket <strong>plus</strong> correct iOS 26 HID input — exposed as a localhost server<br>with a per-sim web UI. dev-dash spawns <code>baguette serve</code> on <code>127.0.0.1:8421</code> (explicit<br>Start, never auto) and embeds its focus page in a <code>WKWebView</code>. Validated end-to-end on<br>iOS 26.4 before any app code was written: live frames + taps/buttons work.</p>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Engine:</strong> vendor baguette as a sidecar (chosen — rides its iOS 26 HID fix and</li>
+</ul>
+<p>  per-Xcode-version maintenance) vs. build a native CoreSimulator/IOSurface embed (max<br>  control, but we'd own the 9-arg HID fix and every Xcode break) vs. a ScreenCaptureKit<br>  mirror of Simulator.app (public capture API, but mirrors a hidden window with fiddly<br>  input mapping).</p>
+<ul>
+<li><strong>Embed surface:</strong> <code>WKWebView</code> pointed at baguette's own focus page (chosen —</li>
+</ul>
+<p>  interactive stream + input for free, and dev-dash is already a heavy WKWebView user)<br>  vs. a native SwiftUI/VideoToolbox renderer decoding the H.264/AVCC WebSocket (more<br>  native, deferred to a possible Phase 2).</p>
+<ul>
+<li><strong>Start:</strong> explicit button (chosen — baguette links private frameworks, so spawning</li>
+</ul>
+<p>  must be intentional) vs. auto-spawn on tab open.</p>
+<ul>
+<li><strong>Run-your-app:</strong> <code>xcodebuild</code> + <code>simctl install</code>/<code>launch</code> orchestration (chosen —</li>
+</ul>
+<p>  durable CLI path, no private frameworks; the same language-agnostic glue any stack<br>  could use).</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: a live, interactive simulator in-window, plus one-click build → install → launch</li>
+</ul>
+<p>  of an Xcode project onto it; the hard, fragile part (iOS 26 capture + input) is<br>  outsourced to a focused upstream.</p>
+<ul>
+<li>Give up: a runtime dependency on the <code>baguette</code> binary (<code>brew install baguette</code>,</li>
+</ul>
+<p>  requires Xcode 26 + Apple Silicon) that is invisible from the Swift; reliance on<br>  baguette's web UI and private-framework linkage, both of which can break across Xcode<br>  versions (revisit flagged); a localhost sidecar we must lifecycle-manage (kill on<br>  quit/Stop).</p>
+<ul>
+<li>Not done: the native renderer (Phase 2). The build → install → launch chain is proven</li>
+</ul>
+<p>  end-to-end against a synthetic iOS app (build, settings-JSON parse, install, launch all<br>  confirmed); a build against a large real-world project (signing, SPM/CocoaPods deps) is<br>  still untested.</p>
+<h2>Build stages</h2>
+<ol>
+<li><code>BaguetteRunner</code> — locate the binary, manage the <code>serve</code> lifecycle, list sims;</li>
+</ol>
+<p>   terminate the sidecar on app quit (<code>willTerminateNotification</code>) and on Stop.<br>2. <code>SimulatorView</code> — global <code>Selection.simulator</code> destination;<br>   not-installed / idle / starting / running / error states; WKWebView embed.<br>3. <code>SimAppRunner</code> — Build &amp; Run: <code>xcodebuild</code> → <code>-showBuildSettings -json</code> →<br>   <code>simctl install</code>/<code>launch</code>; cancellable; derived data kept outside the target repo.<br>4. (Deferred) Phase 2 native VideoToolbox renderer that drops the embedded web UI.</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+dev-dash should let you watch and drive an iOS Simulator — and run your app on it —
+without leaving the dashboard. The simulator screen is an `IOSurface` (a GPU framebuffer
+readable across process boundaries), so embedding is technically possible, but every path
+runs through Apple's **private** CoreSimulator/SimulatorKit frameworks, and input
+injection broke on iOS 26: the old 5-argument `IOHIDEvent` signature most tools use
+silently drops events or crashes `backboardd`; Xcode 26 needs the 9-argument digitizer
+path.
+
+`baguette` (Homebrew, Apache-2.0) already solves the hard parts — 60fps IOSurface
+streaming over WebSocket **plus** correct iOS 26 HID input — exposed as a localhost server
+with a per-sim web UI. dev-dash spawns `baguette serve` on `127.0.0.1:8421` (explicit
+Start, never auto) and embeds its focus page in a `WKWebView`. Validated end-to-end on
+iOS 26.4 before any app code was written: live frames + taps/buttons work.
+
+## Options considered
+
+- **Engine:** vendor baguette as a sidecar (chosen — rides its iOS 26 HID fix and
+  per-Xcode-version maintenance) vs. build a native CoreSimulator/IOSurface embed (max
+  control, but we'd own the 9-arg HID fix and every Xcode break) vs. a ScreenCaptureKit
+  mirror of Simulator.app (public capture API, but mirrors a hidden window with fiddly
+  input mapping).
+- **Embed surface:** `WKWebView` pointed at baguette's own focus page (chosen —
+  interactive stream + input for free, and dev-dash is already a heavy WKWebView user)
+  vs. a native SwiftUI/VideoToolbox renderer decoding the H.264/AVCC WebSocket (more
+  native, deferred to a possible Phase 2).
+- **Start:** explicit button (chosen — baguette links private frameworks, so spawning
+  must be intentional) vs. auto-spawn on tab open.
+- **Run-your-app:** `xcodebuild` + `simctl install`/`launch` orchestration (chosen —
+  durable CLI path, no private frameworks; the same language-agnostic glue any stack
+  could use).
+
+## Tradeoffs
+
+- Gain: a live, interactive simulator in-window, plus one-click build → install → launch
+  of an Xcode project onto it; the hard, fragile part (iOS 26 capture + input) is
+  outsourced to a focused upstream.
+- Give up: a runtime dependency on the `baguette` binary (`brew install baguette`,
+  requires Xcode 26 + Apple Silicon) that is invisible from the Swift; reliance on
+  baguette's web UI and private-framework linkage, both of which can break across Xcode
+  versions (revisit flagged); a localhost sidecar we must lifecycle-manage (kill on
+  quit/Stop).
+- Not done: the native renderer (Phase 2). The build → install → launch chain is proven
+  end-to-end against a synthetic iOS app (build, settings-JSON parse, install, launch all
+  confirmed); a build against a large real-world project (signing, SPM/CocoaPods deps) is
+  still untested.
+
+## Build stages
+
+1. `BaguetteRunner` — locate the binary, manage the `serve` lifecycle, list sims;
+   terminate the sidecar on app quit (`willTerminateNotification`) and on Stop.
+2. `SimulatorView` — global `Selection.simulator` destination;
+   not-installed / idle / starting / running / error states; WKWebView embed.
+3. `SimAppRunner` — Build &amp; Run: `xcodebuild` → `-showBuildSettings -json` →
+   `simctl install`/`launch`; cancellable; derived data kept outside the target repo.
+4. (Deferred) Phase 2 native VideoToolbox renderer that drops the embedded web UI.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0006-retire-devdash-task-store-for-lore.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-24 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0006-retire-devdash-task-store-for-lore.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>Designing agent-native task actions (<a class="lore-link" data-lore-target="decisions/0005-agent-native-task-actions.md">0005-agent-native-task-actions</a>) surfaced a<br>blocking contradiction: dev-dash has <strong>two task systems</strong>. The live store the UI reads<br>and edits is <code>.devdash/tasks.json</code> (<code>TaskStore</code>, UUID ids); lore <code>docs/tasks/*.md</code><br>(numeric ids) is only a <strong>one-way export</strong> (<code>TaskLoreMigrator</code>). So Claude acting<br>through <code>lore</code> (<code>lore add</code> / <code>lore set-status</code>) would write the export, which dev-dash<br>never reads — the agent-native loop can't close. We are retiring the<br><code>.devdash/tasks.json</code> store and making lore docs the single source of truth.</p>
+<h2>Decision</h2>
+<p>Make <strong><code>TaskStore</code> a lore adapter</strong>: keep its public API (<code>read</code>, <code>add</code>, <code>setStatus</code>,<br><code>setOwner</code>, <code>setHasAIRun</code>, <code>setParent</code>, <code>setPhases</code>, <code>addCompletedPhase</code>, <code>delete</code>,<br><code>hasChildren</code>, <code>update</code>, <code>write</code>) and the <code>TaskItem</code> model, but swap the backend from<br><code>.devdash/tasks.json</code> to <code>docs/tasks/*.md</code>. <code>TaskItem.id</code> becomes the lore numeric id<br>(filename prefix). The ~30 call sites and the whole AI integration keep working<br>unchanged; only the storage changes.</p>
+<ul>
+<li><strong>Field mapping</strong> is already defined by <code>TaskLoreMigrator</code> (title, status, owner,</li>
+</ul>
+<p>  category, source, created/started/completed, ai_run, phases, completedPhases, stage,<br>  persona, linkedDoc, parent, ghIssue → frontmatter; notes → body). All enum raw values<br>  already match lore conventions.</p>
+<ul>
+<li><strong>No runtime id map needed.</strong> Once <code>TaskStore</code> returns numeric ids, <code>linkedTaskId</code>,</li>
+</ul>
+<p>  <code>openTaskId</code>, and <code>parentId</code> are all numeric uniformly. The UUID→numeric remap runs<br>  <strong>once</strong>, at migration, via <code>TaskLoreMigrator</code> (which also remaps parents).</p>
+<ul>
+<li><strong>Migration</strong>: on load, if <code>.devdash/tasks.json</code> exists and isn't yet exported,</li>
+</ul>
+<p>  run <code>TaskLoreMigrator</code> (idempotent via <code>devdash_id</code>), then read from lore thereafter.<br>  Leave the old json in place (don't delete user data) but stop writing it.</p>
+<ul>
+<li><strong>One UI</strong>: consolidate on a single task view; remove the <code>AppStorage("taskSource")</code></li>
+</ul>
+<p>  toggle. (Which view survives — see open decision below.)</p>
+<ul>
+<li><strong>Closes the loop</strong>: <code>lore add</code>/<code>lore set-status</code> now write the same files dev-dash</li>
+</ul>
+<p>  reads; <code>NotesFileWatcher</code> already refreshes on change. The Stage-1 launch's<br>  report-back commands become correct once ids are numeric.</p>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Lore-adapter <code>TaskStore</code> (chosen)</strong> — preserves the AI integration + all call sites;</li>
+</ul>
+<p>  smallest blast radius — vs. <strong>consolidate onto <code>LoreTasksView</code></strong> (rewire the entire AI<br>  integration to <code>LoreTaskItem</code>; larger, riskier) vs. <strong>two-way json↔lore sync</strong><br>  (fragile, conflict-prone — rejected).</p>
+<ul>
+<li><strong>Id type:</strong> numeric lore id everywhere (chosen) vs. keep UUIDs with a persistent map</li>
+</ul>
+<p>  (extra state, no benefit once json is gone).</p>
+<ul>
+<li><strong>Task UI (decided):</strong> <code>LoreTasksView</code> becomes the <strong>primary</strong> task view and hosts the</li>
+</ul>
+<p>  AI integration (Launch with Claude, run, SessionEnd advance); <code>TasksTabView</code> is<br>  <strong>retained as a legacy/alternate view</strong>. Both render lore-sourced tasks (via the<br>  lore-backed <code>TaskStore</code> / <code>projectTasks</code>), so there is one source of truth with two<br>  presentations. The AI integration stays on the store methods (which now operate on<br>  lore); LoreTasksView gains the action affordances and bridges its rows to the numeric<br>  lore id.</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: one source of truth; agent-native loop closes; AI integration preserved; lore</li>
+</ul>
+<p>  becomes the durable, git-tracked, <code>lore</code>-CLI-addressable task store.</p>
+<ul>
+<li>Give up: <code>TaskItem.id</code> semantics change (numeric); cascade-delete must be</li>
+</ul>
+<p>  reimplemented over lore <code>parent:</code> frontmatter; status history now lives in the doc<br>  body (lore convention) alongside the date frontmatter; existing users' tasks go<br>  through a one-time migration.</p>
+<ul>
+<li>Risks: anything that persisted a task UUID across launches (none found beyond</li>
+</ul>
+<p>  in-memory <code>linkedTaskId</code>/<code>openTaskId</code>, which are transient) would need attention;<br>  validated during migration.</p>
+<h2>Build stages</h2>
+<ol>
+<li>Lore-adapter <code>TaskStore</code> — reimplement internals over <code>docs/tasks/*.md</code> (numeric</li>
+</ol>
+<p>   ids, full field mapping, status history + dates, cascade delete via <code>parent:</code>),<br>   preserving the API. Unit-verify against the existing call sites.<br>2. Migration + flip — on load, migrate <code>.devdash/tasks.json</code> → lore once<br>   (<code>TaskLoreMigrator</code>), then read lore; stop writing json.<br>3. UI — make <code>LoreTasksView</code> primary and wire the AI integration (Launch/run/advance)<br>   into it, bridging its rows to the numeric lore id; keep <code>TasksTabView</code> as a legacy<br>   view; both read lore-sourced tasks.<br>4. Fix Stage-1 launch — interpolate the numeric lore id into the <code>lore</code> report-back<br>   commands; resume <a class="lore-link" data-lore-target="decisions/0005-agent-native-task-actions.md">0005-agent-native-task-actions</a> (PR card, artifacts,<br>   notifications).</p></div>
+  
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+Designing agent-native task actions ([[0005-agent-native-task-actions]]) surfaced a
+blocking contradiction: dev-dash has **two task systems**. The live store the UI reads
+and edits is `.devdash/tasks.json` (`TaskStore`, UUID ids); lore `docs/tasks/*.md`
+(numeric ids) is only a **one-way export** (`TaskLoreMigrator`). So Claude acting
+through `lore` (`lore add` / `lore set-status`) would write the export, which dev-dash
+never reads — the agent-native loop can't close. We are retiring the
+`.devdash/tasks.json` store and making lore docs the single source of truth.
+
+## Decision
+
+Make **`TaskStore` a lore adapter**: keep its public API (`read`, `add`, `setStatus`,
+`setOwner`, `setHasAIRun`, `setParent`, `setPhases`, `addCompletedPhase`, `delete`,
+`hasChildren`, `update`, `write`) and the `TaskItem` model, but swap the backend from
+`.devdash/tasks.json` to `docs/tasks/*.md`. `TaskItem.id` becomes the lore numeric id
+(filename prefix). The ~30 call sites and the whole AI integration keep working
+unchanged; only the storage changes.
+
+- **Field mapping** is already defined by `TaskLoreMigrator` (title, status, owner,
+  category, source, created/started/completed, ai_run, phases, completedPhases, stage,
+  persona, linkedDoc, parent, ghIssue → frontmatter; notes → body). All enum raw values
+  already match lore conventions.
+- **No runtime id map needed.** Once `TaskStore` returns numeric ids, `linkedTaskId`,
+  `openTaskId`, and `parentId` are all numeric uniformly. The UUID→numeric remap runs
+  **once**, at migration, via `TaskLoreMigrator` (which also remaps parents).
+- **Migration**: on load, if `.devdash/tasks.json` exists and isn't yet exported,
+  run `TaskLoreMigrator` (idempotent via `devdash_id`), then read from lore thereafter.
+  Leave the old json in place (don't delete user data) but stop writing it.
+- **One UI**: consolidate on a single task view; remove the `AppStorage(&quot;taskSource&quot;)`
+  toggle. (Which view survives — see open decision below.)
+- **Closes the loop**: `lore add`/`lore set-status` now write the same files dev-dash
+  reads; `NotesFileWatcher` already refreshes on change. The Stage-1 launch's
+  report-back commands become correct once ids are numeric.
+
+## Options considered
+
+- **Lore-adapter `TaskStore` (chosen)** — preserves the AI integration + all call sites;
+  smallest blast radius — vs. **consolidate onto `LoreTasksView`** (rewire the entire AI
+  integration to `LoreTaskItem`; larger, riskier) vs. **two-way json↔lore sync**
+  (fragile, conflict-prone — rejected).
+- **Id type:** numeric lore id everywhere (chosen) vs. keep UUIDs with a persistent map
+  (extra state, no benefit once json is gone).
+- **Task UI (decided):** `LoreTasksView` becomes the **primary** task view and hosts the
+  AI integration (Launch with Claude, run, SessionEnd advance); `TasksTabView` is
+  **retained as a legacy/alternate view**. Both render lore-sourced tasks (via the
+  lore-backed `TaskStore` / `projectTasks`), so there is one source of truth with two
+  presentations. The AI integration stays on the store methods (which now operate on
+  lore); LoreTasksView gains the action affordances and bridges its rows to the numeric
+  lore id.
+
+## Tradeoffs
+
+- Gain: one source of truth; agent-native loop closes; AI integration preserved; lore
+  becomes the durable, git-tracked, `lore`-CLI-addressable task store.
+- Give up: `TaskItem.id` semantics change (numeric); cascade-delete must be
+  reimplemented over lore `parent:` frontmatter; status history now lives in the doc
+  body (lore convention) alongside the date frontmatter; existing users' tasks go
+  through a one-time migration.
+- Risks: anything that persisted a task UUID across launches (none found beyond
+  in-memory `linkedTaskId`/`openTaskId`, which are transient) would need attention;
+  validated during migration.
+
+## Build stages
+
+1. Lore-adapter `TaskStore` — reimplement internals over `docs/tasks/*.md` (numeric
+   ids, full field mapping, status history + dates, cascade delete via `parent:`),
+   preserving the API. Unit-verify against the existing call sites.
+2. Migration + flip — on load, migrate `.devdash/tasks.json` → lore once
+   (`TaskLoreMigrator`), then read lore; stop writing json.
+3. UI — make `LoreTasksView` primary and wire the AI integration (Launch/run/advance)
+   into it, bridging its rows to the numeric lore id; keep `TasksTabView` as a legacy
+   view; both read lore-sourced tasks.
+4. Fix Stage-1 launch — interpolate the numeric lore id into the `lore` report-back
+   commands; resume [[0005-agent-native-task-actions]] (PR card, artifacts,
+   notifications).
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0005-agent-native-task-actions.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-24 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0005-agent-native-task-actions.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>The hook event bus (see <a class="lore-link" data-lore-target="decisions/0004-claude-code-hook-event-bus.md">0004-claude-code-hook-event-bus</a>) made dev-dash <em>observe</em><br>Claude sessions and <em>feed</em> them context. The next step is the reverse write path: a<br>launched Claude session should act on dev-dash — update a task's status, file a<br>follow-up "review PR" task linked to the PR, produce artifacts that dev-dash renders,<br>and notify the user as these happen.</p>
+<p>Key fact: <strong>dev-dash is file-backed and those files are lore docs.</strong> Tasks are<br><code>docs/tasks/*.md</code>, devlogs <code>docs/devlog/</code>, decisions <code>docs/decisions/</code>, and the<br>running app watches those dirs (<code>NotesFileWatcher</code>/<code>TaskStore</code>) and re-renders on<br>change. lore already provides the write API for them:</p>
+<ul>
+<li><code>lore add &lt;type&gt; --title "..." --field k=v ...</code> — creates a doc; <code>--field</code> spreads</li>
+</ul>
+<p>  arbitrary frontmatter, so <code>lore add task --field pr=&lt;url&gt;</code> files a PR-linked task<br>  with NO schema change.</p>
+<ul>
+<li><code>lore set-status &lt;type&gt; &lt;id&gt; &lt;status&gt;</code> — updates <code>status:</code> AND appends</li>
+</ul>
+<p>  <code>- &lt;timestamp&gt; old → new</code> to <code>## Status history</code> — the exact format <code>TaskStore</code> uses.</p>
+<p>So a Claude session's <strong>action surface is <code>lore</code></strong> (already on PATH). An earlier draft<br>of this ADR proposed a new <code>devdash</code> CLI for task create/status — that was redundant<br>duplication of <code>lore add</code> / <code>lore set-status</code> and is rejected.</p>
+<p>dev-dash's job is only what lore can't do: (1) <strong>launch</strong> an interactive <code>claude</code> in<br>the embedded terminal seeded with the task spec + a one-line note on the <code>lore</code><br>commands to report back; (2) <strong>render</strong> new shapes — a <code>pr:</code> task field as a live PR<br>card (reusing <code>GitDiffScanner.prDetail/openPRWeb</code>), and artifacts; (3) <strong>notify</strong> via<br>native macOS notifications. Launched sessions and their outputs attach to the <strong>task</strong><br>(durable, git-tracked), not the ephemeral session.</p>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Action surface:</strong> new <code>devdash</code> CLI over the files (rejected — duplicates lore) vs.</li>
+</ul>
+<p>  <strong><code>lore</code> (chosen — already does add + set-status with arbitrary fields)</strong> vs. full MCP<br>  now (deferred; when wanted, an MCP tool is a one-line shell to <code>lore</code> or a dev-dash<br>  subcommand; the localhost hook server is the natural host).</p>
+<ul>
+<li><strong>Launch target:</strong> <strong>embedded terminal (chosen)</strong> vs. headless <code>claude -p</code></li>
+</ul>
+<p>  (existing <code>runForTask</code>) vs. external Terminal.app.</p>
+<ul>
+<li><strong>Attach to:</strong> <strong>task (chosen)</strong> vs. session vs. both.</li>
+<li><strong>Artifacts (decided):</strong> a new lore <code>artifact</code> doc type — markdown with</li>
+</ul>
+<p>  <code>--field task=&lt;id&gt;</code>, indexed/searchable, consistent with the doc model; binary<br>  outputs (screenshots, images, diffs) are referenced from the artifact doc rather<br>  than stored as lore docs. Requires adding the <code>artifact</code> type to the lore package.</p>
+<ul>
+<li><strong>PR link:</strong> plain <code>pr:</code> frontmatter via <code>lore add --field</code> (chosen — no schema</li>
+</ul>
+<p>  change) vs. ejecting the task schema to formalize it (later, if validation wanted).</p>
+<ul>
+<li><strong>Notifications:</strong> native <code>UNUserNotificationCenter</code> (app is signed w/ bundle id),</li>
+</ul>
+<p>  fired from hook/file-watch handlers, with a Settings toggle.</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: the write loop reuses lore wholesale — no new CLI, no schema change for PR</li>
+</ul>
+<p>  links, status history stays consistent. dev-dash adds only launch + rendering +<br>  notifications. Durable, git-tracked, MCP-upgradeable.</p>
+<ul>
+<li>Give up: lore invocations are convention-validated, not a typed contract (acceptable;</li>
+</ul>
+<p>  far safer than hand-written frontmatter). Artifacts still need one design choice.</p>
+<ul>
+<li>Risk (revisit): if non-doc actions appear ("open PR in browser", "trigger deploy") or</li>
+</ul>
+<p>  validation/discovery is wanted, promote to MCP tools that shell <code>lore</code>/dev-dash.</p>
+<h2>Build stages</h2>
+<ol>
+<li>Launch — "Launch with Claude" on a task → embedded terminal runs interactive</li>
+</ol>
+<p>   <code>claude</code> seeded with the task spec + a note on the <code>lore</code> report-back commands;<br>   sets owner=ai.<br>2. PR-linked task rendering — render a task's <code>pr:</code> field as a live PR card (reuse the<br>   <code>gh</code> machinery). Creation already works via <code>lore add task --field pr=&lt;url&gt;</code>.<br>3. Artifacts — add an <code>artifact</code> type to the lore package; render artifact docs for a<br>   task in an artifacts panel in task detail (md/web/diff/image renderers exist),<br>   filtered by their <code>task=&lt;id&gt;</code> field; binaries referenced.<br>4. Notifications — <code>UNUserNotificationCenter</code> on PR-task created / status change / new<br>   artifact / session end, with a Settings toggle.</p></div>
+  <div class="lore-backlinks"><span class="lore-backlinks-label">↩ 2 linked references</span> <a class="lore-link" data-lore-target="decisions/0006-retire-devdash-task-store-for-lore.md">Retire the .devdash/tasks.json task store; make lore docs the single source of truth</a> <a class="lore-link" data-lore-target="decisions/0010-tickets-contain-tasks.md">Tickets contain Tasks: a deliverable (ticket) holds work-step tasks, each with its own owner</a></div>
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+The hook event bus (see [[0004-claude-code-hook-event-bus]]) made dev-dash *observe*
+Claude sessions and *feed* them context. The next step is the reverse write path: a
+launched Claude session should act on dev-dash — update a task's status, file a
+follow-up &quot;review PR&quot; task linked to the PR, produce artifacts that dev-dash renders,
+and notify the user as these happen.
+
+Key fact: **dev-dash is file-backed and those files are lore docs.** Tasks are
+`docs/tasks/*.md`, devlogs `docs/devlog/`, decisions `docs/decisions/`, and the
+running app watches those dirs (`NotesFileWatcher`/`TaskStore`) and re-renders on
+change. lore already provides the write API for them:
+
+- `lore add &lt;type&gt; --title &quot;...&quot; --field k=v ...` — creates a doc; `--field` spreads
+  arbitrary frontmatter, so `lore add task --field pr=&lt;url&gt;` files a PR-linked task
+  with NO schema change.
+- `lore set-status &lt;type&gt; &lt;id&gt; &lt;status&gt;` — updates `status:` AND appends
+  `- &lt;timestamp&gt; old → new` to `## Status history` — the exact format `TaskStore` uses.
+
+So a Claude session's **action surface is `lore`** (already on PATH). An earlier draft
+of this ADR proposed a new `devdash` CLI for task create/status — that was redundant
+duplication of `lore add` / `lore set-status` and is rejected.
+
+dev-dash's job is only what lore can't do: (1) **launch** an interactive `claude` in
+the embedded terminal seeded with the task spec + a one-line note on the `lore`
+commands to report back; (2) **render** new shapes — a `pr:` task field as a live PR
+card (reusing `GitDiffScanner.prDetail/openPRWeb`), and artifacts; (3) **notify** via
+native macOS notifications. Launched sessions and their outputs attach to the **task**
+(durable, git-tracked), not the ephemeral session.
+
+## Options considered
+
+- **Action surface:** new `devdash` CLI over the files (rejected — duplicates lore) vs.
+  **`lore` (chosen — already does add + set-status with arbitrary fields)** vs. full MCP
+  now (deferred; when wanted, an MCP tool is a one-line shell to `lore` or a dev-dash
+  subcommand; the localhost hook server is the natural host).
+- **Launch target:** **embedded terminal (chosen)** vs. headless `claude -p`
+  (existing `runForTask`) vs. external Terminal.app.
+- **Attach to:** **task (chosen)** vs. session vs. both.
+- **Artifacts (decided):** a new lore `artifact` doc type — markdown with
+  `--field task=&lt;id&gt;`, indexed/searchable, consistent with the doc model; binary
+  outputs (screenshots, images, diffs) are referenced from the artifact doc rather
+  than stored as lore docs. Requires adding the `artifact` type to the lore package.
+- **PR link:** plain `pr:` frontmatter via `lore add --field` (chosen — no schema
+  change) vs. ejecting the task schema to formalize it (later, if validation wanted).
+- **Notifications:** native `UNUserNotificationCenter` (app is signed w/ bundle id),
+  fired from hook/file-watch handlers, with a Settings toggle.
+
+## Tradeoffs
+
+- Gain: the write loop reuses lore wholesale — no new CLI, no schema change for PR
+  links, status history stays consistent. dev-dash adds only launch + rendering +
+  notifications. Durable, git-tracked, MCP-upgradeable.
+- Give up: lore invocations are convention-validated, not a typed contract (acceptable;
+  far safer than hand-written frontmatter). Artifacts still need one design choice.
+- Risk (revisit): if non-doc actions appear (&quot;open PR in browser&quot;, &quot;trigger deploy&quot;) or
+  validation/discovery is wanted, promote to MCP tools that shell `lore`/dev-dash.
+
+## Build stages
+
+1. Launch — &quot;Launch with Claude&quot; on a task → embedded terminal runs interactive
+   `claude` seeded with the task spec + a note on the `lore` report-back commands;
+   sets owner=ai.
+2. PR-linked task rendering — render a task's `pr:` field as a live PR card (reuse the
+   `gh` machinery). Creation already works via `lore add task --field pr=&lt;url&gt;`.
+3. Artifacts — add an `artifact` type to the lore package; render artifact docs for a
+   task in an artifacts panel in task detail (md/web/diff/image renderers exist),
+   filtered by their `task=&lt;id&gt;` field; binaries referenced.
+4. Notifications — `UNUserNotificationCenter` on PR-task created / status change / new
+   artifact / session end, with a Settings toggle.
+</textarea>
+</div>
+<div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0004-claude-code-hook-event-bus.md" data-lore-type="decision">
+  <div class="lore-card-head">
+    <span class="lore-card-meta">2026-06-23 · architecture</span>
+    <span class="lore-warn" style="display:none"></span>
+    <span class="lore-card-actions">
+      <button class="lore-edit-toggle" type="button">✎ edit source</button>
+      <button class="lore-del" data-action="lore-delete" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0004-claude-code-hook-event-bus.md" title="Delete" type="button">✕</button>
+    </span>
+  </div>
+  <div class="lore-body"><h2>Why this choice</h2>
+<p>The goal is to do all AI-assisted development inside dev-dash, with Claude Code wired<br>into tasks, devlogs, and GitHub. Today the app relates to Claude in two disconnected,<br>one-directional ways:</p>
+<ol>
+<li><strong>App-spawned <code>claude -p</code></strong> (<code>ClaudeRunner</code> → <code>ShellRunner.start</code> → stream-json).</li>
+</ol>
+<p>   The app drives Claude; the only feedback is stdout parsed for <code>[PHASE:]</code> markers.<br>2. <strong>Real terminal/IDE Claude Code sessions</strong> — discovered only <em>after the fact</em> by<br>   <code>SessionScanner</code>/<code>NotesFileWatcher</code> tailing <code>~/.claude/projects/*.jsonl</code>. The app is<br>   a spectator reading a finished transcript, never a participant.</p>
+<p>That split is the friction. "Claude isn't first-class" means the app can launch Claude<br>but Claude can't talk back. Everything is pull-based (15s <code>startAutoRefresh</code> polling).</p>
+<p>The fix is a <strong>return channel built on Claude Code's own hooks</strong>. Hooks fire for every<br>session — terminal, IDE, or app-spawned — and carry <code>session_id</code>, <code>cwd</code>, and<br>event-specific data (<code>tool_name</code>/<code>tool_input</code>, <code>prompt</code>) on stdin. A hook command can<br>also emit <code>additionalContext</code> to inject app state back <em>into</em> Claude. This makes any<br>session an event source and dissolves the in-app vs. outside distinction. <code>cwd</code> is the<br>join key that maps a session to a project in <code>projects</code> with no extra plumbing.</p>
+<h2>Options considered</h2>
+<ul>
+<li><strong>Transport (Claude → app):</strong> localhost HTTP server inside dev-dash (chosen, push,</li>
+</ul>
+<p>  instant, supports synchronous context-injection responses) vs. append-only<br>  <code>events.ndjson</code> tailed like <code>NotesFileWatcher</code> (no networking, but indirect and can't<br>  return context to the hook synchronously).</p>
+<ul>
+<li><strong>Hook scope:</strong> per-project <code>.claude/settings.json</code> (chosen — explicit, committed,</li>
+</ul>
+<p>  app-managed via installer) vs. global <code>~/.claude/settings.json</code> (every session<br>  everywhere; broader but noisier) vs. both.</p>
+<ul>
+<li><strong>Hook wiring:</strong> a single installed helper script (<code>~/.devdash/bin/devdash-hook</code>) that</li>
+</ul>
+<p>  reads the live endpoint+token from <code>~/.devdash/event-endpoint.json</code> and curls the<br>  payload (chosen — stable hook config, app owns endpoint discovery) vs. baking the port<br>  into each settings.json entry (breaks when the port changes between launches).</p>
+<h2>Tradeoffs</h2>
+<ul>
+<li>Gain: Claude becomes bidirectional and event-driven. Terminal sessions light up the</li>
+</ul>
+<p>  right project card live; <code>Stop</code>/<code>SessionEnd</code> advance linked tasks and auto-write<br>  devlogs; git/PR views refresh reactively instead of on a 15s poll; sessions can be<br>  fed current task/devlog context.</p>
+<ul>
+<li>Give up: a new long-lived localhost listener (<code>NWListener</code>) and a token-auth surface</li>
+</ul>
+<p>  to maintain; per-project opt-in (each repo must have hooks installed); reliance on the<br>  current Claude Code hook payload schema, which can change (revisit flagged).</p>
+<ul>
+<li>Security: bind to <code>127.0.0.1</code> only, require a per-machine random token header, and</li>
+</ul>
+<p>  ignore events whose <code>cwd</code> doesn't match a known project.</p>
+<h2>Build stages</h2>
+<ol>
+<li>Event bus: <code>EventServer</code> (localhost listener + token + endpoint file), hook installer,</li>
+</ol>
+<p>   per-project settings writer, <code>SessionStart</code> confirmation.<br>2. Session↔task linking via <code>PreToolUse</code>/<code>PostToolUse</code>/<code>Stop</code>/<code>SessionEnd</code>.<br>3. Auto-devlog on <code>SessionEnd</code>; git/PR refresh on <code>Bash(git<em>|gh</em>)</code> tool use.<br>4. Context injection via <code>UserPromptSubmit</code>/<code>SessionStart</code> returning <code>additionalContext</code>.<br>5. One-click install/remove UI in settings.</p></div>
+  <div class="lore-backlinks"><span class="lore-backlinks-label">↩ 1 linked reference</span> <a class="lore-link" data-lore-target="decisions/0005-agent-native-task-actions.md">Agent-native task actions: Claude acts through lore; dev-dash launches, renders, notifies</a></div>
+  <textarea class="lore-src" style="display:none">
+
+## Why this choice
+
+The goal is to do all AI-assisted development inside dev-dash, with Claude Code wired
+into tasks, devlogs, and GitHub. Today the app relates to Claude in two disconnected,
+one-directional ways:
+
+1. **App-spawned `claude -p`** (`ClaudeRunner` → `ShellRunner.start` → stream-json).
+   The app drives Claude; the only feedback is stdout parsed for `[PHASE:]` markers.
+2. **Real terminal/IDE Claude Code sessions** — discovered only *after the fact* by
+   `SessionScanner`/`NotesFileWatcher` tailing `~/.claude/projects/*.jsonl`. The app is
+   a spectator reading a finished transcript, never a participant.
+
+That split is the friction. &quot;Claude isn't first-class&quot; means the app can launch Claude
+but Claude can't talk back. Everything is pull-based (15s `startAutoRefresh` polling).
+
+The fix is a **return channel built on Claude Code's own hooks**. Hooks fire for every
+session — terminal, IDE, or app-spawned — and carry `session_id`, `cwd`, and
+event-specific data (`tool_name`/`tool_input`, `prompt`) on stdin. A hook command can
+also emit `additionalContext` to inject app state back *into* Claude. This makes any
+session an event source and dissolves the in-app vs. outside distinction. `cwd` is the
+join key that maps a session to a project in `projects` with no extra plumbing.
+
+## Options considered
+
+- **Transport (Claude → app):** localhost HTTP server inside dev-dash (chosen, push,
+  instant, supports synchronous context-injection responses) vs. append-only
+  `events.ndjson` tailed like `NotesFileWatcher` (no networking, but indirect and can't
+  return context to the hook synchronously).
+- **Hook scope:** per-project `.claude/settings.json` (chosen — explicit, committed,
+  app-managed via installer) vs. global `~/.claude/settings.json` (every session
+  everywhere; broader but noisier) vs. both.
+- **Hook wiring:** a single installed helper script (`~/.devdash/bin/devdash-hook`) that
+  reads the live endpoint+token from `~/.devdash/event-endpoint.json` and curls the
+  payload (chosen — stable hook config, app owns endpoint discovery) vs. baking the port
+  into each settings.json entry (breaks when the port changes between launches).
+
+## Tradeoffs
+
+- Gain: Claude becomes bidirectional and event-driven. Terminal sessions light up the
+  right project card live; `Stop`/`SessionEnd` advance linked tasks and auto-write
+  devlogs; git/PR views refresh reactively instead of on a 15s poll; sessions can be
+  fed current task/devlog context.
+- Give up: a new long-lived localhost listener (`NWListener`) and a token-auth surface
+  to maintain; per-project opt-in (each repo must have hooks installed); reliance on the
+  current Claude Code hook payload schema, which can change (revisit flagged).
+- Security: bind to `127.0.0.1` only, require a per-machine random token header, and
+  ignore events whose `cwd` doesn't match a known project.
+
+## Build stages
+
+1. Event bus: `EventServer` (localhost listener + token + endpoint file), hook installer,
+   per-project settings writer, `SessionStart` confirmation.
+2. Session↔task linking via `PreToolUse`/`PostToolUse`/`Stop`/`SessionEnd`.
+3. Auto-devlog on `SessionEnd`; git/PR refresh on `Bash(git*|gh*)` tool use.
+4. Context injection via `UserPromptSubmit`/`SessionStart` returning `additionalContext`.
+5. One-click install/remove UI in settings.
+</textarea>
+</div>
 <div class="lore-card" data-lore-file="/Users/suki/dev/dev-dash/docs/decisions/0003-unified-stacked-diff-view.md" data-lore-type="decision">
   <div class="lore-card-head">
     <span class="lore-card-meta">2026-06-22 · architecture</span>
