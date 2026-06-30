@@ -1941,7 +1941,6 @@ final class DashboardStore: ObservableObject {
                 category: category, owner: owner, notes: notes
             )
             reloadTickets(for: projectPath)
-            reloadPolicies(for: projectPath)
             todoError = nil
         } catch {
             todoError = "Couldn't add ticket: \(error.localizedDescription)"
@@ -1952,14 +1951,12 @@ final class DashboardStore: ObservableObject {
     func setTicketStatus(projectPath: String, id: String, status: TaskStatus) {
         try? TicketStore.setStatus(projectPath: projectPath, id: id, status: status)
         reloadTickets(for: projectPath)
-        reloadPolicies(for: projectPath)
     }
 
     /// Set owner on a ticket by id, then refresh tickets.
     func setTicketOwner(projectPath: String, id: String, owner: TaskOwner) {
         try? TicketStore.setOwner(projectPath: projectPath, id: id, owner: owner)
         reloadTickets(for: projectPath)
-        reloadPolicies(for: projectPath)
     }
 
     func setTaskParent(projectPath: String, id: String, newParentId: String?) {
@@ -2361,7 +2358,6 @@ final class DashboardStore: ObservableObject {
         projectTasks[projectPath] = TaskStore.read(projectPath)
         refreshTaskSnapshot(for: projectPath)
         reloadTickets(for: projectPath)
-        reloadPolicies(for: projectPath)
 
         // Re-read the task to pick up the persisted ticket/owner fields, then launch.
         let persisted = TaskStore.read(projectPath).first { $0.id == workTask.id } ?? workTask

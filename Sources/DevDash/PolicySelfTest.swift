@@ -165,7 +165,8 @@ enum PolicySelfTest {
         check(quick.contains("Implement login"),       "prompt: includes ticket title")
         check(quick.contains("Email + password."),     "prompt: includes ticket notes")
         check(quick.contains("Add form UI"),           "prompt: lists existing tasks (dedupe)")
-        check(quick.contains("TASK:"),                 "prompt: carries TASK: instruction")
+        check(quick.contains("Output each suggested task on its own line as exactly: `TASK: <title>`"),
+              "prompt: carries TASK: instruction line")
 
         let deep = store.buildTicketBreakdownPrompt(
             ticket: ticket, existingTaskTitles: [], projectPath: proj, deep: true)
