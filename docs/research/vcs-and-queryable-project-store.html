@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beyond Git — jj, Fossil &amp; the Queryable Project Store</title>
+<style>
+  :root{
+    --ink:#16161d;--ink-soft:#3a3a46;--muted:#6b6b78;--line:#e4e4ec;
+    --bg:#fbfbfd;--paper:#fff;--accent:#5b4be0;--accent-soft:#efecff;
+    --amber:#b4690e;--amber-soft:#fbf1e2;--teal:#0f766e;--code-bg:#f4f4f8;--maxw:820px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 26px}
+  header.hero{background:radial-gradient(1100px 360px at 82% -10%,rgba(91,75,224,.10),transparent 60%),
+    radial-gradient(800px 320px at 0% 0%,rgba(180,105,14,.07),transparent 55%),var(--paper);
+    border-bottom:1px solid var(--line);padding:52px 0 36px}
+  .kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 14px}
+  h1{font-size:34px;line-height:1.12;margin:0 0 12px;letter-spacing:-.02em;font-weight:800}
+  .lede{font-size:18px;line-height:1.45;color:var(--ink-soft);max-width:640px;margin:0}
+  .meta{margin-top:20px;font-size:13px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+  .meta b{color:var(--ink-soft);font-weight:600}
+
+  section{padding:22px 0;border-top:1px solid var(--line)}
+  h2.sec{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 4px}
+  h3.title{font-size:22px;line-height:1.2;letter-spacing:-.01em;margin:0 0 12px;font-weight:800}
+  h4{font-size:15px;margin:18px 0 6px;letter-spacing:-.01em}
+  p{margin:0 0 12px}
+  strong{font-weight:680}a{color:var(--accent)}.muted{color:var(--muted);font-size:14px}
+  ul,ol{margin:0 0 12px;padding-left:20px}li{margin:0 0 5px}li::marker{color:var(--accent)}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.84em;background:var(--code-bg);padding:.1em .38em;border-radius:5px;color:#2c2350}
+  pre{background:#1c1b29;color:#e6e4f5;padding:14px 16px;border-radius:10px;overflow:auto;font-size:13px;line-height:1.55;margin:0 0 14px}
+  pre code{background:none;color:inherit;padding:0}
+
+  .callout{border-radius:10px;padding:14px 16px;margin:16px 0;border:1px solid var(--line)}
+  .callout .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;margin:0 0 5px}
+  .insight{background:var(--accent-soft);border-color:#d9d3ff}.insight .lbl{color:var(--accent)}
+  .missing{background:var(--amber-soft);border-color:#eed9bb}.missing .lbl{color:var(--amber)}
+  .callout p{margin:0;font-size:14.5px}
+
+  .tablewrap{overflow-x:auto;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;background:var(--paper);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f6f6fa;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  tr:last-child td{border-bottom:none}td code{font-size:.82em}
+  .yes{color:var(--teal);font-weight:700}.no{color:#b42318;font-weight:700}.partial{color:var(--amber);font-weight:700}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+  .col{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--paper)}
+  .col.jj{border-top:3px solid var(--accent)}.col.fossil{border-top:3px solid var(--amber)}
+  .col h4{margin:0 0 6px}.col ul{margin:0;padding-left:18px;font-size:13.5px}
+
+  footer{border-top:1px solid var(--line);padding:22px 0 48px;color:var(--muted);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none}.src{margin:4px 0;word-break:break-word}
+  @media (max-width:600px){h1{font-size:27px}.two{grid-template-columns:1fr}}
+  @media print{body{background:#fff;font-size:10.5pt}pre{background:#f4f4f8;color:#000;border:1px solid #ddd}
+    .insight,.missing{-webkit-print-color-adjust:exact;print-color-adjust:exact}a{color:#000}}
+</style>
+</head>
+<body>
+
+<header class="hero"><div class="wrap">
+  <p class="kicker">Research Brief · Version Control Futures</p>
+  <h1>Beyond Git: jj, Fossil &amp; the Queryable Project Store</h1>
+  <p class="lede">What "replacing git" really means — and how <strong>lore</strong> + <strong>dev-dash</strong> already implement most of the synthesis jj and Fossil are circling.</p>
+  <div class="meta"><span><b>2026-06-30</b></span><span>Scope: landscape → concept → codebase findings</span><span>~/dev/lore · ~/dev-dash</span></div>
+</div></header>
+
+<div class="wrap">
+
+  <section>
+    <h2 class="sec">01 · Landscape</h2>
+    <h3 class="title">"Replacing git" means replacing the interface, not the model</h3>
+    <p>Git's content-addressed commit DAG is the part everyone agrees is correct. The future isn't "git is gone" — it's "you stop typing <code>git</code> and the porcelain changes." The complaints: bad CLI, heavyweight branching/merging, poor monorepo scale, binary bloat.</p>
+    <ul>
+      <li><strong>jj</strong> — git-compatible frontend; the credible "what replaces the <em>command</em>" answer.</li>
+      <li><strong>Sapling</strong> — cleaner UX + stacked diffs over git; strong at scale.</li>
+      <li><strong>Pijul/Darcs</strong> — true theoretical replacement (patch theory); niche, breaks git compat.</li>
+      <li><strong>Fossil</strong> — all-in-one VCS + issues + wiki + forum; deliberate niche.</li>
+    </ul>
+    <p class="muted">Only <strong>interoperability</strong> has ever driven adoption — speak git's format, migrate one dev at a time. Git the storage format is permanent infrastructure; what gets replaced is the command you type.</p>
+  </section>
+
+  <section>
+    <h2 class="sec">02 · The two bets</h2>
+    <h3 class="title">jj vs Fossil</h3>
+    <div class="two">
+      <div class="col jj">
+        <h4>Jujutsu — UX is wrong, model is right</h4>
+        <ul>
+          <li>New frontend, <strong>backend is git's object store</strong> — a jj repo is a git repo</li>
+          <li><strong>No staging</strong> — working copy <em>is</em> a commit, auto-snapshotted</li>
+          <li><strong>Total undo</strong> — op log + <code>jj op restore</code> rewinds the whole repo</li>
+          <li><strong>Conflicts are data</strong> — rebase through them, never blocked</li>
+          <li>Adoption risk ≈ 0; reversible. Bites: pre-1.0, no-staging flip</li>
+        </ul>
+      </div>
+      <div class="col fossil">
+        <h4>Fossil — VCS shouldn't be standalone</h4>
+        <ul>
+          <li>By SQLite's author; <strong>one SQLite file</strong> = whole project</li>
+          <li>Issues + wiki versioned <em>with</em> code, not in a silo</li>
+          <li>Remembers everything — anti-history-rewrite by design</li>
+          <li>Native web timeline + UI, zero setup</li>
+          <li>Bites: <strong>not git-compatible</strong> → leaves the ecosystem</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tablewrap"><table>
+      <tr><th></th><th>jj</th><th>Fossil</th></tr>
+      <tr><td><b>git-compatible</b></td><td class="yes">Yes</td><td class="no">No</td></tr>
+      <tr><td><b>Storage</b></td><td>Standard git repo</td><td>One SQLite file</td></tr>
+      <tr><td><b>History rewrite</b></td><td>Safe &amp; encouraged</td><td>Discouraged</td></tr>
+      <tr><td><b>Killer feature</b></td><td>Total undo, first-class conflicts</td><td>All-in-one project portal</td></tr>
+      <tr><td><b>Adoption risk</b></td><td class="yes">Near zero</td><td class="partial">High</td></tr>
+    </table></div>
+    <p class="muted"><strong>Workspaces (jj's worktrees):</strong> <code>jj workspace add ../dir</code> — independent dirs, shared repo + op log, no branch required, each with its own working-copy commit. Docs cite the use case explicitly: <em>give AI agents their own sandbox</em>.</p>
+  </section>
+
+  <section>
+    <h2 class="sec">03 · Fossil's breadth</h2>
+    <h3 class="title">Where the all-in-one scope falls short</h3>
+    <p>Fossil bundles a lot, but the scope is <strong>wide, fixed, and pre-AI</strong>:</p>
+    <ul>
+      <li><strong>No code review / PR workflow</strong> — timeline + tickets, but no first-class pull requests.</li>
+      <li><strong>No CI/CD</strong> — no pipeline integration; bolt-on, against the grain.</li>
+      <li><strong>One-way git interop only</strong> — isolates you from GitHub and every AI coding tool that assumes git.</li>
+      <li><strong>Fixed artifact types</strong> — check-ins / tickets / wiki / forum; no extensible typed-doc schema.</li>
+      <li><strong>Not agent-native</strong> — queryable SQLite, but no schema-as-prompt, no <code>owner: ai</code>, no machine-owned sections.</li>
+      <li><strong>No operation log / undo</strong> — faithful history ≠ rewindable state.</li>
+      <li><strong>No real-time event/hook stream</strong> — pull-based; nothing like a live agent event bus.</li>
+    </ul>
+    <div class="callout insight"><p class="lbl">Punchline</p>
+      <p>These gaps are almost exactly what <strong>lore + dev-dash add on top of git</strong>. Building on git instead of <em>inside</em> Fossil gets you Fossil's "one queryable place" benefit <em>and</em> the things its fixed, pre-AI breadth misses.</p></div>
+  </section>
+
+  <section>
+    <h2 class="sec">04 · Concept</h2>
+    <h3 class="title">The bridge between jj and Fossil</h3>
+    <p>jj's op log is <strong>an event database that doesn't know it's one</strong>. Fossil's repo is <strong>a database that won't branch like git</strong>. Same target, opposite sides:</p>
+    <p class="muted" style="font-style:italic">A project as an event-sourced, queryable, branchable store — code, operation history, issues, and decisions all first-class records you can <code>SELECT</code>, fork, time-travel, and safely undo.</p>
+    <p>Convergence is already happening: <strong>git-bug / Radicle</strong> pull Fossil's bundling into git; <strong>Dolt / Datomic</strong> pull git's branchable DAG into a database. Nobody's shipped the full thing.</p>
+    <div class="callout insight"><p class="lbl">Key insight</p>
+      <p>"A VCS" and "a queryable project database" are the <strong>same data structure from two angles</strong> — an append-only log of facts with a branchable index. jj is the strongest <em>engine</em>; Fossil the strongest <em>vision</em> of scope.</p></div>
+  </section>
+
+  <section>
+    <h2 class="sec">05 · Finding</h2>
+    <h3 class="title">lore — a queryable knowledge store on git, not in a DB</h3>
+    <p>Node CLI at <code>~/dev/lore</code>. A <strong>git-native knowledge base over plain markdown</strong>: markdown is source of truth, <code>index.md</code> is a regenerable view. Deliberately <em>not</em> a database (deps: <code>gray-matter</code>, <code>yaml</code>, <code>zod</code>).</p>
+    <ul>
+      <li><strong>Typed docs as data</strong> — task / ticket / decision / devlog / idea / artifact / <strong>policy</strong>, defined by YAML schemas (eject to override). The schema is the type system <em>and</em> an AI prompt.</li>
+      <li><strong>Graph layer</strong> — <code>type: reference</code> fields + <code>[[wikilinks]]</code> → on-demand backlinks (never persisted).</li>
+      <li><strong>History</strong> — mostly flat current-state; two append-only seams (<code>## Status history</code>, dated devlogs). <strong>Git is the real event log &amp; time machine.</strong></li>
+      <li><strong>Agent-native by design</strong> (ADR 0012) — a <code>policy</code> type whose frontmatter is <em>routing metadata</em> (<code>applies_to</code>, <code>trigger</code>, <code>status</code>, <code>priority</code>); the app injects active, scope-matched policy bodies <em>deterministically</em> into agent prompts. Edit a doc → change agent behavior, no code change. This is exactly what Fossil's fixed scope can't do.</li>
+    </ul>
+    <div class="callout insight"><p class="lbl">The match</p>
+      <p>lore is a Fossil-style knowledge store that made the <strong>opposite storage bet from Fossil — the same as jj</strong>: don't use a database, treat <strong>git as the time machine</strong>. You built the queryable knowledge layer <em>on top of git</em>.</p></div>
+    <div class="callout insight"><p class="lbl">Event-log vs current-state, made explicit (ADR 0012)</p>
+      <p>"An <strong>ADR is decision history</strong> (immutable: why we chose this). A <strong>policy doc is a living operating instruction</strong> the agent follows now (editable; deprecated when superseded). Don't conflate them." That's the append-only-record vs mutable-current-state split — the two halves of the whole synthesis — already separated as first-class doc types.</p></div>
+    <p class="muted"><strong>Drift flagged:</strong> README claims a <code>claude -p</code> fallback for AI commands; the code only uses the Anthropic SDK and hard-errors without <code>ANTHROPIC_API_KEY</code>.</p>
+  </section>
+
+  <section>
+    <h2 class="sec">06 · Finding</h2>
+    <h3 class="title">dev-dash — unifying code-history with project-knowledge</h3>
+    <p>macOS SwiftUI dashboard treating knowledge (devlogs/decisions/tasks) and code history (git/Claude sessions) as one file-backed graph, with agents as first-class participants.</p>
+    <ul>
+      <li><strong>Scanners</strong> — git readers (<code>GitScanner</code>, <code>RecentCommitsScanner</code>, <code>GitStatusScanner</code> incl. <code>git worktree list</code>) + knowledge graph (<code>LoreLinkIndex</code> builds two-way links in Swift).</li>
+      <li><strong>WorktreeManager</strong> — N tasks → N worktrees (<code>task/&lt;id&gt;-&lt;slug&gt;</code>) → N Claude sessions; the <strong>task lore doc is the join</strong> between agent, branch, worktree. Hand-rolled safety (collision-retry, <code>branch -D</code> HEAD guard).</li>
+      <li><strong>Hook event bus</strong> (ADR 0004) — makes any Claude session an event source; <code>recentEvents</code> is a live op-log of agent activity, but <strong>in-memory, 300-capped, never persisted</strong>.</li>
+      <li><strong>Session JSONL transcripts</strong> — append-only log of every tool call; the closest thing to true event sourcing, already on disk.</li>
+      <li><strong>PolicyStore</strong> (ADR 0012) — reads <code>policy</code> docs; <code>DashboardStore.policies(for:appliesTo:trigger:)</code> returns active, scope+trigger-matched policies ordered by <code>(priority, id)</code>, injected into ticket-breakdown and the agent seed prompt. Behavior-as-data the agent reads at launch.</li>
+    </ul>
+    <div class="callout insight"><p class="lbl">The loop</p>
+      <p>Launch agent into isolated worktree → agent acts (hook events) + writes lore docs → dev-dash reduces events into live state + re-renders the graph. <code>cwd</code> is the join key. = a queryable, agent-aware event/knowledge graph layered on git.</p></div>
+  </section>
+
+  <section>
+    <h2 class="sec">07 · The reveal</h2>
+    <h3 class="title">dev-dash + lore is the bridge — ~80% built</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Element</th><th>Whose idea</th><th>Status</th></tr>
+      <tr><td>Queryable project knowledge as data</td><td>Fossil's vision</td><td><span class="yes">✓</span> lore typed docs</td></tr>
+      <tr><td>…stored on git, not a DB</td><td>jj's bet</td><td><span class="yes">✓</span> git = time machine</td></tr>
+      <tr><td>Graph layer over records</td><td>both</td><td><span class="yes">✓</span> <code>LoreLinkIndex</code></td></tr>
+      <tr><td>Branchable agent sandboxes</td><td>jj workspaces</td><td><span class="yes">✓</span> <code>WorktreeManager</code></td></tr>
+      <tr><td>Unified operation log</td><td>jj op-log</td><td><span class="partial">◑</span> 4 partial seams</td></tr>
+      <tr><td>Safe undo / time-travel</td><td>jj <code>op restore</code></td><td><span class="no">✗</span> missing</td></tr>
+    </table></div>
+    <p class="muted">You made <strong>jj's substrate bet with Fossil's ambition</strong> — git-native markdown instead of a SQLite blob. The synthesis, independently rederived.</p>
+  </section>
+
+  <section>
+    <h2 class="sec">08 · The gap &amp; the fix</h2>
+    <h3 class="title">The missing 20% is jj's deepest idea</h3>
+    <p>Four append-only streams exist (status history, hook bus, JSONL, devlogs) — but the richest (hook bus) is ephemeral, and there's <strong>no general undo / time-travel</strong>. Agent off the rails = manual <code>git</code>, not "rewind to operation 12."</p>
+    <h4>What jj gives you — and doesn't</h4>
+    <ul>
+      <li><span class="yes">Gives:</span> repo-level <code>op restore</code> across all workspaces; retires WorktreeManager's safety code; first-class conflicts for N agents; durable op-log for free; stays git so lore/CI/PRs unchanged.</li>
+      <li><span class="no">Doesn't:</span> reverse external side effects (PR opened, Linear moved), app/in-memory state, or anything outside the repo. <strong>Necessary but not sufficient.</strong></li>
+    </ul>
+    <div class="callout missing"><p class="lbl">Why op-log ranks first, jj second</p>
+      <p>jj's op-log and your hook bus are the <strong>same structure from two sides</strong>. jj covers the <strong>code half</strong> of undo cheaply; your own event log covers the <strong>knowledge/external half</strong> jj can't touch. Build the log first; treat jj as a measured spike.</p></div>
+  </section>
+
+  <section>
+    <h2 class="sec">09 · Action</h2>
+    <h3 class="title">Next moves (value-per-effort order)</h3>
+    <ol>
+      <li><strong>Persist the hook event bus</strong> → append-only per-project NDJSON. You already produce the stream; instant durable op-log. <em>Commit to this.</em></li>
+      <li><strong>Unify the durable seams</strong> (status history + hook events + JSONL) into one timeline keyed by task/cwd — the "SELECT across code + knowledge + activity, as-of any point" surface.</li>
+      <li><strong>Spike jj behind <code>launchInWorktree</code></strong> — swap <code>WorktreeManager.create</code> for <code>jj workspace add</code> on one project. <em>Evaluate, don't migrate.</em> Note: <code>GitStatusScanner.parseWorktrees</code> needs a <code>jj workspace list</code> variant (jj workspaces aren't git worktrees).</li>
+    </ol>
+  </section>
+
+  <footer>
+    <p><strong>Sources</strong></p>
+    <p class="src">jj — <a href="https://docs.jj-vcs.dev/latest/git-compatibility/">Jujutsu docs</a> · <a href="https://www.joshualyman.com/2026/02/demystifying-jujutsu-jj-workspaces/">Demystifying jj Workspaces</a> · <a href="https://shaddy.dev/notes/jj-worktrees/">jj worktrees (Shaddy)</a> · <a href="https://tonyfinn.com/blog/jj/">jj overview (Tony Finn)</a></p>
+    <p class="src">Fossil — <a href="https://fossil-scm.org/forum/forumpost/b251b6e48e">Is Git irreplaceable?</a> · <a href="https://blog.fraggod.net/2011/05/02/fossil-to-git-export-and-mirroring.html">Fossil↔git mirroring</a></p>
+    <p class="src">Codebase — <code>~/dev/lore</code> · <code>~/dev-dash</code> (Scanners, DashboardStore, ADRs 0004–0010)</p>
+  </footer>
+
+</div>
+</body>
+</html>
