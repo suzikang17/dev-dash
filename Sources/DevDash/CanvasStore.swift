@@ -8,6 +8,7 @@ enum PanelKind: Codable, Hashable {
     case preview                // web preview for the project
     case simulator              // iOS simulator embed (project-scoped)
     case terminal(id: UUID)     // a live shell, keyed independently
+    case browser                // general web browser (address bar + WKWebView)
 
     var label: String {
         switch self {
@@ -15,6 +16,7 @@ enum PanelKind: Codable, Hashable {
         case .preview:     return "Preview"
         case .simulator:   return "Simulator"
         case .terminal:    return "Terminal"
+        case .browser:     return "Browser"
         }
     }
 
@@ -24,6 +26,7 @@ enum PanelKind: Codable, Hashable {
         case .preview:     return "globe"
         case .simulator:   return "iphone"
         case .terminal:    return "terminal"
+        case .browser:     return "safari"
         }
     }
 
@@ -43,6 +46,8 @@ enum PanelKind: Codable, Hashable {
         case .terminal(let id):
             try c.encode("terminal", forKey: .kind)
             try c.encode(id, forKey: .terminalID)
+        case .browser:
+            try c.encode("browser", forKey: .kind)
         }
     }
 
@@ -54,6 +59,7 @@ enum PanelKind: Codable, Hashable {
             self = .view(DetailTab(rawValue: raw) ?? .info)
         case "simulator": self = .simulator
         case "terminal":  self = .terminal(id: try c.decode(UUID.self, forKey: .terminalID))
+        case "browser":   self = .browser
         default:          self = .preview
         }
     }
@@ -120,14 +126,20 @@ final class CanvasStore: ObservableObject {
 
     // MARK: Panel ops
 
-    /// Spawn a panel of `kind`, placed near the top-left of the current viewport
-    /// (accounting for pan), stacked on top.
-    func addPanel(kind: PanelKind, for path: String) {
+    /// Spawn a panel of `kind`, stacked on top. When `at` (a board-coordinate
+    /// point, e.g. a right-click location) is given the panel's top-left lands
+    /// there; otherwise new panels cascade near the top-left of the viewport.
+    func addPanel(kind: PanelKind, for path: String, at boardOrigin: CGPoint? = nil) {
         var l = layout(for: path)
         let topZ = (l.panels.map(\.z).max() ?? 0) + 1
-        // Cascade new panels so they don't all stack exactly.
-        let n = CGFloat(l.panels.count % 6)
-        let origin = CGPoint(x: -l.pan.width + 60 + n * 28, y: -l.pan.height + 60 + n * 28)
+        let origin: CGPoint
+        if let boardOrigin {
+            origin = boardOrigin
+        } else {
+            // Cascade new panels so they don't all stack exactly.
+            let n = CGFloat(l.panels.count % 6)
+            origin = CGPoint(x: -l.pan.width + 60 + n * 28, y: -l.pan.height + 60 + n * 28)
+        }
         let size = defaultSize(for: kind)
         l.panels.append(CanvasPanel(id: UUID(), kind: kind,
                                     frame: CGRect(origin: origin, size: size), z: topZ))
@@ -167,8 +179,16 @@ final class CanvasStore: ObservableObject {
         switch kind {
         case .simulator: return CGSize(width: 460, height: 720)
         case .preview:   return CGSize(width: 520, height: 420)
+        case .browser:   return CGSize(width: 640, height: 480)
         case .terminal:  return CGSize(width: 520, height: 320)
-        case .view:      return CGSize(width: 460, height: 480)
+        case .view(let tab):
+            // Two-pane views (list/timeline + detail) need ~640px+ to lay out — spawn
+            // them wide/tall so they don't get crushed.
+            switch tab {
+            case .daily, .changes: return CGSize(width: 860, height: 560)
+            case .tasks:           return CGSize(width: 820, height: 620)
+            default:               return CGSize(width: 460, height: 480)
+            }
         }
     }
 

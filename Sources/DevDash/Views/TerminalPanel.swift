@@ -254,8 +254,18 @@ struct ResizeHandle: View {
         Rectangle()
             .fill(Color.clear)
             .frame(width: edge == .leading ? 6 : nil, height: isVertical ? 6 : nil)
-            .overlay(edge == .leading ? AnyView(Divider().rotationEffect(.degrees(90))) : AnyView(Divider()),
-                     alignment: edge == .top ? .top : (edge == .bottom ? .bottom : .leading))
+            // Hairline: a horizontal Divider for top/bottom edges, but a proper
+            // 1pt-wide vertical rule for the leading edge. (Rotating a Divider 90°
+            // mis-lays-out into a stray full-width horizontal line.)
+            .overlay(alignment: edge == .top ? .top : (edge == .bottom ? .bottom : .leading)) {
+                if isVertical {
+                    Divider()
+                } else {
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(width: 1)
+                }
+            }
             .contentShape(Rectangle())
             .hoverCursor(isVertical ? .resizeUpDown : .resizeLeftRight)
             .gesture(

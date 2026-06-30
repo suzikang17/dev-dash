@@ -15,8 +15,17 @@ struct CanvasView: View {
 
     @State private var pan: CGSize = .zero
     @State private var panAccum: CGSize = .zero
+    /// Latest cursor position in viewport-local coords; used to spawn panels where
+    /// the user right-clicked. Board point = hoverPoint − pan.
+    @State private var hoverPoint: CGPoint = .zero
 
     private static let boardSize = CGSize(width: 4000, height: 3000)
+
+    /// Where a newly-spawned panel should land (board coords), derived from the
+    /// current cursor position.
+    private var spawnOrigin: CGPoint {
+        CGPoint(x: hoverPoint.x - pan.width, y: hoverPoint.y - pan.height)
+    }
 
     private var layout: CanvasLayout { canvas.layout(for: project.path) }
 
@@ -26,6 +35,10 @@ struct CanvasView: View {
         Color(NSColor.underPageBackgroundColor)
             .contentShape(Rectangle())
             .gesture(panGesture)
+            // Track the cursor so right-click spawns land where you clicked.
+            .onContinuousHover(coordinateSpace: .local) { phase in
+                if case .active(let p) = phase { hoverPoint = p }
+            }
             // Right-click empty canvas to add a panel.
             .contextMenu { addPanelMenuItems }
             // Panels board — anchored to the viewport's top-left, panned via offset.
@@ -46,7 +59,6 @@ struct CanvasView: View {
                 .coordinateSpace(name: canvasBoardSpace)
             }
             .overlay { if layout.panels.isEmpty { emptyHint } }
-            .overlay(alignment: .topLeading) { toolbar }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .onAppear { pan = layout.pan; panAccum = layout.pan }
@@ -67,37 +79,27 @@ struct CanvasView: View {
 
     // MARK: Toolbar (＋ spawn menu)
 
-    private var toolbar: some View {
-        Menu { addPanelMenuItems } label: {
-            Label("Add panel", systemImage: "plus")
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .padding(.horizontal, DSSpace.sm)
-        .padding(.vertical, DSSpace.xs)
-        .background(.bar, in: Capsule())
-        .padding(DSSpace.md)
-    }
-
-    /// Shared menu items for both the toolbar "Add panel" button and the
-    /// right-click context menu.
+    /// Menu items for the right-click "add panel" context menu.
     @ViewBuilder
     private var addPanelMenuItems: some View {
         Section("Views") {
             ForEach(DetailTab.allCases) { tab in
                 Button {
-                    canvas.addPanel(kind: .view(tab), for: project.path)
+                    canvas.addPanel(kind: .view(tab), for: project.path, at: spawnOrigin)
                 } label: { Label(tab.label, systemImage: tab.systemImage) }
             }
         }
         Divider()
-        Button { canvas.addPanel(kind: .preview, for: project.path) } label: {
+        Button { canvas.addPanel(kind: .preview, for: project.path, at: spawnOrigin) } label: {
             Label("Preview", systemImage: "globe")
         }
-        Button { canvas.addPanel(kind: .simulator, for: project.path) } label: {
+        Button { canvas.addPanel(kind: .browser, for: project.path, at: spawnOrigin) } label: {
+            Label("Browser", systemImage: "safari")
+        }
+        Button { canvas.addPanel(kind: .simulator, for: project.path, at: spawnOrigin) } label: {
             Label("Simulator", systemImage: "iphone")
         }
-        Button { canvas.addPanel(kind: .terminal(id: UUID()), for: project.path) } label: {
+        Button { canvas.addPanel(kind: .terminal(id: UUID()), for: project.path, at: spawnOrigin) } label: {
             Label("Terminal", systemImage: "terminal")
         }
     }
@@ -110,7 +112,7 @@ struct CanvasView: View {
                 .accessibilityHidden(true)
             Text("Empty canvas")
                 .font(DSFont.sectionTitle)
-            Text("Use \u{201C}Add panel\u{201D} to drop the preview, simulator, tasks, terminal, and more here — then drag and resize them however you like.")
+            Text("Right-click anywhere to drop the preview, simulator, tasks, terminal, and more here — then drag and resize them however you like.")
                 .font(DSFont.label)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -164,14 +166,20 @@ struct CanvasPanelView<Content: View>: View {
     }
 
     var body: some View {
+        // While resizing, freeze the content at its start size (resizeOrigin) so heavy
+        // bodies (the simulator/browser WKWebView) don't reflow every frame — that
+        // per-frame reflow starves the drag and makes growing especially fail. The
+        // chrome resizes live; the content reflows once on release. Content stays
+        // mounted throughout, so the running simulator keeps its state.
+        let contentSize = resizeOrigin ?? liveFrame.size
         VStack(spacing: 0) {
             titleBar
             Divider()
             content()
-                .frame(width: liveFrame.width, height: max(0, liveFrame.height - Self.titleBarHeight - 1))
+                .frame(width: contentSize.width, height: max(0, contentSize.height - Self.titleBarHeight - 1))
                 .clipped()
         }
-        .frame(width: liveFrame.width, height: liveFrame.height)
+        .frame(width: liveFrame.width, height: liveFrame.height, alignment: .topLeading)
         .background(Color(NSColor.windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: DSRadius.medium, style: .continuous).stroke(DSColor.hairline, lineWidth: 1))
@@ -183,7 +191,9 @@ struct CanvasPanelView<Content: View>: View {
         .onChange(of: panel.frame) { _, new in
             if dragOrigin == nil && resizeOrigin == nil { liveFrame = new }
         }
-        .onTapGesture { canvas.raise(panel.id, for: projectPath) }
+        // NOTE: no panel-wide tap-to-raise — it would eat clicks meant for the
+        // panel's content (e.g. the simulator web view). Raising happens from the
+        // title bar (tap or drag) instead.
     }
 
     private var titleBar: some View {
@@ -224,6 +234,8 @@ struct CanvasPanelView<Content: View>: View {
                     canvas.updateFrame(panel.id, frame: liveFrame, for: projectPath)
                 }
         )
+        // Click the title bar (without dragging) to bring the panel to the front.
+        .onTapGesture { canvas.raise(panel.id, for: projectPath) }
     }
 
     private var resizeHandle: some View {
@@ -274,6 +286,8 @@ struct PanelContentView: View {
             SimulatorEmbedView(fixedProject: project)
         case .terminal:
             TerminalPanel(project: project)
+        case .browser:
+            BrowserPanel()
         }
     }
 }

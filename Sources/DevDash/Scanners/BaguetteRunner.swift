@@ -44,6 +44,12 @@ enum BaguetteError: LocalizedError {
 @MainActor
 final class BaguetteRunner: ObservableObject {
 
+    /// The `baguette serve` sidecar is a single machine-wide server on a fixed
+    /// port, so all simulator views must share ONE runner — otherwise each view
+    /// spawns its own server that collides on the port, and stopping one kills it
+    /// for the others. Every `SimulatorEmbedView` observes this shared instance.
+    static let shared = BaguetteRunner()
+
     static let port: Int = 8421
     static let host: String = "127.0.0.1"
 
@@ -157,7 +163,16 @@ final class BaguetteRunner: ObservableObject {
             throw err
         }
 
-        // 2. Boot the selected simulator if it is Shutdown.
+        // 2. If a baguette server is already serving on the port (left over from a
+        //    previous launch, or started by another simulator view), adopt it
+        //    instead of spawning a duplicate that would collide on the port.
+        if await serverReachable() {
+            serverState = .running
+            await refreshDevices()
+            return
+        }
+
+        // 3. Boot the selected simulator if it is Shutdown.
         if let udid = selectedUDID,
            let device = devices.first(where: { $0.udid == udid }),
            !device.isBooted {
@@ -166,7 +181,7 @@ final class BaguetteRunner: ObservableObject {
                                       timeout: 60)
         }
 
-        // 3. Spawn `baguette serve`.
+        // 4. Spawn `baguette serve`.
         let proc: RunningProcess
         do {
             proc = try ShellRunner.start(bin, args: [
@@ -220,11 +235,25 @@ final class BaguetteRunner: ObservableObject {
 
     // MARK: - Private helpers
 
+    /// Single quick probe: is a baguette server already answering on the port?
+    private func serverReachable() async -> Bool {
+        let url = Self.serverBase.appendingPathComponent("simulators")
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 1
+        let session = URLSession(configuration: config)
+        do {
+            let (_, response) = try await session.data(from: url)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
+    }
+
     /// Poll `http://host:port/simulators` until it responds with HTTP 200,
     /// returning `true` if it comes up within the timeout.
     private func waitForPort(timeoutSeconds: Int) async -> Bool {
         let url = Self.serverBase.appendingPathComponent("simulators")
-        var config = URLSessionConfiguration.ephemeral
+        let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 1
         let session = URLSession(configuration: config)
         let deadline = Date().addingTimeInterval(Double(timeoutSeconds))

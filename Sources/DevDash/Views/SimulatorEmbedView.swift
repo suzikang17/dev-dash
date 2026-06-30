@@ -24,7 +24,8 @@ struct SimulatorEmbedView: View {
     /// projects that contain an Xcode workspace/project.
     let fixedProject: Project?
 
-    @StateObject private var runner = BaguetteRunner()
+    // Shared, machine-wide server (one `baguette serve` for all simulator views).
+    @ObservedObject private var runner = BaguetteRunner.shared
     @StateObject private var webHolder = SimulatorWebHolder()
     @StateObject private var appRunner = SimAppRunner()
     @EnvironmentObject private var store: DashboardStore
@@ -39,7 +40,10 @@ struct SimulatorEmbedView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
+            // Only separate the toolbar from the content when the live embed sits
+            // flush beneath it (running). In idle/starting/not-installed the content
+            // is centered with big gaps, so a full-width divider just floats orphaned.
+            if runner.serverState == .running { Divider() }
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,12 +53,11 @@ struct SimulatorEmbedView: View {
                 await runner.refreshDevices()
             }
         }
-        // Tear down the server when this view disappears (e.g. user switches away
-        // while the server is running — explicit stop on navigation change).
+        // Do NOT stop the shared server on disappear — other simulator views (the
+        // dock, canvas panels, the global destination) may still be using it, and
+        // it's cleaned up on app quit. Stopping is an explicit user action only.
         .onDisappear {
-            if runner.serverState == .running {
-                runner.stop()
-            }
+            webHolder.clear()
         }
     }
 
