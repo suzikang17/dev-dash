@@ -14,6 +14,7 @@ struct DevDashApp: App {
         TaskStoreSelfTest.runIfRequested()  // exits early when launched with --selftest-taskstore
         PolicySelfTest.runIfRequested()     // exits early when launched with --selftest-policy
         EventLogSelfTest.runIfRequested()   // exits early when launched with --selftest-eventlog
+        NotificationSelfTest.runIfRequested() // exits early when launched with --selftest-notifications
     }
 
     var body: some Scene {
