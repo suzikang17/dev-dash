@@ -1,7 +1,8 @@
 name: note
 dir: notes
 heading: Notes
-id: { strategy: sequential, pad: 4 }
+# Daily pages are date-named (2026-06-20.md), not sequentially numbered.
+id: { strategy: dated, dateField: created }
 body: free
 frontmatter:
   - { name: title, type: string, required: true }
