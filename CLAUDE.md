@@ -54,7 +54,7 @@ scanner, or cross-tab work).
 - **Ticket** (`docs/tickets/`) = deliverable; contains **Tasks** (`docs/tasks/`), each with its own owner (human/ai) — ADR 0010. Task-less tickets show as "draft"; break down via ticket context menu (policy-driven suggestion → inline review)
 - **Policies** (`docs/policies/`) = agent behavior as data; app injects `active` ones into prompts by `applies_to`/`trigger` — ADR 0012. Edit the doc to change agent behavior, no code change
 - **Hook event bus**: Claude sessions POST to `EventServer`; `cwd` joins session → project — ADR 0004. Agent's write path is the `lore` CLI (ADR 0005); `NotesFileWatcher` picks up external doc writes
-- ADR 0013 (in flight): NDJSON operation log under `.devdash/events/`
+- **Operation log** (ADR 0013): every hook event is appended as NDJSON to `<project>/.devdash/events/<date>.ndjson` (source of truth; unmatched → `~/.devdash/events/_unmatched.ndjson`); `recentEvents` is a 300-cap tail restored from today's files on launch. Write via `EventLogStore` only (crash-safe seek-to-end appends). Query view (SQLite) is task 0009, still open
 
 ## Lore doc flow
 
