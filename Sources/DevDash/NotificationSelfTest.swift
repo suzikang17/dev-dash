@@ -14,6 +14,7 @@ enum NotificationSelfTest {
 
         checkLogRoundTrip(check)
         checkRestoreWindowAndCap(check)
+        checkGatingAndUnread(check)
 
         let msg = failures.isEmpty
             ? "notifications-selftest: ALL PASS"
@@ -69,6 +70,37 @@ enum NotificationSelfTest {
         NotificationLogStore.appendSync(notif(4), to: path)
         check(NotificationLogStore.read(at: path).count == 4,
               "rt: torn line skipped, post-crash append survives")
+    }
+
+    // Pure gating + unread logic on NotificationStore statics.
+    private static func checkGatingAndUnread(_ check: (Bool, String) -> Void) {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let feed = (0..<5).map { notif($0, date: base) }   // dates base+0 … base+4
+
+        check(NotificationStore.unreadCount(feed: feed, lastSeenAt: base.addingTimeInterval(2)) == 2,
+              "unread: items strictly newer than lastSeenAt")
+        check(NotificationStore.unreadCount(feed: feed, lastSeenAt: base.addingTimeInterval(100)) == 0,
+              "unread: none when lastSeenAt is newest")
+        check(NotificationStore.unreadCount(feed: [], lastSeenAt: .distantPast) == 0,
+              "unread: empty feed")
+
+        let kinds: Set<NotificationKind> = [.taskDone, .needsInput]
+        check(NotificationStore.shouldBanner(kind: .taskDone, bannerKinds: kinds, masterEnabled: true),
+              "gate: banner when kind enabled + master on")
+        check(!NotificationStore.shouldBanner(kind: .taskDone, bannerKinds: kinds, masterEnabled: false),
+              "gate: master off suppresses banner")
+        check(!NotificationStore.shouldBanner(kind: .prMerged, bannerKinds: kinds, masterEnabled: true),
+              "gate: kind off suppresses banner")
+
+        check(NotificationStore.shouldRecord(kind: .taskDone, bannerKinds: []),
+              "gate: non-idle kinds always recorded in feed")
+        check(!NotificationStore.shouldRecord(kind: .sessionIdle, bannerKinds: []),
+              "gate: sessionIdle hidden from feed when disabled")
+        check(NotificationStore.shouldRecord(kind: .sessionIdle, bannerKinds: [.sessionIdle]),
+              "gate: sessionIdle recorded when enabled")
+
+        check(NotificationStore.defaultBannerKinds == Set(NotificationKind.allCases).subtracting([.sessionIdle]),
+              "gate: default = all kinds except sessionIdle")
     }
 
     // Restore: last-3-days window, newest first, 300 cap.

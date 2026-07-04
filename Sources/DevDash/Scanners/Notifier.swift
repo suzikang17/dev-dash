@@ -15,10 +15,13 @@ enum Notifier {
     }
 
     /// Post an immediate local notification. Safe to call without prior auth check.
-    static func post(title: String, body: String) {
+    /// `userInfo` carries the click-to-navigate target (read by AppDelegate's
+    /// UNUserNotificationCenterDelegate).
+    static func post(title: String, body: String, userInfo: [String: String] = [:]) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body  = body
+        if !userInfo.isEmpty { content.userInfo = userInfo }
         let id = UUID().uuidString
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { _ in }
