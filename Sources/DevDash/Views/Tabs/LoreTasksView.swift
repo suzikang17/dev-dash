@@ -228,6 +228,18 @@ struct LoreTasksView: View {
                         TextField("New ticket — type a title, press ↩", text: $newTicketTitle)
                             .textFieldStyle(.plain)
                             .onSubmit { quickCreateTicket() }
+                        let drafts = draftTickets()
+                        if !drafts.isEmpty {
+                            Button {
+                                breakDownAllDraftTickets()
+                            } label: {
+                                Label("Break down drafts (\(drafts.count))", systemImage: "list.bullet.indent")
+                                    .font(DSFont.micro)
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(suggestingTicketId != nil)
+                            .help("Suggest tasks for every task-less open ticket, one at a time; review each before adding")
+                        }
                     }
                     .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.sm)
                     .background(Color(NSColor.windowBackgroundColor))
@@ -691,6 +703,35 @@ struct LoreTasksView: View {
         newTicketTaskTitle = ""
         addTaskForTicket = nil
         reload()
+    }
+
+    /// Open tickets with no child tasks — the "draft" set the batch action targets.
+    private func draftTickets() -> [Ticket] {
+        (store.projectTickets[projectPath] ?? []).filter { ticket in
+            ticket.status == .open && !tasks.contains { loreNumEq($0.ticketId, ticket.id) }
+        }
+    }
+
+    /// Sequentially suggest tasks for every draft ticket (one claude -p at a
+    /// time). Each ticket's inline checklist appears as its run completes; the
+    /// user still reviews/accepts per ticket — nothing is written automatically.
+    private func breakDownAllDraftTickets() {
+        guard suggestingTicketId == nil else { return }
+        let drafts = draftTickets()
+        guard !drafts.isEmpty else { return }
+        Task {
+            for ticket in drafts {
+                expandedTickets.insert(ticket.id)
+                suggestingTicketId = ticket.id
+                await store.suggestTasksForTicket(ticketId: ticket.id, projectPath: projectPath, deep: false)
+                let runs = store.claudeTasks[projectPath] ?? []
+                if let run = runs.last(where: { $0.kind == .taskSuggestion && $0.status == .completed }) {
+                    let titles = store.parseSuggestedTasks(from: run.id, projectPath: projectPath)
+                    ticketSuggestions[ticket.id] = titles.map { SuggestedDraft(title: $0) }
+                }
+            }
+            suggestingTicketId = nil
+        }
     }
 
     private func startBreakdown(ticketId: String, deep: Bool) {
