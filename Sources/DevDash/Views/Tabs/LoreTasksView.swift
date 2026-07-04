@@ -197,10 +197,23 @@ struct LoreTasksView: View {
                 LoreInitView(projectPath: projectPath) { refreshLoreState() }
             }
         }
-        .onAppear { refreshLoreState() }
+        .onAppear {
+            refreshLoreState()
+            consumePendingBreakdown()
+        }
         .onChange(of: projectPath) { _, _ in refreshLoreState() }
         .onChange(of: search) { _, _ in rebuildIndex() }
         .onChange(of: (store.projectTickets[projectPath] ?? []).map(\.id)) { _, _ in rebuildIndex() }
+        .onChange(of: store.pendingBreakdownTicketId) { _, _ in consumePendingBreakdown() }
+    }
+
+    /// Consume a ⌘K-requested ticket breakdown (set via the command bar, which
+    /// can't reach this view's checklist state directly).
+    private func consumePendingBreakdown() {
+        guard let id = store.pendingBreakdownTicketId else { return }
+        store.pendingBreakdownTicketId = nil
+        viewMode = .tickets
+        startBreakdown(ticketId: id, deep: false)
     }
 
     private func refreshLoreState() {

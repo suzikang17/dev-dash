@@ -56,6 +56,47 @@ func makeCommandActions(query: String, store: DashboardStore, dismiss: @escaping
         })
     }
 
+    // — Agent verbs (current project) — matched by ticket/task title or keyword.
+    if !currentPath.isEmpty {
+        let tickets = store.projectTickets[currentPath] ?? []
+        let projectTasks = store.tasksV2(for: currentPath)
+
+        // Break down a ticket (draft tickets first; matched by title or "break").
+        let breakCandidates = tickets.filter { t in
+            t.status != .done && (t.title.lowercased().contains(q) || matches("break down", "breakdown"))
+        }.prefix(3)
+        for ticket in breakCandidates {
+            result.append(PaletteAction(
+                id: "breakdown:\(ticket.id)", icon: "list.bullet.indent", color: .orange,
+                label: "Break into tasks: \(ticket.title)", subtitle: "Suggest child tasks (review before adding)"
+            ) {
+                store.selection = .project(path: currentPath)
+                store.tabStore.detailTab = .tasks
+                store.pendingBreakdownTicketId = ticket.id
+                dismiss()
+            })
+        }
+
+        // Launch a task with Claude / mark a task done — matched by title.
+        let taskMatches = projectTasks.filter { $0.status != .done && $0.title.lowercased().contains(q) }.prefix(3)
+        for task in taskMatches {
+            result.append(PaletteAction(
+                id: "launch:\(task.id)", icon: "play.circle.fill", color: .green,
+                label: "Launch with Claude: \(task.title)", subtitle: "Runs in a task worktree"
+            ) {
+                store.launchClaudeForTask(taskId: task.id, projectPath: currentPath)
+                dismiss()
+            })
+            result.append(PaletteAction(
+                id: "done:\(task.id)", icon: "checkmark.circle.fill", color: .teal,
+                label: "Mark done: \(task.title)"
+            ) {
+                Task { await store.markTaskDone(projectPath: currentPath, taskId: task.id) }
+                dismiss()
+            })
+        }
+    }
+
     result.append(PaletteAction(
         id: "create", icon: "plus.circle.fill", color: .blue,
         label: "Create task: \(trimmed)"

@@ -177,6 +177,11 @@ final class DashboardStore: ObservableObject {
     /// Bumped on every doc regen so ProductWebView knows to reload the file.
     @Published var docRegenToken: Int = 0
 
+    /// Cross-component bridge: set by the ⌘K command bar to ask LoreTasksView
+    /// (which owns the inline suggestion checklist state) to start a breakdown
+    /// for this ticket. The view consumes it and resets to nil.
+    @Published var pendingBreakdownTicketId: String? = nil
+
     /// Resolved font stacks for the generator. For `.custom`, each user-picked
     /// family is wrapped with a graceful fallback chain; empty fields inherit it.
     var resolvedDocFonts: DocFontSet {
