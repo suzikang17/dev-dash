@@ -4,6 +4,9 @@ struct DailyTabView: View {
     @EnvironmentObject var store: DashboardStore
     @State private var days: [DayGroup] = []
     @State private var allDocs: [DailyLoreEntry] = []
+    /// Cache of the last docs-tree scan, keyed by date — lets digest-only
+    /// updates recompose `days` without re-reading every doc.
+    @State private var cachedDocsByDate: [String: [DailyLoreEntry]] = [:]
     @State private var selectedEntry: DailyLoreEntry?
     @State private var selectedSession: SessionDigest?
     @State private var mode: ViewMode = .daily
@@ -124,7 +127,7 @@ struct DailyTabView: View {
                 reload(project: project)
                 startWatcher(project: project)            // re-point the watcher at the new project
             }
-            .onChange(of: store.sessionDigests.count) { _, _ in reload(project: project) }
+            .onChange(of: store.sessionDigests.count) { _, _ in refreshSessions(project: project) }
             .onChange(of: mode) { _, newMode in if newMode == .daily { browseType = nil } }
             .sheet(isPresented: $showNewTask) {
                 NewLoreTaskSheet(projectPath: project.path) {
@@ -486,29 +489,61 @@ struct DailyTabView: View {
                 }
             }
 
-            var sessionsByDate: [String: [SessionDigest]] = [:]
-            for digest in digests.values {
-                guard digest.projectPath == projectPath || digest.projectPath.hasPrefix("\(projectPath)/"),
-                      let start = digest.startedAt else { continue }
-                let dateStr = Self.dayFormatter.string(from: start)
-                sessionsByDate[dateStr, default: []].append(digest)
-            }
-
-            var allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
-            let todayStr = Self.dayFormatter.string(from: Date())
-            allDates.insert(todayStr)   // today always shows, even with no docs/sessions yet
-            let groups = allDates.sorted(by: >).map { dateStr in
-                DayGroup(
-                    dateStr: dateStr,
-                    isToday: dateStr == todayStr,
-                    formatted: Self.formatDate(dateStr),
-                    docs: (docsByDate[dateStr] ?? []).sorted { $0.title < $1.title },
-                    sessions: (sessionsByDate[dateStr] ?? []).sorted {
-                        ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast)
-                    }
+            // Compose on the main actor: digest grouping is cheap (dozens of
+            // entries), and it lets refreshSessions() reuse the doc cache with
+            // no disk I/O when only sessionDigests changed.
+            await MainActor.run {
+                self.cachedDocsByDate = docsByDate
+                self.allDocs = allDocsList
+                self.days = Self.composeDays(
+                    docsByDate: docsByDate,
+                    sessionsByDate: Self.sessionsByDate(digests, projectPath: projectPath)
                 )
+                self.loaded = true
             }
-            await MainActor.run { self.days = groups; self.allDocs = allDocsList; self.loaded = true }
+        }
+    }
+
+    /// Recompose day groups from the cached docs scan + current digests.
+    /// No disk I/O — used when only `sessionDigests` changed (a digest arrival
+    /// used to trigger a full docs-tree rescan).
+    private func refreshSessions(project: Project) {
+        guard loaded else { reload(project: project); return }
+        days = Self.composeDays(
+            docsByDate: cachedDocsByDate,
+            sessionsByDate: Self.sessionsByDate(store.sessionDigests, projectPath: project.path)
+        )
+    }
+
+    private static func sessionsByDate(
+        _ digests: [String: SessionDigest], projectPath: String
+    ) -> [String: [SessionDigest]] {
+        var out: [String: [SessionDigest]] = [:]
+        for digest in digests.values {
+            guard digest.projectPath == projectPath || digest.projectPath.hasPrefix("\(projectPath)/"),
+                  let start = digest.startedAt else { continue }
+            out[dayFormatter.string(from: start), default: []].append(digest)
+        }
+        return out
+    }
+
+    private static func composeDays(
+        docsByDate: [String: [DailyLoreEntry]],
+        sessionsByDate: [String: [SessionDigest]]
+    ) -> [DayGroup] {
+        var allDates = Set(docsByDate.keys).union(sessionsByDate.keys)
+        let todayStr = dayFormatter.string(from: Date())
+        allDates.insert(todayStr)   // today always shows, even with no docs/sessions yet
+        return allDates.sorted(by: >).map { dateStr in
+            DayGroup(
+                dateStr: dateStr,
+                isToday: dateStr == todayStr,
+                formatted: formatDate(dateStr),
+                docs: (docsByDate[dateStr] ?? []).sorted { $0.title < $1.title },
+                sessions: (sessionsByDate[dateStr] ?? []).sorted {
+                    ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast)
+                }
+            )
         }
     }
 
