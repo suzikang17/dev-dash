@@ -1368,17 +1368,31 @@ final class DashboardStore: ObservableObject {
             self.lastUpdated = Date()
 
             // Background git status scan for all git projects — detached so it
-            // doesn't block the main refresh tick. Each result updates the sidebar
-            // as it arrives.
+            // doesn't block the main refresh tick. Results are collected and merged
+            // in ONE @Published write per tick: per-path writes republished the whole
+            // store N times (once per project), fanning out to every observing view.
             let gitPaths = projects.filter { $0.isGit }.map { $0.path }
             Task.detached(priority: .utility) { [weak self] in
-                await withTaskGroup(of: Void.self) { group in
+                let statuses = await withTaskGroup(
+                    of: (String, GitStatus)?.self,
+                    returning: [String: GitStatus].self
+                ) { group in
                     for path in gitPaths {
                         group.addTask {
-                            guard let status = await GitStatusScanner.scan(path: path) else { return }
-                            await MainActor.run { self?.gitStatuses[path] = status }
+                            guard let status = await GitStatusScanner.scan(path: path) else { return nil }
+                            return (path, status)
                         }
                     }
+                    var collected: [String: GitStatus] = [:]
+                    for await pair in group {
+                        if let (path, status) = pair { collected[path] = status }
+                    }
+                    return collected
+                }
+                guard !statuses.isEmpty else { return }
+                await MainActor.run {
+                    guard let self else { return }
+                    self.gitStatuses.merge(statuses) { _, new in new }
                 }
             }
             // Linear sync — fan out across groups that have a team binding.
