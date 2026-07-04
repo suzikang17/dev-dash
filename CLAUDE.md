@@ -59,6 +59,8 @@ scanner, or cross-tab work).
 ## Lore doc flow
 
 - Devlog after each session via `/devlog`; ADRs in `docs/decisions/` when a tool/pattern is chosen; `lore reindex <type>` after adding docs
+- A local pre-commit hook runs `lore validate --all` (errors block, warnings pass; bypass with `--no-verify`). After any schema change, heal docs with `lore migrate <type>` (dry-run) then `--write`
+- Do NOT bulk-rename `lore_type:` → `type:` in docs here (`lore migrate` offers it): dev-dash's stores still write `lore_type` and `DailyTabView` reads it; lore accepts it as a legacy alias indefinitely
 
 ## Worktrees
 
