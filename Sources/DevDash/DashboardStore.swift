@@ -298,19 +298,28 @@ final class DashboardStore: ObservableObject {
         taskWatcher = nil
         taskWatcherDirs = desired
         guard !desired.isEmpty else { return }
-        taskWatcher = NotesFileWatcher(dirs: Array(desired), onChange: { [weak self] in
-            // Already debounced by NotesFileWatcher (0.3 s). Hop to main for store mutation.
-            DispatchQueue.main.async { self?.reloadTasksAndNotify() }
+        taskWatcher = NotesFileWatcher(dirs: Array(desired), onChangedDirs: { [weak self] changedDirs in
+            // Debounced; callback arrives on main. Map "<project>/docs/<type>"
+            // back to project paths and reload ONLY the affected projects — a
+            // single Claude write in one repo used to re-parse every project's
+            // tasks/tickets/artifacts on the main thread.
+            let projectPaths = Set(changedDirs.map { dir -> String in
+                let docs = (dir as NSString).deletingLastPathComponent   // strip "/<type>"
+                return (docs as NSString).deletingLastPathComponent      // strip "/docs"
+            })
+            self?.reloadTasksAndNotify(only: projectPaths)
         })
     }
 
-    /// Reload tasks and artifacts for every project, diff vs snapshots, and fire
-    /// notifications for meaningful changes. First call per project seeds silently.
-    /// Also silently reloads tickets (no notifications for ticket changes).
-    func reloadTasksAndNotify() {
+    /// Reload tasks and artifacts, diff vs snapshots, and fire notifications for
+    /// meaningful changes. First call per project seeds silently. Also silently
+    /// reloads tickets (no notifications for ticket changes).
+    /// `only`: restrict to these project paths (nil = all projects).
+    func reloadTasksAndNotify(only: Set<String>? = nil) {
         var didChangeArtifacts = false
         for project in projects {
             let path = project.path
+            if let only, !only.contains(path) { continue }
 
             // — Tickets (silent reload — no notifications) —
             let freshTickets = TicketStore.read(path)
@@ -370,25 +379,10 @@ final class DashboardStore: ObservableObject {
     }
 
     /// Diff-notify for a single project (used by the SessionEnd path).
+    /// Routes through the scoped reload so tickets/policies/artifacts written
+    /// during the session are picked up too, not just tasks.
     private func reloadTasksAndNotifyForProject(_ projectPath: String) {
-        let fresh = TaskStore.read(projectPath)
-        let freshMap = Dictionary(uniqueKeysWithValues: fresh.map { ($0.id, $0) })
-
-        if let snap = taskSnapshot[projectPath], enableNotifications {
-            for (id, task) in freshMap {
-                if snap[id] == nil {
-                    if task.pr != nil {
-                        Notifier.post(title: "PR review task created", body: task.title)
-                    } else {
-                        Notifier.post(title: "New task", body: task.title)
-                    }
-                } else if snap[id]?.status != .done && task.status == .done {
-                    Notifier.post(title: "Task done", body: task.title)
-                }
-            }
-        }
-        taskSnapshot[projectPath] = freshMap
-        projectTasks[projectPath] = fresh.isEmpty ? nil : fresh
+        reloadTasksAndNotify(only: [projectPath])
     }
 
     /// Seed `taskSnapshot` and `artifactSnapshot` from disk WITHOUT notifying.
