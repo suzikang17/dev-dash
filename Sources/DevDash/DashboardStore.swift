@@ -742,8 +742,9 @@ final class DashboardStore: ObservableObject {
             detail = ev.event
         }
 
+        let now = Date()
         let event = ClaudeIntegrationEvent(
-            timestamp: Date(),
+            timestamp: now,
             projectPath: path,
             projectName: name,
             hookEvent: ev.event,
@@ -754,6 +755,22 @@ final class DashboardStore: ObservableObject {
         if recentEvents.count > 300 {
             recentEvents.removeLast(recentEvents.count - 300)
         }
+
+        // Durable NDJSON operation log (ADR 0013). NDJSON is the source of
+        // truth; recentEvents above is just the 300-cap tail view. Appended
+        // off-main on EventLogStore's serial queue.
+        EventLogStore.append(
+            PersistedEvent(
+                ts: EventLogStore.isoFormatter.string(from: now),
+                id: event.id.uuidString,
+                session: ev.sessionId,
+                cwd: ev.cwd,
+                hook: ev.event,
+                cat: category.rawValue,
+                detail: detail
+            ),
+            projectPath: path
+        )
     }
 
     @discardableResult
@@ -1759,6 +1776,42 @@ final class DashboardStore: ObservableObject {
                 // Load groups after meta is set so migration can read it.
                 self?.loadGroupsAndTasks()
                 self?.migratePerRepoLinearBindings()
+                self?.restoreRecentEvents()
+            }
+        }
+    }
+
+    private var didRestoreRecentEvents = false
+
+    /// Reconstruct `recentEvents` as a tail view over today's NDJSON operation
+    /// logs (ADR 0013) — once, after the first project scan, and only if no
+    /// live hook events have arrived yet (live events win over history).
+    func restoreRecentEvents() {
+        guard !didRestoreRecentEvents else { return }
+        didRestoreRecentEvents = true
+        guard recentEvents.isEmpty else { return }
+        let projs = projects.map { ($0.path, $0.name) }
+        Task.detached(priority: .utility) { [weak self] in
+            var restored: [ClaudeIntegrationEvent] = []
+            for (path, name) in projs {
+                for pe in EventLogStore.readToday(projectPath: path) {
+                    guard let ts = EventLogStore.isoFormatter.date(from: pe.ts) else { continue }
+                    restored.append(ClaudeIntegrationEvent(
+                        timestamp: ts,
+                        projectPath: path,
+                        projectName: name,
+                        hookEvent: pe.hook,
+                        category: .init(rawValue: pe.cat) ?? .other,
+                        detail: pe.detail
+                    ))
+                }
+            }
+            restored.sort { $0.timestamp > $1.timestamp }
+            let tail = Array(restored.prefix(300))
+            guard !tail.isEmpty else { return }
+            await MainActor.run {
+                guard let self, self.recentEvents.isEmpty else { return }
+                self.recentEvents = tail
             }
         }
     }

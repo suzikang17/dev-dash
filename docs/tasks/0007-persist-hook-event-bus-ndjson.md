@@ -1,7 +1,7 @@
 ---
 lore_type: task
 title: Persist the hook event bus as an append-only NDJSON operation log
-status: open
+status: done
 owner: ai
 category: engineering
 priority: high
@@ -16,18 +16,20 @@ session. NDJSON is the source of truth per ADR
 
 ## Acceptance criteria
 
-- [ ] Add a `Codable PersistedEvent` mirror (ISO-8601 `ts`, stable `id`, `session` parsed
+- [x] Add a `Codable PersistedEvent` mirror (ISO-8601 `ts`, stable `id`, `session` parsed
       from the hook payload, `cwd`, `hook`, `cat`, `detail`) — do **not** serialize
       `ClaudeIntegrationEvent` (not Codable; id/timestamp are construction-time).
-- [ ] `DashboardStore.handleHookEvent` appends one NDJSON line per event to
+- [x] `DashboardStore.handleHookEvent` appends one NDJSON line per event to
       `<projectPath>/.devdash/events/<YYYY-MM-DD>.ndjson` *after* project matching, off
       the main thread.
-- [ ] Events with no matched project append to `~/.devdash/events/_unmatched.ndjson`.
-- [ ] `recentEvents` reconstructs as a tail view over today's file on launch.
-- [ ] Append is crash-safe (`seekToEnd`, no read-modify-write) — verified by a
+- [x] Events with no matched project append to `~/.devdash/events/_unmatched.ndjson`.
+- [x] `recentEvents` reconstructs as a tail view over today's file on launch.
+- [x] Append is crash-safe (`seekToEnd`, no read-modify-write) — verified by a
       write / kill / reopen test.
 
 ## Notes
 
 `.devdash/` is already gitignored, so the log is excluded automatically. This is the
 write side only; the query view is task 0009.
+## Status history
+- 2026-07-04T13:35 open → done

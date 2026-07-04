@@ -13,6 +13,7 @@ struct DevDashApp: App {
         DailySelfTest.runIfRequested()      // exits early when launched with --daily-selftest
         TaskStoreSelfTest.runIfRequested()  // exits early when launched with --selftest-taskstore
         PolicySelfTest.runIfRequested()     // exits early when launched with --selftest-policy
+        EventLogSelfTest.runIfRequested()   // exits early when launched with --selftest-eventlog
     }
 
     var body: some Scene {
