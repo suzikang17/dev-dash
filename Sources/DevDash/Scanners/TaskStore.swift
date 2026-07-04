@@ -646,19 +646,43 @@ enum TaskStore {
     /// which other consumers depend on.
     static func parseTaskFrontmatter(_ content: String) -> [String: String] {
         var result: [String: String] = [:]
+        let lines = content.components(separatedBy: "\n")
+        var i = 0
         var fences = 0
-        for line in content.components(separatedBy: "\n") {
+        while i < lines.count {
+            let line = lines[i]
+            i += 1
             if line.hasPrefix("---") {
                 fences += 1
                 if fences == 2 { break }
                 continue
             }
-            guard fences == 1, let colon = line.firstIndex(of: ":") else { continue }
+            guard fences == 1 else { continue }
+            // Indented lines at this point are stray continuations (already-consumed
+            // block scalars never reach here) — never treat them as keys.
+            if line.first == " " || line.first == "\t" { continue }
+            guard let colon = line.firstIndex(of: ":") else { continue }
             let key = String(line[line.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
             let rawValue = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-            // Unescape double-quoted values written by yamlStr().
             let value: String
-            if rawValue.hasPrefix("\"") && rawValue.hasSuffix("\"") && rawValue.count >= 2 {
+            if ["|", "|-", "|+", ">", ">-", ">+"].contains(rawValue) {
+                // YAML block scalar (the lore CLI writes long titles as `>-` folded
+                // scalars). Consume the indented continuation lines; fold with spaces
+                // for `>`, keep newlines for `|`.
+                var parts: [String] = []
+                while i < lines.count {
+                    let next = lines[i]
+                    if next.hasPrefix("---") { break }
+                    let trimmed = next.trimmingCharacters(in: .whitespaces)
+                    let indented = next.first == " " || next.first == "\t"
+                    if !indented && !trimmed.isEmpty { break }
+                    parts.append(trimmed)
+                    i += 1
+                }
+                while parts.last?.isEmpty == true { parts.removeLast() }
+                value = parts.joined(separator: rawValue.hasPrefix("|") ? "\n" : " ")
+            } else if rawValue.hasPrefix("\"") && rawValue.hasSuffix("\"") && rawValue.count >= 2 {
+                // Unescape double-quoted values written by yamlStr().
                 value = unescapeYamlStr(rawValue)
             } else if (rawValue.hasPrefix("'") && rawValue.hasSuffix("'")) && rawValue.count >= 2 {
                 value = String(rawValue.dropFirst().dropLast())

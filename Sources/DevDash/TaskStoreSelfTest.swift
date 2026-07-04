@@ -69,6 +69,7 @@ enum TaskStoreSelfTest {
         }
 
         checkFullFieldRoundTrip(check)
+        checkBlockScalarFrontmatter(check)
         checkAdversarialEscaping(check)
         checkNotesWithSentinelLines(check)
         checkPhasesWithCommas(check)
@@ -106,6 +107,52 @@ enum TaskStoreSelfTest {
         try? FileManager.default.removeItem(atPath: dir)
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    // MARK: - Check a2: YAML block-scalar frontmatter (lore CLI writes `title: >-`)
+
+    private static func checkBlockScalarFrontmatter(_ check: (Bool, String) -> Void) {
+        // Folded scalar (>-): continuation lines join with spaces.
+        let folded = """
+        ---
+        lore_type: task
+        title: >-
+          Hook events: run a real claude session in a hook-installed project; confirm
+          live card + Recent Claude events populate
+        ticket: '0004'
+        owner: human
+        ---
+        body
+        """
+        let fm1 = TaskStore.parseTaskFrontmatter(folded)
+        check(fm1["title"] == "Hook events: run a real claude session in a hook-installed project; confirm live card + Recent Claude events populate",
+              "a2: folded >- title joined with spaces")
+        check(fm1["ticket"] == "0004",  "a2: key after block scalar still parsed")
+        check(fm1["owner"] == "human",  "a2: subsequent keys unaffected")
+        check(fm1["Hook events"] == nil, "a2: continuation line not misread as a key")
+
+        // Literal scalar (|): continuation lines keep newlines.
+        let literal = """
+        ---
+        title: |
+          line one
+          line two
+        status: open
+        ---
+        """
+        let fm2 = TaskStore.parseTaskFrontmatter(literal)
+        check(fm2["title"] == "line one\nline two", "a2: literal | keeps newlines")
+        check(fm2["status"] == "open",              "a2: key after literal scalar parsed")
+
+        // Bare > and >+ variants also consume continuations.
+        let bare = "---\ntitle: >\n  a b\n  c\nstatus: open\n---\n"
+        let fm3 = TaskStore.parseTaskFrontmatter(bare)
+        check(fm3["title"] == "a b c", "a2: bare > folds")
+
+        // Plain single-line values still work (no regression).
+        let plain = "---\ntitle: Simple title\nstatus: open\n---\n"
+        check(TaskStore.parseTaskFrontmatter(plain)["title"] == "Simple title",
+              "a2: plain scalar unchanged")
     }
 
     // MARK: - Check a: full-field round-trip
