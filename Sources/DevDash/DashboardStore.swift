@@ -1789,7 +1789,12 @@ final class DashboardStore: ObservableObject {
     /// Joined bodies of active `ticket`-scoped policies for a trigger.
     /// Empty string when none match.
     func ticketPolicyText(projectPath: String, trigger: String) -> String {
-        policies(for: projectPath, appliesTo: "ticket", trigger: trigger)
+        policyText(projectPath: projectPath, appliesTo: "ticket", trigger: trigger)
+    }
+
+    /// Joined bodies of active policies for any scope + trigger. Empty when none.
+    func policyText(projectPath: String, appliesTo scope: String, trigger: String) -> String {
+        policies(for: projectPath, appliesTo: scope, trigger: trigger)
             .map { $0.body }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
@@ -2757,13 +2762,16 @@ final class DashboardStore: ObservableObject {
             branchLine = ""
         }
 
-        let policyPreamble: String
+        // Inject active on_work policies: project-scoped always, ticket-scoped
+        // only when the task belongs to a ticket.
+        var preambleParts: [String] = []
+        let projectText = policyText(projectPath: projectPath, appliesTo: "project", trigger: "on_work")
+        if !projectText.isEmpty { preambleParts.append(projectText) }
         if task.ticket != nil {
-            let text = ticketPolicyText(projectPath: projectPath, trigger: "on_work")
-            policyPreamble = text.isEmpty ? "" : text + "\n\n"
-        } else {
-            policyPreamble = ""
+            let ticketText = ticketPolicyText(projectPath: projectPath, trigger: "on_work")
+            if !ticketText.isEmpty { preambleParts.append(ticketText) }
         }
+        let policyPreamble = preambleParts.isEmpty ? "" : preambleParts.joined(separator: "\n\n") + "\n\n"
 
         let prompt = """
         \(policyPreamble)Task \(task.id): \(task.title)
