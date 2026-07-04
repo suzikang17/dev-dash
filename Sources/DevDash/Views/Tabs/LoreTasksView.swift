@@ -159,6 +159,15 @@ struct LoreTasksView: View {
     /// Zero-pad-tolerant id normalizer (mirrors loreNumEq semantics).
     private static func normNum(_ s: String) -> String { Int(s).map(String.init) ?? s }
 
+    /// Cached — loadTask runs once per task FILE during reload; allocating a
+    /// DateFormatter per file was measurable churn.
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
     private var filtered: [LoreTaskItem] { index.filtered }
 
     private func tasksFor(_ col: LoreKanbanColumn) -> [LoreTaskItem] { index.byColumn[col] ?? [] }
@@ -1282,8 +1291,7 @@ struct LoreTasksView: View {
     private func loadTask(file: String, reusingId: UUID? = nil) -> LoreTaskItem? {
         let path = "\(projectPath)/docs/tasks/\(file)"
         guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-        let todayStr = df.string(from: Date())
+        let todayStr = Self.dayFormatter.string(from: Date())
         let fm = parseLoreFM(raw)
         let body = loreMDBody(raw)
         let completedToday = body.range(

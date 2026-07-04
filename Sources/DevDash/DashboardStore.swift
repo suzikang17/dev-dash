@@ -1290,6 +1290,7 @@ final class DashboardStore: ObservableObject {
     }
 
     private var refreshTask: Task<Void, Never>?
+    private var activationObserver: NSObjectProtocol?
 
     private var refreshing = false
     /// Set when `refreshAll` is asked to run while one is already in flight, so
@@ -1409,7 +1410,20 @@ final class DashboardStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 if Task.isCancelled { break }
+                // Skip ticks while the app is inactive — 2 git subprocesses ×
+                // N projects every 15s in the background is pure energy burn.
+                // didBecomeActive (below) fires a catch-up refresh on return.
+                if !NSApplication.shared.isActive { continue }
                 await self?.refreshAll()
+            }
+        }
+        // Catch-up refresh when the app comes back to the foreground, so the
+        // sidebar is never staler than one activation.
+        if activationObserver == nil {
+            activationObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in await self?.refreshAll() }
             }
         }
     }
