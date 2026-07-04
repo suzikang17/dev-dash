@@ -269,6 +269,27 @@ struct LoreTasksView: View {
                     Divider()
                 }
 
+                if let collisions = store.projectIdCollisions[projectPath], !collisions.isEmpty {
+                    HStack(alignment: .top, spacing: DSSpace.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(DSColor.warning)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Duplicate lore ids — parallel branches minted the same number. Rename the newer file to a fresh id (refs like ticket:/parent: follow the id).")
+                                .font(DSFont.micro).foregroundColor(.primary)
+                            ForEach(collisions, id: \.self) { line in
+                                Text(line)
+                                    .font(DSFont.monoDigits(.caption2))
+                                    .foregroundColor(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, DSSpace.md).padding(.vertical, DSSpace.xs)
+                    .background(DSColor.warning.opacity(0.08))
+                    Divider()
+                }
+
                 HStack(spacing: DSSpace.sm) {
                     Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                     TextField("Search tasks…", text: $search).textFieldStyle(.plain)

@@ -70,6 +70,7 @@ enum TaskStoreSelfTest {
 
         checkFullFieldRoundTrip(check)
         checkBlockScalarFrontmatter(check)
+        checkIdCollisionAudit(check)
         checkAdversarialEscaping(check)
         checkNotesWithSentinelLines(check)
         checkPhasesWithCommas(check)
@@ -153,6 +154,46 @@ enum TaskStoreSelfTest {
         let plain = "---\ntitle: Simple title\nstatus: open\n---\n"
         check(TaskStore.parseTaskFrontmatter(plain)["title"] == "Simple title",
               "a2: plain scalar unchanged")
+    }
+
+    // MARK: - Check a3: duplicate lore-id detection (parallel-branch collisions)
+
+    private static func checkIdCollisionAudit(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("a3")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+        let fm = FileManager.default
+        let tasksDir = "\(proj)/docs/tasks"
+        let ticketsDir = "\(proj)/docs/tickets"
+        try? fm.createDirectory(atPath: tasksDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: ticketsDir, withIntermediateDirectories: true)
+
+        func write(_ dir: String, _ name: String) {
+            try? "---\nlore_type: task\ntitle: t\nstatus: open\n---\n"
+                .write(toFile: "\(dir)/\(name)", atomically: true, encoding: .utf8)
+        }
+        // Two branches both minted 0010; a legacy non-padded 010 also collides
+        // numerically. 0011 is unique. index.md is ignored.
+        write(tasksDir, "0010-from-branch-a.md")
+        write(tasksDir, "0010-from-branch-b.md")
+        write(tasksDir, "010-legacy-pad.md")
+        write(tasksDir, "0011-unique.md")
+        write(tasksDir, "index.md")
+        write(ticketsDir, "0001-only.md")
+
+        let taskCollisions = LoreIdAudit.collisions(inDir: tasksDir)
+        check(taskCollisions.count == 1,                     "a3: one collision group detected")
+        check(taskCollisions.first?.id == "0010",            "a3: collision id normalized to 0010")
+        check(taskCollisions.first?.files.count == 3,        "a3: pad-variant 010 collides numerically")
+        check(LoreIdAudit.collisions(inDir: ticketsDir).isEmpty, "a3: unique ids → no collision")
+
+        let msgs = LoreIdAudit.audit(projectPath: proj)
+        check(msgs.count == 1,                               "a3: audit rolls up per project")
+        check(msgs.first?.hasPrefix("task 0010:") == true,   "a3: message names type + id")
+
+        // Healthy project → empty audit (no false positives).
+        try? fm.removeItem(atPath: "\(tasksDir)/0010-from-branch-b.md")
+        try? fm.removeItem(atPath: "\(tasksDir)/010-legacy-pad.md")
+        check(LoreIdAudit.audit(projectPath: proj).isEmpty,  "a3: audit clean after repair")
     }
 
     // MARK: - Check a: full-field round-trip

@@ -182,6 +182,11 @@ final class DashboardStore: ObservableObject {
     /// for this ticket. The view consumes it and resets to nil.
     @Published var pendingBreakdownTicketId: String? = nil
 
+    /// Duplicate lore-id collisions per project (path → messages), detected by
+    /// `LoreIdAudit` during scans. Non-empty = two files share a numeric id
+    /// (usually parallel worktree branches both minting max+1, then merging).
+    @Published var projectIdCollisions: [String: [String]] = [:]
+
     /// Resolved font stacks for the generator. For `.custom`, each user-picked
     /// family is wrapped with a graceful fallback chain; empty fields inherit it.
     var resolvedDocFonts: DocFontSet {
@@ -325,6 +330,13 @@ final class DashboardStore: ObservableObject {
         for project in projects {
             let path = project.path
             if let only, !only.contains(path) { continue }
+
+            // Re-audit id collisions — external writes (branch merges, agent
+            // `lore add`) are exactly when duplicate ids appear.
+            let collisions = LoreIdAudit.audit(projectPath: path)
+            if projectIdCollisions[path] ?? [] != collisions {
+                projectIdCollisions[path] = collisions.isEmpty ? nil : collisions
+            }
 
             // — Tickets (silent reload — no notifications) —
             let freshTickets = TicketStore.read(path)
@@ -1749,6 +1761,7 @@ final class DashboardStore: ObservableObject {
             var ticketMap: [String: [Ticket]] = [:]
             var providerMap: [String: [Provider]] = [:]
             var healthMap: [String: [String: HealthRunResult]] = [:]
+            var collisionMap: [String: [String]] = [:]
             for path in paths {
                 // Run migration first (marker-gated, fast-path when already done).
                 // This is blocking file I/O — must stay off the main actor.
@@ -1765,6 +1778,8 @@ final class DashboardStore: ObservableObject {
                 if !providers.isEmpty { providerMap[path] = providers }
                 let health = HealthStore.read(path)
                 if !health.isEmpty { healthMap[path] = health }
+                let collisions = LoreIdAudit.audit(projectPath: path)
+                if !collisions.isEmpty { collisionMap[path] = collisions }
             }
             await MainActor.run {
                 self?.projectMeta = metaMap
@@ -1772,6 +1787,7 @@ final class DashboardStore: ObservableObject {
                 self?.projectTickets = ticketMap
                 self?.projectProviders = providerMap
                 self?.projectHealth = healthMap
+                self?.projectIdCollisions = collisionMap
                 self?.seedTaskSnapshots()
                 // Load groups after meta is set so migration can read it.
                 self?.loadGroupsAndTasks()
