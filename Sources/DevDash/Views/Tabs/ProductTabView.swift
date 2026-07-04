@@ -467,20 +467,33 @@ struct ProductTabView: View {
     }
 
     private func regen(project: Project) {
+        // Snapshot inputs on the main actor, then generate off-main:
+        // generate() reads+writes many files synchronously and used to block
+        // the main thread on every tab entry / project switch.
         let template = store.template(for: project.path)
         let meta = store.meta(for: project.path)
         let tasks = store.tasksV2(for: project.path)
-        _ = ProductDocGenerator.generate(
-            projectName: project.name,
-            projectPath: project.path,
-            meta: meta,
-            template: template,
-            tasks: tasks,
-            status: store.projectStatus(for: project.path)
-        )
-        lastRegenAt = Date()
-        reloadToken &+= 1   // force WKWebView reload so latest HTML + JS land
-        docExists = FileManager.default.fileExists(atPath: ProductDocGenerator.indexPath(for: project.path))
+        let status = store.projectStatus(for: project.path)
+        let name = project.name
+        let path = project.path
+        Task.detached(priority: .userInitiated) {
+            _ = ProductDocGenerator.generate(
+                projectName: name,
+                projectPath: path,
+                meta: meta,
+                template: template,
+                tasks: tasks,
+                status: status
+            )
+            let exists = FileManager.default.fileExists(atPath: ProductDocGenerator.indexPath(for: path))
+            await MainActor.run {
+                // Ignore stale completions after a project switch.
+                guard store.project(for: store.selection)?.path == path else { return }
+                lastRegenAt = Date()
+                reloadToken &+= 1   // force WKWebView reload so latest HTML + JS land
+                docExists = exists
+            }
+        }
     }
 
     private func openFile(_ path: String) {
