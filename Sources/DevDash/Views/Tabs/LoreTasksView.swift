@@ -113,45 +113,64 @@ struct LoreTasksView: View {
     @State private var suggestingTicketId: String? = nil
     @State private var suggestRunId: UUID? = nil
 
-    private var filtered: [LoreTaskItem] {
-        guard !search.isEmpty else { return tasks }
-        return tasks.filter { $0.title.localizedCaseInsensitiveContains(search) }
+    /// Memoized filter/grouping index. The old computed-property cascade
+    /// re-filtered `tasks` up to 9× per render (and flatTaskList was
+    /// O(tickets × tasks)); every search keystroke re-ran all of it. The index
+    /// is rebuilt ONCE per input change (tasks mutation, search, tickets) and
+    /// body reads are dictionary lookups.
+    private struct TaskIndex {
+        var filtered: [LoreTaskItem] = []
+        var byColumn: [LoreKanbanColumn: [LoreTaskItem]] = [:]
+        var yourTurn: [LoreTaskItem] = []     // speccing+reviewQA in task order
+        var ticketFlat: [LoreTaskItem] = []   // ticket-mode ordering (roots + subtasks, then unassigned)
+    }
+    @State private var index = TaskIndex()
+
+    /// Rebuild the index. Call after ANY mutation of `tasks` (reload,
+    /// updateInPlace) — plus search/tickets changes via onChange.
+    private func rebuildIndex() {
+        let f = search.isEmpty ? tasks : tasks.filter { $0.title.localizedCaseInsensitiveContains(search) }
+        var byCol: [LoreKanbanColumn: [LoreTaskItem]] = [:]
+        for t in f { byCol[t.kanbanColumn, default: []].append(t) }
+
+        // Ticket-mode flat ordering: O(tasks + tickets) via grouping dictionaries.
+        let tickets = store.projectTickets[projectPath] ?? []
+        var flat: [LoreTaskItem] = []
+        let byTicket = Dictionary(grouping: f.filter { $0.ticketId != nil }) { Self.normNum($0.ticketId!) }
+        for ticket in tickets {
+            let ticketTasks = byTicket[Self.normNum(ticket.id)] ?? []
+            let byParent = Dictionary(grouping: ticketTasks.filter { $0.parentId != nil }) { Self.normNum($0.parentId!) }
+            for task in ticketTasks where task.parentId == nil {
+                flat.append(task)
+                flat.append(contentsOf: byParent[Self.normNum(numericPrefix(task.file))] ?? [])
+            }
+        }
+        let assignedFiles = Set(flat.map { $0.file })
+        flat.append(contentsOf: f.filter { !assignedFiles.contains($0.file) && $0.ticketId == nil })
+
+        index = TaskIndex(
+            filtered: f,
+            byColumn: byCol,
+            yourTurn: f.filter { $0.kanbanColumn == .speccing || $0.kanbanColumn == .reviewQA },
+            ticketFlat: flat
+        )
     }
 
-    private func tasksFor(_ col: LoreKanbanColumn) -> [LoreTaskItem] {
-        filtered.filter { $0.kanbanColumn == col }
-    }
+    /// Zero-pad-tolerant id normalizer (mirrors loreNumEq semantics).
+    private static func normNum(_ s: String) -> String { Int(s).map(String.init) ?? s }
 
-    private var yourTurnTasks: [LoreTaskItem] {
-        filtered.filter { $0.kanbanColumn == .speccing || $0.kanbanColumn == .reviewQA }
-    }
-    private var aiTurnTasks: [LoreTaskItem] {
-        filtered.filter { $0.kanbanColumn == .aiWorking }
-    }
-    private var blockedNeedsTasks: [LoreTaskItem] {
-        filtered.filter { $0.kanbanColumn == .blocked }
-    }
+    private var filtered: [LoreTaskItem] { index.filtered }
+
+    private func tasksFor(_ col: LoreKanbanColumn) -> [LoreTaskItem] { index.byColumn[col] ?? [] }
+
+    private var yourTurnTasks: [LoreTaskItem] { index.yourTurn }
+    private var aiTurnTasks: [LoreTaskItem] { index.byColumn[.aiWorking] ?? [] }
+    private var blockedNeedsTasks: [LoreTaskItem] { index.byColumn[.blocked] ?? [] }
 
     private var flatTaskList: [LoreTaskItem] {
         switch viewMode {
         case .tickets:
-            // All tasks in ticket order (for keyboard nav in ticket mode).
-            // Iterate only ROOT tasks per ticket; subtasks are appended once as children.
-            let tickets = store.projectTickets[projectPath] ?? []
-            var result: [LoreTaskItem] = []
-            for ticket in tickets {
-                let ticketTasks = filtered.filter { loreNumEq($0.ticketId, ticket.id) }
-                let roots = ticketTasks.filter { $0.parentId == nil }
-                for task in roots {
-                    result.append(task)
-                    let subtasks = ticketTasks.filter { loreNumEq($0.parentId, numericPrefix(task.file)) }
-                    result.append(contentsOf: subtasks)
-                }
-            }
-            // Unassigned tasks (no ticket field or ticket doesn't resolve)
-            let assignedFiles = Set(result.map { $0.file })
-            result.append(contentsOf: filtered.filter { !assignedFiles.contains($0.file) && $0.ticketId == nil })
-            return result
+            return index.ticketFlat
         case .kanban:
             return LoreKanbanColumn.allCases
                 .filter { $0 != .done || showDone }
@@ -171,6 +190,8 @@ struct LoreTasksView: View {
         }
         .onAppear { refreshLoreState() }
         .onChange(of: projectPath) { _, _ in refreshLoreState() }
+        .onChange(of: search) { _, _ in rebuildIndex() }
+        .onChange(of: (store.projectTickets[projectPath] ?? []).map(\.id)) { _, _ in rebuildIndex() }
     }
 
     private func refreshLoreState() {
@@ -1240,6 +1261,7 @@ struct LoreTasksView: View {
             .sorted()
             .compactMap { loadTask(file: $0) }
         tasks = loaded
+        rebuildIndex()
         if let sel = selected { selected = tasks.first { $0.file == sel.file } }
         scheduleGraphRefresh()
     }
@@ -1252,6 +1274,7 @@ struct LoreTasksView: View {
         guard let item = loadTask(file: file, reusingId: reuseId) else { return }
         if let idx = tasks.firstIndex(where: { $0.file == file }) { tasks[idx] = item }
         else { tasks.append(item) }
+        rebuildIndex()
         if selected?.file == file { selected = item }
         scheduleGraphRefresh()
     }
