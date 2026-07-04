@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 7 — Embedded live iOS Simulator (baguette) + Build & Run"
 date: "2026-06-24"
 day: 7

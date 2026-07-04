@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 7 — retire .devdash/tasks.json for lore; build the agent-native task loop"
 date: "2026-06-24"
 day: 7

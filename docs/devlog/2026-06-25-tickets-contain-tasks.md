@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 8 — Tickets contain Tasks: a deliverable holds work-step tasks, review becomes its own to-do"
 date: "2026-06-25"
 day: 8

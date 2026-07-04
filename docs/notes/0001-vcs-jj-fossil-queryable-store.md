@@ -1,4 +1,5 @@
 ---
+type: note
 title: "Research: jj, Fossil & the queryable project store — and how dev-dash + lore already build the bridge"
 tags: research, version-control, architecture, jj, fossil
 created: 2026-06-30

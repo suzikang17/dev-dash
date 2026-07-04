@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 1 — dev-dash: lore integration, Ideas tab, summarize-day"
 date: "2026-06-18"
 day: 1

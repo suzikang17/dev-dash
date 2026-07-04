@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 7 — Claude integration: per-project config, configurable events, settings side-tab nav"
 date: "2026-06-24"
 day: 7

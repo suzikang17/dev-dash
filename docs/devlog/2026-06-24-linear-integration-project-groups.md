@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 7 — Linear integration + project groups (two-way sync)"
 date: "2026-06-24"
 day: 7

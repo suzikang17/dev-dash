@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 6 — Claude Code hook event bus: live sessions, context injection, events feed"
 date: "2026-06-23"
 day: 6

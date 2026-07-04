@@ -1,4 +1,5 @@
 ---
+type: devlog
 title: "Day 8 — isolated worktree task workflow: launch → branch → PR → Review & QA → cleanup"
 date: "2026-06-25"
 day: 8
