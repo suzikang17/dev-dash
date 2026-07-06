@@ -67,9 +67,10 @@ struct DevDashApp: App {
                     if store.selection == nil && !hasSavedSelection { store.selection = .home }
                     store.startEventServer()
                     store.armNavigationObserver()
-                    store.migrateNotificationHookEventOnce()
                     await store.reattachManagedServers()
                     await store.refreshAll()
+                    // After refreshAll: the migration's reconcile loop needs `projects` populated.
+                    store.migrateNotificationHookEventOnce()
                     store.restoreLastSelection()
                     await store.refreshTodos()
                     store.startAutoRefresh()

@@ -734,7 +734,17 @@ final class DashboardStore: ObservableObject {
         guard !UserDefaults.standard.bool(forKey: flag) else { return }
         UserDefaults.standard.set(true, forKey: flag)
         if !defaultEnabledEvents.contains("Notification") {
-            defaultEnabledEvents.insert("Notification")
+            defaultEnabledEvents.insert("Notification")   // didSet reconciles inheriting projects
+        } else {
+            // Fresh (never-persisted) default already includes the new event, so the
+            // insert above is a no-op and didSet never fires — but installed projects'
+            // settings.json predate the event. Reconcile them directly.
+            for project in projects {
+                let path = project.path
+                guard projectHookConfigs[path]?.enabledEvents == nil,
+                      hooksInstalled(for: path) else { continue }
+                try? HookInstaller.installProjectHooks(projectPath: path, events: defaultEnabledEvents)
+            }
         }
         for (path, config) in projectHookConfigs {
             if var events = config.enabledEvents, !events.contains("Notification") {
