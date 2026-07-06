@@ -29,7 +29,7 @@ scanner, or cross-tab work).
 - `bash run.sh` — debug build + shader compile + codesign + launch
 - `bash dist.sh` — release build, packages `DevDash-YYYYMMDD.zip`
 - `swift build` — build only
-- Self-tests (headless, no XCTest): `swift build && .build/debug/DevDash --selftest-taskstore | --selftest-policy | --daily-selftest | --selftest-terminal` — run the relevant suite before claiming a data-layer change done
+- Self-tests (headless, no XCTest): `swift build && .build/debug/DevDash --selftest-taskstore | --selftest-policy | --selftest-notifications | --daily-selftest | --selftest-terminal` — run the relevant suite before claiming a data-layer change done
 - `lore reindex <type>` / `lore validate <type>` — after editing lore docs (note: decision type is singular, `lore reindex decision`)
 
 ## Conventions
@@ -41,12 +41,15 @@ scanner, or cross-tab work).
 - New lore doc mutations go through the enum stores (`TaskStore`/`TicketStore`/`PolicyStore` pattern); keep them stateless static funcs
 - `BaguetteRunner.shared` is a machine-wide singleton — never spawn a second `baguette serve`
 
-## Performance guardrails (violations have caused real UI lag — see ARCHITECTURE.md §guardrails)
+## Performance guardrails (violations have caused real UI lag)
 
-- No synchronous file I/O on the main actor from `body`/`.onAppear`/`.onChange` — `Task.detached` + `MainActor.run` write-back
-- Batch `@Published` dict writes: one assignment per refresh, not one per project (DashboardStore has ~64 publishers; every mutation fans out everywhere)
+Full policy with the incident behind each rule: `docs/policies/0003-performance-guardrails.md` (injected into launched agent prompts); narrative in ARCHITECTURE.md §guardrails. Summary:
+
+- No synchronous file I/O on the main actor from `body`/`.onAppear`/`.onChange` — `Task.detached` + `MainActor.run` write-back, and guard stale completions after the `await`
+- Batch `@Published` dict writes: one assignment per refresh, not one per project (DashboardStore has ~64 publishers; every mutation fans out everywhere); never add a high-frequency writer to it — that's what the child stores (ServerStore/TabStore/CanvasStore) are for
 - Prefer the single-file/single-project reload paths (`updateInPlace`, `reloadTasksAndNotifyForProject`) over directory-wide rescans
 - Don't filter/sort large collections inside view `body` — memoize
+- Per-frame gesture/hover state stays local to the smallest view (commit to store on gesture end); isolate expensive subtrees with `Equatable` views + `.equatable()`
 - Static `DateFormatter`s only; never allocate one in a per-file loop
 
 ## Agent-native model (how the pieces fit)

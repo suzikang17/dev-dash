@@ -289,6 +289,8 @@ final class DashboardStore: ObservableObject {
     private var taskSnapshot: [String: [String: TaskItem]] = [:]
     /// projectPath → Set<artifactId> snapshot used for new-artifact diffing.
     private var artifactSnapshot: [String: Set<String>] = [:]
+    /// projectPath → (ticketId → rollup status) snapshot for ticket-status diffing.
+    private var ticketStatusSnapshot: [String: [String: TaskStatus]] = [:]
     /// Bumped whenever the watcher fires so TaskDetailSheet can re-read artifacts.
     @Published var artifactsRefreshToken: Int = 0
     /// The dir set the current watcher was armed with; used to avoid tearing
@@ -328,9 +330,23 @@ final class DashboardStore: ObservableObject {
         })
     }
 
+    /// Rollup status for a ticket from its child tasks — the notification-side
+    /// twin of LoreTasksView.ticketRollupStatus (which renders from lore items).
+    /// nil when the ticket has no tasks (caller falls back to stored status).
+    nonisolated static func ticketRollupStatus(ticketId: String, tasks: [TaskItem]) -> TaskStatus? {
+        let ticketTasks = tasks.filter { TaskStore.numEq($0.ticket ?? "", ticketId) }
+        guard !ticketTasks.isEmpty else { return nil }
+        if ticketTasks.allSatisfy({ $0.status == .done || $0.status == .skipped }) { return .done }
+        if ticketTasks.contains(where: { $0.status == .blocked }) { return .blocked }
+        if ticketTasks.contains(where: { ($0.status == .open && $0.owner == .ai) || $0.status == .inProgress }) {
+            return .inProgress
+        }
+        return .open
+    }
+
     /// Reload tasks and artifacts, diff vs snapshots, and fire notifications for
-    /// meaningful changes. First call per project seeds silently. Also silently
-    /// reloads tickets (no notifications for ticket changes).
+    /// meaningful changes. First call per project seeds silently. Ticket rollup
+    /// status changes are diffed and notified here too.
     /// `only`: restrict to these project paths (nil = all projects).
     func reloadTasksAndNotify(only: Set<String>? = nil) {
         var didChangeArtifacts = false
@@ -345,7 +361,7 @@ final class DashboardStore: ObservableObject {
                 projectIdCollisions[path] = collisions.isEmpty ? nil : collisions
             }
 
-            // — Tickets (silent reload — no notifications) —
+            // — Tickets (diff rollup status below; first load per project seeds silently) —
             let freshTickets = TicketStore.read(path)
             projectTickets[path] = freshTickets.isEmpty ? nil : freshTickets
 
@@ -381,6 +397,25 @@ final class DashboardStore: ObservableObject {
             // Always update snapshot and projectTasks.
             taskSnapshot[path] = freshMap
             projectTasks[path] = fresh.isEmpty ? nil : fresh
+
+            // — Ticket rollup status diff —
+            var freshTicketStatuses: [String: TaskStatus] = [:]
+            for ticket in freshTickets {
+                freshTicketStatuses[ticket.id] =
+                    Self.ticketRollupStatus(ticketId: ticket.id, tasks: fresh) ?? ticket.status
+            }
+            if let snap = ticketStatusSnapshot[path] {
+                // Diff: only notify when we have a prior snapshot (not first load).
+                for ticket in freshTickets {
+                    guard let old = snap[ticket.id],
+                          let new = freshTicketStatuses[ticket.id], old != new else { continue }
+                    notificationStore.post(.ticketStatusChanged,
+                        title: "Ticket \(new == .done ? "complete" : new.rawValue): \(ticket.title)",
+                        body: "\(old.rawValue) → \(new.rawValue)",
+                        projectPath: path, tab: .tasks)
+                }
+            }
+            ticketStatusSnapshot[path] = freshTicketStatuses
 
             // — Artifacts —
             let freshArtifacts = ArtifactStore.read(path)

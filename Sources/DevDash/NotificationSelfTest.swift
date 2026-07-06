@@ -15,6 +15,7 @@ enum NotificationSelfTest {
         checkLogRoundTrip(check)
         checkRestoreWindowAndCap(check)
         checkGatingAndUnread(check)
+        checkTicketRollup(check)
 
         let msg = failures.isEmpty
             ? "notifications-selftest: ALL PASS"
@@ -101,6 +102,43 @@ enum NotificationSelfTest {
 
         check(NotificationStore.defaultBannerKinds == Set(NotificationKind.allCases).subtracting([.sessionIdle]),
               "gate: default = all kinds except sessionIdle")
+    }
+
+    private static func task(_ id: String, status: TaskStatus, owner: TaskOwner, ticket: String?) -> TaskItem {
+        var t = TaskItem(id: id, title: "t\(id)", notes: nil, stage: nil,
+                         category: .other, source: .local, status: status,
+                         createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+                         startedAt: nil, completedAt: nil, ghIssueURL: nil)
+        t.owner = owner
+        t.ticket = ticket
+        return t
+    }
+
+    // Rollup mirrors LoreTasksView.ticketRollupStatus over [TaskItem].
+    private static func checkTicketRollup(_ check: (Bool, String) -> Void) {
+        typealias R = DashboardStore
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: []) == nil,
+              "rollup: no tasks → nil (caller uses stored status)")
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: [
+            task("1", status: .done, owner: .human, ticket: "0001"),
+            task("2", status: .skipped, owner: .none, ticket: "0001"),
+        ]) == .done, "rollup: all done/skipped → done")
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: [
+            task("1", status: .blocked, owner: .human, ticket: "0001"),
+            task("2", status: .done, owner: .none, ticket: "0001"),
+        ]) == .blocked, "rollup: any blocked → blocked")
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: [
+            task("1", status: .open, owner: .ai, ticket: "0001"),
+        ]) == .inProgress, "rollup: open+ai → inProgress")
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: [
+            task("1", status: .inProgress, owner: .human, ticket: "0001"),
+        ]) == .inProgress, "rollup: in_progress → inProgress")
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: [
+            task("1", status: .open, owner: .human, ticket: "0001"),
+        ]) == .open, "rollup: plain open → open")
+        check(R.ticketRollupStatus(ticketId: "0001", tasks: [
+            task("1", status: .done, owner: .human, ticket: "0002"),
+        ]) == nil, "rollup: other tickets' tasks ignored")
     }
 
     // Restore: last-3-days window, newest first, 300 cap.
