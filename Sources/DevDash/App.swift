@@ -67,6 +67,7 @@ struct DevDashApp: App {
                     if store.selection == nil && !hasSavedSelection { store.selection = .home }
                     store.startEventServer()
                     store.armNavigationObserver()
+                    store.migrateNotificationHookEventOnce()
                     await store.reattachManagedServers()
                     await store.refreshAll()
                     store.restoreLastSelection()

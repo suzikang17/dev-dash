@@ -688,6 +688,25 @@ final class DashboardStore: ObservableObject {
     /// settings.json. Captures managed state BEFORE mutating so the empty→re-enable round-trip works:
     /// disabling all events sets managed=true and reconciles (removing entries), intent is preserved;
     /// re-enabling an event sees managed=true via intent and reconciles again (re-adding entries).
+    /// One-time: add the "Notification" hook event to previously-saved event
+    /// sets (global default + per-project overrides predate this event and
+    /// would silently never install it). didSet on defaultEnabledEvents
+    /// re-reconciles installed projects.
+    func migrateNotificationHookEventOnce() {
+        let flag = "devdash.migratedNotificationHookEvent"
+        guard !UserDefaults.standard.bool(forKey: flag) else { return }
+        UserDefaults.standard.set(true, forKey: flag)
+        if !defaultEnabledEvents.contains("Notification") {
+            defaultEnabledEvents.insert("Notification")
+        }
+        for (path, config) in projectHookConfigs {
+            if var events = config.enabledEvents, !events.contains("Notification") {
+                events.insert("Notification")
+                setEnabledEventsOverride(events, for: path)
+            }
+        }
+    }
+
     func setEnabledEventsOverride(_ events: Set<String>?, for path: String) {
         let managed = hooksInstalled(for: path)   // capture BEFORE mutating (intent OR content)
         if managed { installedHookProjects.insert(path) }   // migrate pre-existing into intent set
@@ -787,6 +806,11 @@ final class DashboardStore: ObservableObject {
             } else {
                 detail = "\(prefix)\(toolName)"
             }
+
+        case "Notification":
+            category = .session
+            let msg = ev.raw["message"] as? String ?? "Waiting for input"
+            detail = "Needs input: \(msg)"
 
         default:
             category = .other
@@ -1014,6 +1038,23 @@ final class DashboardStore: ObservableObject {
             ensureSession(sid: sid, cwd: ev.cwd, now: now)
             liveSessions[sid]?.currentTool = nil
             liveSessions[sid]?.lastEventAt = now
+            // Opt-in per-turn idle notification (default off — fires every turn;
+            // NotificationStore.shouldRecord drops it entirely unless enabled).
+            let idleProj = liveSessions[sid]?.projectName ?? "unknown project"
+            notificationStore.post(.sessionIdle, title: "Claude is idle — \(idleProj)",
+                                   body: liveSessions[sid]?.lastPrompt.map { "After: \($0.prefix(80))" } ?? "Turn finished",
+                                   projectPath: liveSessions[sid]?.projectPath, tab: .claude)
+
+        case "Notification":
+            // Claude Code fires this when the session is blocked on the user —
+            // a permission prompt or idle waiting-for-input.
+            ensureSession(sid: sid, cwd: ev.cwd, now: now)
+            liveSessions[sid]?.lastEventAt = now
+            let msg = ev.raw["message"] as? String ?? "Waiting for your input"
+            let projName = liveSessions[sid]?.projectName ?? "unknown project"
+            notificationStore.post(.needsInput, title: "Claude needs input — \(projName)",
+                                   body: msg,
+                                   projectPath: liveSessions[sid]?.projectPath, tab: .claude)
 
         case "SessionEnd":
             ensureSession(sid: sid, cwd: ev.cwd, now: now)
