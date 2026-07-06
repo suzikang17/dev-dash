@@ -65,6 +65,7 @@ struct DevDashApp: App {
                     let hasSavedSelection = UserDefaults.standard.string(forKey: "devdash.lastSelection") != nil
                     if store.selection == nil && !hasSavedSelection { store.selection = .home }
                     store.startEventServer()
+                    store.armNavigationObserver()
                     await store.reattachManagedServers()
                     await store.refreshAll()
                     store.restoreLastSelection()
@@ -108,13 +109,42 @@ private struct MenuBarLabel: View {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+extension Notification.Name {
+    /// Posted by AppDelegate when a system notification banner is clicked.
+    /// userInfo: projectPath / tab / taskId (all optional strings).
+    static let devdashNavigate = Notification.Name("devdash.navigate")
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        UNUserNotificationCenter.current().delegate = self
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Show banners even while the app is frontmost (macOS suppresses them by default).
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async
+        -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    /// Banner clicked → activate and forward the navigation target to the store.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        let raw = response.notification.request.content.userInfo
+        var info: [String: String] = [:]
+        for (k, v) in raw {
+            if let ks = k as? String, let vs = v as? String { info[ks] = vs }
+        }
+        let payload = info
+        await MainActor.run {
+            NSApp.activate(ignoringOtherApps: true)
+            NotificationCenter.default.post(name: .devdashNavigate, object: nil, userInfo: payload)
+        }
     }
 }

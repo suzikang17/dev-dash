@@ -132,6 +132,8 @@ final class DashboardStore: ObservableObject {
     /// Open a TaskDetailSheet for this task. Set to nil to dismiss.
     @Published var openTaskId: String? = nil
     @Published var openTaskProjectPath: String? = nil
+    /// Observer for banner-click navigation requests forwarded by AppDelegate.
+    private var navigateObserver: NSObjectProtocol?
     @Published var isSettingsVisible: Bool = false
     /// Folders scanned for projects (Settings → Project folders). Mirrors the
     /// persisted `DevRoots.roots`; mutate via `addDevRoot`/`removeDevRoot`/`resetDevRoots`
@@ -489,6 +491,36 @@ final class DashboardStore: ObservableObject {
             // Map service to its project so a service↔project switch shares tab memory
             guard let svc = services.first(where: { $0.id == id }) else { return nil }
             return projects.first { svc.cwd == $0.path || svc.cwd.hasPrefix("\($0.path)/") }?.path
+        }
+    }
+
+    /// Shared click-to-navigate: system banner clicks (via .devdashNavigate)
+    /// and in-app notification rows both land here.
+    func navigate(projectPath: String?, tabRaw: String?, taskId: String?) {
+        guard let projectPath else { return }
+        // Order matters: selection first (its didSet may restore a remembered
+        // tab via tabStore.selectionChanged), THEN the explicit tab override.
+        selection = .project(path: projectPath)
+        if let tabRaw, let tab = DetailTab(rawValue: tabRaw) {
+            tabStore.detailTab = tab
+        }
+        if let taskId {
+            openTaskProjectPath = projectPath
+            openTaskId = taskId
+        }
+    }
+
+    /// Call once at startup (from App.task, alongside startEventServer).
+    func armNavigationObserver() {
+        guard navigateObserver == nil else { return }
+        navigateObserver = NotificationCenter.default.addObserver(
+            forName: .devdashNavigate, object: nil, queue: .main
+        ) { [weak self] note in
+            let info = note.userInfo as? [String: String] ?? [:]
+            Task { @MainActor in
+                self?.navigate(projectPath: info["projectPath"],
+                               tabRaw: info["tab"], taskId: info["taskId"])
+            }
         }
     }
 
