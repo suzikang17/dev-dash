@@ -24,6 +24,7 @@ struct DevDashApp: App {
                 .environmentObject(store.serverStore)
                 .environmentObject(store.tabStore)
                 .environmentObject(store.canvasStore)
+                .environmentObject(store.notificationStore)
                 .frame(minWidth: 900, minHeight: 600)
                 .preferredColorScheme(store.appTheme.colorScheme)
                 .overlay {
@@ -60,6 +61,7 @@ struct DevDashApp: App {
                 }
                 .task {
                     Notifier.requestAuthIfNeeded()
+                    store.notificationStore.restoreFromDisk()
                     let hasSavedSelection = UserDefaults.standard.string(forKey: "devdash.lastSelection") != nil
                     if store.selection == nil && !hasSavedSelection { store.selection = .home }
                     store.startEventServer()

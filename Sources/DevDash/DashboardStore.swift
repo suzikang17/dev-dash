@@ -115,6 +115,9 @@ final class DashboardStore: ObservableObject {
     /// Per-project freeform canvas layouts + mode, split out like `TabStore` so
     /// panel drags don't republish this store. See `CanvasStore`.
     let canvasStore = CanvasStore()
+    /// Notification feed + banner gating, split out like `TabStore` so unread
+    /// badge updates don't republish this store. See `NotificationStore`.
+    let notificationStore = NotificationStore()
     @Published var pinnedProjects: Set<String> = Set(
         UserDefaults.standard.stringArray(forKey: "devdash.pinnedProjects") ?? []
     )
@@ -351,19 +354,23 @@ final class DashboardStore: ObservableObject {
 
             if let snap = taskSnapshot[path] {
                 // Diff: only notify when we have a prior snapshot (not first load).
-                if enableNotifications {
-                    for (id, task) in freshMap {
-                        if snap[id] == nil {
-                            // New task
-                            if task.pr != nil {
-                                Notifier.post(title: "PR review task created", body: task.title)
-                            } else {
-                                Notifier.post(title: "New task", body: task.title)
-                            }
-                        } else if snap[id]?.status != .done && task.status == .done {
-                            // Task moved to done
-                            Notifier.post(title: "Task done", body: task.title)
+                // Banner gating (per-kind + master) lives inside NotificationStore.post;
+                // the in-app feed records regardless.
+                for (id, task) in freshMap {
+                    if snap[id] == nil {
+                        // New task
+                        if task.pr != nil {
+                            notificationStore.post(.prReviewTask, title: "PR review task created",
+                                                   body: task.title,
+                                                   projectPath: path, tab: .tasks, taskId: id)
+                        } else {
+                            notificationStore.post(.taskCreated, title: "New task", body: task.title,
+                                                   projectPath: path, tab: .tasks, taskId: id)
                         }
+                    } else if snap[id]?.status != .done && task.status == .done {
+                        // Task moved to done
+                        notificationStore.post(.taskDone, title: "Task done", body: task.title,
+                                               projectPath: path, tab: .tasks, taskId: id)
                     }
                 }
             }
@@ -380,10 +387,10 @@ final class DashboardStore: ObservableObject {
                 // LOAD-BEARING: this `if let` (nil snapshot = silent) is the entire
                 // anti-spam guarantee for launch AND late-added projects. Do NOT refactor
                 // into a seed-then-diff that would notify on every existing artifact.
-                if enableNotifications {
-                    for artifact in freshArtifacts where !snapIds.contains(artifact.id) {
-                        Notifier.post(title: "Artifact added", body: artifact.title)
-                    }
+                for artifact in freshArtifacts where !snapIds.contains(artifact.id) {
+                    notificationStore.post(.artifactAdded, title: "Artifact added",
+                                           body: artifact.title,
+                                           projectPath: path, tab: .tasks)
                 }
             }
             // Always update artifact snapshot and bump token if anything changed.
@@ -920,6 +927,7 @@ final class DashboardStore: ObservableObject {
                                     reviewTitle = "Review PR"
                                 }
 
+                                var createdReviewTaskId: String? = nil
                                 do {
                                     let reviewTask = try TaskStore.add(
                                         projectPath: projPath,
@@ -927,6 +935,7 @@ final class DashboardStore: ObservableObject {
                                         category: .qa,
                                         source: .local
                                     )
+                                    createdReviewTaskId = reviewTask.id
                                     // Set ticket + owner + pr in-place.
                                     let dir = TaskStore.file(for: projPath)
                                     if let fname = TaskStore.findFile(id: reviewTask.id, in: dir),
@@ -946,10 +955,10 @@ final class DashboardStore: ObservableObject {
                                 }
 
                                 reloadTasksAndNotifyForProject(projPath)
-                                if enableNotifications {
-                                    let body = ticketTitle ?? (current?.title ?? taskId)
-                                    Notifier.post(title: "PR opened → review task created", body: body)
-                                }
+                                let body = ticketTitle ?? (current?.title ?? taskId)
+                                notificationStore.post(.prOpened, title: "PR opened → review task created",
+                                                       body: body,
+                                                       projectPath: projPath, tab: .tasks, taskId: createdReviewTaskId)
                             }
                         } else {
                             // Legacy fallback (no ticket): move work task to Review & QA.
@@ -959,10 +968,10 @@ final class DashboardStore: ObservableObject {
                             try? TaskStore.setHasAIRun(projectPath: projPath, id: taskId)
                             try? TaskStore.setOwner(projectPath: projPath, id: taskId, owner: .human)
                             reloadTasksAndNotifyForProject(projPath)
-                            if enableNotifications {
-                                let title = current?.title ?? taskId
-                                Notifier.post(title: "PR opened → Review & QA", body: title)
-                            }
+                            let title = current?.title ?? taskId
+                            notificationStore.post(.prOpened, title: "PR opened → Review & QA",
+                                                   body: title,
+                                                   projectPath: projPath, tab: .tasks, taskId: taskId)
                         }
                     }
                 }
@@ -999,10 +1008,9 @@ final class DashboardStore: ObservableObject {
                 }
                 // Notify on meaningful session end + diff tasks for that project.
                 if meaningful, let projPath = session.projectPath {
-                    if enableNotifications {
-                        Notifier.post(title: "Claude finished",
-                                      body: "Session ended in \(session.projectName)")
-                    }
+                    notificationStore.post(.sessionFinished, title: "Claude finished",
+                                           body: "Session ended in \(session.projectName)",
+                                           projectPath: projPath, tab: .claude)
                     reloadTasksAndNotifyForProject(projPath)
                 }
             }
