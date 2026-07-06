@@ -1,10 +1,74 @@
 {
-  "hooks": {
-    "SessionStart":     [ { "hooks": [ { "type": "command", "command": "$HOME/.devdash/bin/devdash-hook" } ] } ],
-    "SessionEnd":       [ { "hooks": [ { "type": "command", "command": "$HOME/.devdash/bin/devdash-hook" } ] } ],
-    "Stop":             [ { "hooks": [ { "type": "command", "command": "$HOME/.devdash/bin/devdash-hook" } ] } ],
-    "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "$HOME/.devdash/bin/devdash-hook" } ] } ],
-    "PreToolUse":       [ { "hooks": [ { "type": "command", "command": "$HOME/.devdash/bin/devdash-hook" } ] } ],
-    "PostToolUse":      [ { "hooks": [ { "type": "command", "command": "$HOME/.devdash/bin/devdash-hook" } ] } ]
+  "hooks" : {
+    "Notification" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\/Users\/suki\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse" : [
+      {
+        "hooks" : [
+          {
+            "command" : "$HOME\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse" : [
+      {
+        "hooks" : [
+          {
+            "command" : "$HOME\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd" : [
+      {
+        "hooks" : [
+          {
+            "command" : "$HOME\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart" : [
+      {
+        "hooks" : [
+          {
+            "command" : "$HOME\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "Stop" : [
+      {
+        "hooks" : [
+          {
+            "command" : "$HOME\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit" : [
+      {
+        "hooks" : [
+          {
+            "command" : "$HOME\/.devdash\/bin\/devdash-hook",
+            "type" : "command"
+          }
+        ]
+      }
+    ]
   }
 }
