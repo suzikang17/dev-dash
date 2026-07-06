@@ -3,13 +3,14 @@ import AppKit
 
 struct ClaudeTabView: View {
     @EnvironmentObject var store: DashboardStore
+    @Environment(\.panelSelection) private var panelSelection
     @State private var prompt = ""
     @State private var allowEdits = false
     @State private var showAllEvents = false
     @FocusState private var promptFocused: Bool
 
     var body: some View {
-        if let project = store.project(for: store.selection) {
+        if let project = store.project(for: panelSelection ?? store.selection) {
             VStack(spacing: 0) {
                 composer(project: project)
                 Divider()

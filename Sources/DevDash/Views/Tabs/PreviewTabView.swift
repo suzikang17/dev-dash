@@ -6,6 +6,8 @@ enum PreviewMode: String { case web, ios }
 
 struct PreviewTabView: View {
     @EnvironmentObject var store: DashboardStore
+    // Canvas panels pinned to another project inject this override (see PanelContentView).
+    @Environment(\.panelSelection) private var panelSelection
     @StateObject private var holder = WebViewHolder()
     @State private var snapshotInProgress = false
     @State private var diffResult: SnapshotDiffResult?
@@ -50,8 +52,8 @@ struct PreviewTabView: View {
     }
 
     var body: some View {
-        let proj = store.project(for: store.selection)
-        let svc: Service? = store.service(for: store.selection)
+        let proj = store.project(for: panelSelection ?? store.selection)
+        let svc: Service? = store.service(for: panelSelection ?? store.selection)
         let customURL: URL? = proj.flatMap { URL(string: store.meta(for: $0.path).customDevServerURL ?? "") }
         let effectiveURL: URL? = customURL ?? svc.flatMap { URL(string: $0.url ?? "") }
         let hasWeb = effectiveURL != nil
@@ -256,7 +258,7 @@ struct PreviewTabView: View {
                 let target = (showing && prodURL != nil) ? prodURL! : url
                 holder.webView.load(URLRequest(url: target))
             }
-            .onChange(of: store.selection) { _, _ in showingProduction = false }
+            .onChange(of: panelSelection ?? store.selection) { _, _ in showingProduction = false }
     }
 }
 

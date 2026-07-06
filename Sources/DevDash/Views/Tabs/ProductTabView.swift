@@ -7,6 +7,8 @@ import AppKit
 /// files; viewed via WKWebView.
 struct ProductTabView: View {
     @EnvironmentObject var store: DashboardStore
+    // Canvas panels pinned to another project inject this override (see PanelContentView).
+    @Environment(\.panelSelection) private var panelSelection
     @State private var lastRegenAt: Date?
     @State private var reloadToken: Int = 0
     @State private var showLinkedSidebar: Bool = false
@@ -22,7 +24,7 @@ struct ProductTabView: View {
     @State private var activeLoreType: String?
 
     var body: some View {
-        if let project = store.project(for: store.selection) {
+        if let project = store.project(for: panelSelection ?? store.selection) {
             VStack(spacing: 0) {
                 toolbar(project: project)
                 Divider()
@@ -488,7 +490,7 @@ struct ProductTabView: View {
             let exists = FileManager.default.fileExists(atPath: ProductDocGenerator.indexPath(for: path))
             await MainActor.run {
                 // Ignore stale completions after a project switch.
-                guard store.project(for: store.selection)?.path == path else { return }
+                guard store.project(for: panelSelection ?? store.selection)?.path == path else { return }
                 lastRegenAt = Date()
                 reloadToken &+= 1   // force WKWebView reload so latest HTML + JS land
                 docExists = exists

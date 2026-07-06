@@ -125,7 +125,8 @@ enum LoreLinkIndex {
     }
 
     /// Body markdown after the leading `--- … ---` frontmatter (exact-fence rule).
-    private static func bodyOf(_ s: String) -> String {
+    /// Internal (not private): the Docs viewer reuses it when rendering a doc.
+    static func bodyOf(_ s: String) -> String {
         let lines = s.components(separatedBy: "\n")
         guard let open = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }),
               lines[..<open].allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }),

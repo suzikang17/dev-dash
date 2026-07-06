@@ -2,6 +2,8 @@ import SwiftUI
 
 struct DailyTabView: View {
     @EnvironmentObject var store: DashboardStore
+    // Canvas panels pinned to another project inject this override (see PanelContentView).
+    @Environment(\.panelSelection) private var panelSelection
     @State private var days: [DayGroup] = []
     @State private var allDocs: [DailyLoreEntry] = []
     /// Cache of the last docs-tree scan, keyed by date — lets digest-only
@@ -28,7 +30,7 @@ struct DailyTabView: View {
 
     private enum ViewMode { case daily, browse }
 
-    private var project: Project? { store.project(for: store.selection) }
+    private var project: Project? { store.project(for: panelSelection ?? store.selection) }
 
     var body: some View {
         Group {

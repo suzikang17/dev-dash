@@ -4,10 +4,11 @@ import AppKit
 struct LogsTabView: View {
     @EnvironmentObject var store: DashboardStore
     @EnvironmentObject var serverStore: ServerStore
+    @Environment(\.panelSelection) private var panelSelection
     @State private var autoScroll = true
 
     var body: some View {
-        if let project = store.project(for: store.selection) {
+        if let project = store.project(for: panelSelection ?? store.selection) {
             let lines = serverStore.logs(for: project.path)
             VStack(spacing: 0) {
                 HStack {

@@ -4,9 +4,11 @@ import AppKit
 struct InfoTabView: View {
     @EnvironmentObject var store: DashboardStore
     @EnvironmentObject var serverStore: ServerStore
+    // Canvas panels pinned to another project inject this override (see PanelContentView).
+    @Environment(\.panelSelection) private var panelSelection
 
     var body: some View {
-        if let project = store.project(for: store.selection) {
+        if let project = store.project(for: panelSelection ?? store.selection) {
             VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: DSSpace.lg) {
@@ -268,6 +270,7 @@ private struct ProviderRow: View {
     let provider: Provider
     let onEdit: () -> Void
     @EnvironmentObject var store: DashboardStore
+    @Environment(\.panelSelection) private var panelSelection
     @State private var hover = false
 
     var body: some View {
@@ -346,7 +349,7 @@ private struct ProviderRow: View {
     /// We don't carry projectPath in Provider, so the context menu's delete
     /// has to look it up. Walk up via the EnvironmentObject's selection.
     private var providerProjectPath: String {
-        store.project(for: store.selection)?.path ?? ""
+        store.project(for: panelSelection ?? store.selection)?.path ?? ""
     }
 
     private func formatCost(_ d: Double) -> String {

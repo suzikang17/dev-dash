@@ -4,6 +4,8 @@ import DevDashCore
 
 struct ChangesTabView: View {
     @EnvironmentObject var store: DashboardStore
+    // Canvas panels pinned to another project inject this override (see PanelContentView).
+    @Environment(\.panelSelection) private var panelSelection
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case changes, prs, sessions, files, deploys
@@ -120,7 +122,7 @@ struct ChangesTabView: View {
     }
 
     var body: some View {
-        if let project = store.project(for: store.selection) {
+        if let project = store.project(for: panelSelection ?? store.selection) {
             HStack(spacing: 0) {
                 sidebar(projectPath: project.path)
                     .frame(width: sidebarWidth)
@@ -716,7 +718,7 @@ struct ChangesTabView: View {
         let result = await VercelScanner.deployments(projectPath: projectPath, limit: 30)
         await MainActor.run {
             // The fetch is slow (network); ignore it if the user switched projects.
-            guard store.project(for: store.selection)?.path == projectPath else { return }
+            guard store.project(for: panelSelection ?? store.selection)?.path == projectPath else { return }
             deploysResult = result
             if case let .ok(list) = result { deployments = list } else { deployments = [] }
             selectedDeploymentId = deployments.first?.id
