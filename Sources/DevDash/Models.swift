@@ -297,6 +297,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var gstackPersonaOverride: String? = nil
     var linkedDocPath: String? = nil
     var pr: String? = nil
+    /// Set once the PR at `pr` is observed merged (durable dedupe for the
+    /// merge notification; also lets UI show cleanup affordances without a fetch).
+    var prMerged: Bool = false
     // Worktree integration fields (set when launched with launchInWorktree=true)
     var worktree: String? = nil   // absolute path to the worktree, e.g. <repo>/.worktrees/task-0042-foo
     var branch: String? = nil     // branch name, e.g. task/0042-foo
@@ -639,7 +642,7 @@ enum Selection: Hashable {
 enum DetailTab: String, CaseIterable, Identifiable {
     // `preview` was removed from the main tab strip — Preview now lives in the
     // right-side dock (toggle with ⌘P).
-    case info, claude, tasks, product, changes, logs, daily
+    case info, claude, tasks, product, docs, changes, logs, daily
     var id: String { rawValue }
 
     var label: String {
@@ -648,6 +651,7 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .claude: return "Claude"
         case .tasks: return "Tasks"
         case .product: return "Product"
+        case .docs: return "Docs"
         case .changes: return "Changes"
         case .logs: return "Logs"
         case .daily: return "Today"
@@ -660,6 +664,7 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .claude: return "sparkles"
         case .tasks: return "checklist"
         case .product: return "doc.richtext"
+        case .docs: return "books.vertical"
         case .changes: return "arrow.triangle.branch"
         case .logs: return "terminal"
         case .daily: return "calendar.day.timeline.left"

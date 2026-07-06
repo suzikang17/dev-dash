@@ -134,6 +134,8 @@ final class DashboardStore: ObservableObject {
     @Published var openTaskProjectPath: String? = nil
     /// Observer for banner-click navigation requests forwarded by AppDelegate.
     private var navigateObserver: NSObjectProtocol?
+    /// Last `gh pr view` poll per "<projectPath>#<taskId>" (5-min throttle).
+    private var prMergePollLast: [String: Date] = [:]
     @Published var isSettingsVisible: Bool = false
     /// Folders scanned for projects (Settings → Project folders). Mirrors the
     /// persisted `DevRoots.roots`; mutate via `addDevRoot`/`removeDevRoot`/`resetDevRoots`
@@ -1476,6 +1478,7 @@ final class DashboardStore: ObservableObject {
                 }
             }
             self.lastUpdated = Date()
+            pollPRMerges()
 
             // Background git status scan for all git projects — detached so it
             // doesn't block the main refresh tick. Results are collected and merged
@@ -1517,6 +1520,42 @@ final class DashboardStore: ObservableObject {
                 }
             }
         } while refreshPending
+    }
+
+    /// Detect merged PRs for tasks with an open PR + active worktree.
+    /// Called from refreshAll; each PR polled at most every 5 minutes; gh runs
+    /// off-main. On merge: durable frontmatter flag (dedupe) + notification.
+    func pollPRMerges() {
+        let now = Date()
+        var toPoll: [(projectPath: String, taskId: String, title: String, prNumber: Int)] = []
+        for (path, tasks) in projectTasks {
+            for task in tasks ?? [] where task.worktree != nil && !task.prMerged {
+                guard let pr = task.pr,
+                      let number = Self.prNumberFromURL(from: pr) else { continue }
+                let key = "\(path)#\(task.id)"
+                if let last = prMergePollLast[key], now.timeIntervalSince(last) < 300 { continue }
+                prMergePollLast[key] = now
+                toPoll.append((path, task.id, task.title, number))
+            }
+        }
+        guard !toPoll.isEmpty else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            for item in toPoll {
+                guard let detail = await GitDiffScanner.prDetail(path: item.projectPath,
+                                                                 number: item.prNumber) else { continue }
+                guard detail.state.lowercased() == "merged" else { continue }
+                // Durable dedupe first (rare, small frontmatter rewrite), then
+                // notify + reload on main.
+                try? TaskStore.setPRMerged(projectPath: item.projectPath, id: item.taskId)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.reloadTasks(for: item.projectPath)
+                    self.notificationStore.post(.prMerged,
+                        title: "PR merged", body: item.title,
+                        projectPath: item.projectPath, tab: .tasks, taskId: item.taskId)
+                }
+            }
+        }
     }
 
     func startAutoRefresh(interval: TimeInterval = 15) {

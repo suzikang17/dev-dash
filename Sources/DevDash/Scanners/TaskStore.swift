@@ -201,6 +201,16 @@ enum TaskStore {
         try result.write(toFile: "\(dir)/\(filename)", atomically: true, encoding: .utf8)
     }
 
+    /// Mark a task's PR as merged (idempotent frontmatter write).
+    static func setPRMerged(projectPath: String, id: String) throws {
+        let dir = file(for: projectPath)
+        guard let filename = findFile(id: id, in: dir),
+              let raw = try? String(contentsOfFile: "\(dir)/\(filename)", encoding: .utf8)
+        else { return }
+        let result = setOrAddFrontmatterKey(in: raw, key: "pr_merged", value: "true")
+        try result.write(toFile: "\(dir)/\(filename)", atomically: true, encoding: .utf8)
+    }
+
     /// Set or clear the `worktree:` and `branch:` frontmatter keys in place.
     /// Passing nil for both removes both keys.
     static func setWorktree(projectPath: String, id: String, worktree: String?, branch: String?) throws {
@@ -367,6 +377,7 @@ enum TaskStore {
         str("persona", t.gstackPersonaOverride)
         str("linkedDoc", t.linkedDocPath)
         str("pr", t.pr)
+        if t.prMerged { lines.append("pr_merged: true") }
         str("worktree", t.worktree)
         str("branch", t.branch)
         if let pid = t.parentId, !pid.isEmpty { lines.append("parent: \(yamlStr(pid))") }
@@ -430,6 +441,11 @@ enum TaskStore {
         setStr("persona", t.gstackPersonaOverride)
         setStr("linkedDoc", t.linkedDocPath)
         setStr("pr", t.pr)
+        if t.prMerged {
+            doc = setOrAddFrontmatterKey(in: doc, key: "pr_merged", value: "true")
+        } else {
+            doc = removeFrontmatterKey(in: doc, key: "pr_merged")
+        }
         setStr("worktree", t.worktree)
         setStr("branch", t.branch)
         if let pid = t.parentId, !pid.isEmpty {
@@ -741,6 +757,7 @@ enum TaskStore {
             gstackPersonaOverride: fm["persona"].flatMap { $0.isEmpty ? nil : $0 },
             linkedDocPath: fm["linkedDoc"].flatMap { $0.isEmpty ? nil : $0 },
             pr: fm["pr"].flatMap { $0.isEmpty ? nil : $0 },
+            prMerged: fm["pr_merged"] == "true",
             worktree: fm["worktree"].flatMap { $0.isEmpty ? nil : $0 },
             branch: fm["branch"].flatMap { $0.isEmpty ? nil : $0 },
             ticket: fm["ticket"].flatMap { $0.isEmpty ? nil : $0 }

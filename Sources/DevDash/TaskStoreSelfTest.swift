@@ -78,6 +78,7 @@ enum TaskStoreSelfTest {
         checkNumericIdTolerance(check)
         checkSetStatusHistory(check)
         checkMigrationOneTime(check)
+        checkPRMergedRoundTrip(check)
         checkSetPR(check)
         checkWorktreeFieldRoundTrip(check)
         checkWorktreeSlugNaming(check)
@@ -295,6 +296,34 @@ enum TaskStoreSelfTest {
     }
 
     // MARK: - Check c: notes containing sentinel and heading lines
+
+    private static func checkPRMergedRoundTrip(_ check: (Bool, String) -> Void) {
+        let proj = makeTempProject("prm")
+        defer { try? FileManager.default.removeItem(atPath: proj) }
+
+        let t: TaskItem
+        do {
+            t = try TaskStore.add(projectPath: proj, title: "PR merge test")
+            try TaskStore.setPR(projectPath: proj, id: t.id, url: "https://github.com/x/y/pull/7")
+        } catch {
+            check(false, "prm: add/setPR threw \(error)"); return
+        }
+
+        // Absent → false.
+        var read = TaskStore.read(proj).first { $0.id == t.id }
+        check(read?.prMerged == false, "prm: pr_merged absent → false")
+
+        // Set → true after re-read; idempotent second write.
+        do {
+            try TaskStore.setPRMerged(projectPath: proj, id: t.id)
+            try TaskStore.setPRMerged(projectPath: proj, id: t.id)
+        } catch {
+            check(false, "prm: setPRMerged threw \(error)"); return
+        }
+        read = TaskStore.read(proj).first { $0.id == t.id }
+        check(read?.prMerged == true,   "prm: pr_merged set → true after re-read")
+        check(read?.pr == "https://github.com/x/y/pull/7", "prm: pr URL preserved alongside pr_merged")
+    }
 
     private static func checkNotesWithSentinelLines(_ check: (Bool, String) -> Void) {
         let proj = makeTempProject("c")
