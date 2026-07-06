@@ -178,7 +178,6 @@ struct CanvasView: View {
     /// Two-finger scroll / WASD pan (from the event bridge). Deltas arrive in
     /// screen px; divide by zoom so motion tracks the finger in overview too.
     private func applyScrollPan(_ delta: CGSize) {
-        NSLog("[CanvasDebug] applyScrollPan delta=(%.1f, %.1f)", delta.width, delta.height)
         setPan(CGSize(width: pan.width + delta.width / zoom, height: pan.height + delta.height / zoom),
                animated: false)
     }
@@ -237,10 +236,6 @@ struct CanvasView: View {
                          (viewport.height - 2 * margin) / bounds.height)
         let target = CGSize(width: viewport.width / 2 - bounds.midX,
                             height: viewport.height / 2 - bounds.midY)
-        NSLog("[CanvasDebug] fitAll viewport=(%.0f,%.0f) bounds=(%.0f,%.0f,%.0f,%.0f) zoom=%.2f target=(%.0f,%.0f)",
-              viewport.width, viewport.height,
-              bounds.minX, bounds.minY, bounds.width, bounds.height,
-              fit, target.width, target.height)
         withAnimation(.easeOut(duration: 0.25)) { zoom = max(Self.minZoom, fit) }
         setPan(target, animated: true)
     }
@@ -544,8 +539,6 @@ final class CanvasEventBridgeView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         removeMonitors()
-        NSLog("[CanvasDebug] bridge viewDidMoveToWindow window=%@ bounds=%@",
-              window.map { String(describing: $0) } ?? "nil", NSStringFromRect(bounds))
         guard window != nil else { return }
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] e in
             self?.handleScroll(e) ?? e
