@@ -78,17 +78,29 @@ struct ContentView: View {
         .opacity(0)
     }
 
-    /// Hidden buttons binding ⌘1–9 to the nine detail tabs (only while a
-    /// project/service is selected — home and simulator ignore detailTab). ⌘0 is Home.
+    /// Hidden buttons binding ⌘1–9. Normally they select the detail tabs; when
+    /// the selected project is in canvas mode (which covers the tab body, making
+    /// tab switching inert) a number assigned to a canvas panel jumps to that
+    /// panel instead. ⌘0 is Home.
     @ViewBuilder
     private var tabShortcuts: some View {
         if let sel = store.selection, sel != .home, sel != .simulator {
-            ForEach(Array(DetailTab.allCases.prefix(9).enumerated()), id: \.offset) { idx, tab in
-                Button("") { tabStore.detailTab = tab }
-                    .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
+            ForEach(1...9, id: \.self) { n in
+                Button("") { fireNumberShortcut(n) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
                     .frame(width: 0, height: 0)
                     .opacity(0)
             }
+        }
+    }
+
+    private func fireNumberShortcut(_ n: Int) {
+        if let project = store.project(for: store.selection),
+           canvasStore.isCanvasMode(project.path),
+           let panelID = canvasStore.panelID(forShortcut: n, in: project.path) {
+            canvasStore.requestJump(to: panelID, in: project.path)
+        } else if n <= DetailTab.allCases.count {
+            tabStore.detailTab = DetailTab.allCases[n - 1]
         }
     }
 
@@ -190,6 +202,9 @@ struct ContentView: View {
                     }
                 }
             }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            NotificationBellButton()
         }
         ToolbarItem(placement: .primaryAction) {
             commandField
