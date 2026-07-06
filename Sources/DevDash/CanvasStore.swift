@@ -71,6 +71,27 @@ struct CanvasPanel: Identifiable, Codable, Hashable {
     var kind: PanelKind
     var frame: CGRect    // position + size on the board (board coordinates)
     var z: Int           // higher = front
+    /// When set, the panel shows this project instead of the canvas's project
+    /// (optional so pre-existing persisted layouts decode as "follow canvas").
+    var projectOverride: String? = nil
+    /// Assigned ⌘1–9 slot: pressing it raises + centers this panel (canvas mode
+    /// repurposes the tab shortcuts, which are inert while the canvas covers the
+    /// tab body). Optional so old persisted layouts decode.
+    var shortcut: Int? = nil
+}
+
+/// Selection override injected by canvas panels so the shared tab views render a
+/// pinned project instead of the globally selected one. Views resolve their
+/// project/service via `panelSelection ?? store.selection`.
+private struct PanelSelectionKey: EnvironmentKey {
+    static let defaultValue: Selection? = nil
+}
+
+extension EnvironmentValues {
+    var panelSelection: Selection? {
+        get { self[PanelSelectionKey.self] }
+        set { self[PanelSelectionKey.self] = newValue }
+    }
 }
 
 /// A project's canvas: its panels and the board's pan offset.
@@ -162,15 +183,69 @@ final class CanvasStore: ObservableObject {
         persistLayouts()
     }
 
-    /// Bring a panel to the front (highest z).
+    /// Bring a panel to the front (highest z). Compacts z-values to 0..<count while
+    /// it's at it, so they don't grow unboundedly across a long-lived layout.
     func raise(_ id: UUID, for path: String) {
         var l = layout(for: path)
         guard let i = l.panels.firstIndex(where: { $0.id == id }) else { return }
         let topZ = (l.panels.map(\.z).max() ?? 0)
+        // Already front → no-op. Matters: raise fires on every content click.
         guard l.panels[i].z != topZ else { return }
-        l.panels[i].z = topZ + 1
+        compactZ(&l, raising: i)
         layouts[path] = l
         persistLayouts()
+    }
+
+    /// Reassign z = rank order (0..<count) with panel `raisedIndex` on top.
+    private func compactZ(_ l: inout CanvasLayout, raising raisedIndex: Int) {
+        let raisedID = l.panels[raisedIndex].id
+        let order = l.panels.indices.sorted {
+            (l.panels[$0].id == raisedID ? Int.max : l.panels[$0].z)
+                < (l.panels[$1].id == raisedID ? Int.max : l.panels[$1].z)
+        }
+        for (rank, idx) in order.enumerated() { l.panels[idx].z = rank }
+    }
+
+    /// Pin a panel to a specific project (nil = follow the canvas's project).
+    func setProjectOverride(_ projectPath: String?, panel id: UUID, for path: String) {
+        var l = layout(for: path)
+        guard let i = l.panels.firstIndex(where: { $0.id == id }) else { return }
+        l.panels[i].projectOverride = projectPath
+        layouts[path] = l
+        persistLayouts()
+    }
+
+    // MARK: Panel shortcuts (⌘1–9)
+
+    /// Assign a ⌘N slot to a panel (nil clears). A slot is unique per canvas:
+    /// assigning steals it from whichever panel held it.
+    func setShortcut(_ n: Int?, panel id: UUID, for path: String) {
+        var l = layout(for: path)
+        guard let i = l.panels.firstIndex(where: { $0.id == id }) else { return }
+        if let n {
+            for j in l.panels.indices where l.panels[j].shortcut == n { l.panels[j].shortcut = nil }
+        }
+        l.panels[i].shortcut = n
+        layouts[path] = l
+        persistLayouts()
+    }
+
+    func panelID(forShortcut n: Int, in path: String) -> UUID? {
+        layout(for: path).panels.first { $0.shortcut == n }?.id
+    }
+
+    /// One-shot "raise + center this panel" request, published so the visible
+    /// CanvasView (which owns the live pan state) can act on it. The token makes
+    /// repeated jumps to the same panel observable via onChange.
+    struct JumpRequest: Equatable {
+        let path: String
+        let panelID: UUID
+        let token: Int
+    }
+    @Published private(set) var jump: JumpRequest?
+
+    func requestJump(to panelID: UUID, in path: String) {
+        jump = JumpRequest(path: path, panelID: panelID, token: (jump?.token ?? 0) + 1)
     }
 
     // MARK: Helpers
@@ -187,14 +262,24 @@ final class CanvasStore: ObservableObject {
             switch tab {
             case .daily, .changes: return CGSize(width: 860, height: 560)
             case .tasks:           return CGSize(width: 820, height: 620)
+            case .docs:            return CGSize(width: 880, height: 640)
             default:               return CGSize(width: 460, height: 480)
             }
         }
     }
 
+    /// Debounced: drag-end paths fire updateFrame + raise back-to-back, and scroll
+    /// panning commits repeatedly — one JSON encode after the burst is enough.
+    private var persistTask: Task<Void, Never>?
+
     private func persistLayouts() {
-        if let data = try? JSONEncoder().encode(layouts) {
-            UserDefaults.standard.set(data, forKey: layoutsKey)
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled, let self else { return }
+            if let data = try? JSONEncoder().encode(self.layouts) {
+                UserDefaults.standard.set(data, forKey: self.layoutsKey)
+            }
         }
     }
 
