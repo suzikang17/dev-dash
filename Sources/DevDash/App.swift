@@ -31,6 +31,7 @@ struct DevDashApp: App {
                     if store.isSettingsVisible {
                         SettingsView()
                             .environmentObject(store)
+                            .environmentObject(store.notificationStore)
                     }
                 }
                 // Invisible button holds the ⌘, shortcut binding (⌘K lives in

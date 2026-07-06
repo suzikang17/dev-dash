@@ -5,6 +5,7 @@ import AppKit
 /// Presented as an overlay so a click outside (or Esc) dismisses it.
 struct SettingsView: View {
     @EnvironmentObject var store: DashboardStore
+    @EnvironmentObject private var notifications: NotificationStore
 
     // MARK: - Tab navigation
     private enum SettingsTab: String, CaseIterable, Identifiable {
@@ -510,10 +511,27 @@ struct SettingsView: View {
                         Toggle("Notify on Claude task activity", isOn: $store.enableNotifications)
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                        Text("Native notifications when Claude creates a PR task, completes a task, or finishes a session.")
+                        Text("Master switch for native notification banners. The in-app feed (bell) always records events. Per-event control:")
                             .font(DSFont.micro)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(NotificationKind.allCases, id: \.rawValue) { kind in
+                                Toggle(kind.label, isOn: Binding(
+                                    get: { notifications.isBannerEnabled(kind) },
+                                    set: { notifications.setBanner(kind, enabled: $0) }
+                                ))
+                                .toggleStyle(.checkbox)
+                                .controlSize(.mini)
+                                .disabled(!store.enableNotifications)
+                            }
+                            Text("“Claude turn finished (idle)” fires every turn — enabling it also shows those entries in the feed.")
+                                .font(DSFont.micro)
+                                .foregroundStyle(.tertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.leading, DSSpace.md)
+                        .padding(.top, 2)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Toggle("Run launched tasks in an isolated worktree", isOn: $store.launchInWorktree)
