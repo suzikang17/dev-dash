@@ -9,7 +9,7 @@ struct SettingsView: View {
 
     // MARK: - Tab navigation
     private enum SettingsTab: String, CaseIterable, Identifiable {
-        case appearance, folders, claude, document, terminal, linear
+        case appearance, folders, claude, document, terminal, linear, about
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -19,6 +19,7 @@ struct SettingsView: View {
             case .document:   return "Document"
             case .terminal:   return "Terminal"
             case .linear:     return "Linear"
+            case .about:      return "About"
             }
         }
         var systemImage: String {
@@ -29,6 +30,7 @@ struct SettingsView: View {
             case .document:   return "doc.text"
             case .terminal:   return "terminal"
             case .linear:     return "rhombus"
+            case .about:      return "info.circle"
             }
         }
     }
@@ -38,6 +40,12 @@ struct SettingsView: View {
     // MARK: - Claude integration section state
     @State private var installed: Set<String> = []
     @State private var hookError: String? = nil
+
+    // MARK: - About section state
+    @State private var devDashVersionInfo: RepoVersionInfo? = nil
+    @State private var loreVersionInfo: RepoVersionInfo? = nil
+    @State private var isCheckingDevDash = false
+    @State private var isCheckingLore = false
 
     var body: some View {
         ZStack {
@@ -105,6 +113,7 @@ struct SettingsView: View {
                         case .document:   documentSection
                         case .terminal:   terminalSection
                         case .linear:     linearSection
+                        case .about:      aboutSection
                         }
                     }
                     .padding(DSSpace.xl)
@@ -882,6 +891,106 @@ struct SettingsView: View {
         section(title: "Linear") {
             LinearSettingsView()
                 .environmentObject(store)
+        }
+    }
+
+    // MARK: - About (repo version info — "is this the latest build?")
+
+    private var aboutSection: some View {
+        section(title: "About") {
+            VStack(alignment: .leading, spacing: DSSpace.md) {
+                Text("Local git identity of dev-dash and the lore CLI it depends on — compare this against another machine to see if they're running the same build.")
+                    .font(DSFont.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                repoVersionRow(label: "dev-dash", info: devDashVersionInfo, isChecking: isCheckingDevDash) {
+                    await checkRemote(name: "dev-dash", path: devDashVersionInfo?.path, isDevDash: true)
+                }
+                repoVersionRow(label: "lore", info: loreVersionInfo, isChecking: isCheckingLore) {
+                    await checkRemote(name: "lore", path: loreVersionInfo?.path, isDevDash: false)
+                }
+            }
+        }
+        .task {
+            guard devDashVersionInfo == nil else { return }
+            if let devDashPath = RepoVersionScanner.findRepoRoot(from: Bundle.main.bundlePath) {
+                devDashVersionInfo = await RepoVersionScanner.scan(name: "dev-dash", path: devDashPath)
+            }
+            if let lorePath = await RepoVersionScanner.resolveLoreRepoPath() {
+                loreVersionInfo = await RepoVersionScanner.scan(name: "lore", path: lorePath)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func repoVersionRow(label: String, info: RepoVersionInfo?, isChecking: Bool,
+                                action: @escaping () async -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: DSSpace.sm) {
+                Text(label)
+                    .font(DSFont.bodyEmphasized)
+                Spacer()
+                Button {
+                    Task { await action() }
+                } label: {
+                    if isChecking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Check for updates")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isChecking || info == nil)
+            }
+            if let info {
+                HStack(spacing: DSSpace.xs) {
+                    if let branch = info.branch {
+                        Text(branch).font(DSFont.mono(.caption2))
+                    }
+                    if let sha = info.shortSHA {
+                        Text(sha).font(DSFont.monoDigits(.caption2)).foregroundStyle(.secondary)
+                    }
+                    if let date = info.commitDate {
+                        Text(date, format: .relative(presentation: .named))
+                            .font(DSFont.micro).foregroundStyle(.secondary)
+                    }
+                }
+                if info.remoteChecked {
+                    Text(remoteStatusLabel(info))
+                        .font(DSFont.micro)
+                        .foregroundStyle(info.behind > 0 ? DSColor.warning : DSColor.success)
+                }
+            } else {
+                Text("Not found").font(DSFont.micro).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(DSSpace.sm)
+        .background(Color.primary.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.small, style: .continuous))
+    }
+
+    private func remoteStatusLabel(_ info: RepoVersionInfo) -> String {
+        switch (info.ahead, info.behind) {
+        case (0, 0): return "Up to date with origin"
+        case (let a, 0): return "\(a) commit\(a == 1 ? "" : "s") ahead of origin"
+        case (0, let b): return "\(b) commit\(b == 1 ? "" : "s") behind origin — pull to update"
+        case (let a, let b): return "\(a) ahead, \(b) behind origin (diverged)"
+        }
+    }
+
+    @MainActor
+    private func checkRemote(name: String, path: String?, isDevDash: Bool) async {
+        guard let path else { return }
+        if isDevDash { isCheckingDevDash = true } else { isCheckingLore = true }
+        let result = await RepoVersionScanner.checkRemote(name: name, path: path)
+        if isDevDash {
+            devDashVersionInfo = result
+            isCheckingDevDash = false
+        } else {
+            loreVersionInfo = result
+            isCheckingLore = false
         }
     }
 
