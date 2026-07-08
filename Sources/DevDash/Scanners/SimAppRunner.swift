@@ -222,12 +222,25 @@ final class SimAppRunner: ObservableObject {
     /// can kill it immediately rather than waiting for Task cancellation to
     /// propagate through the async stream.
     private var buildProcess: RunningProcess? = nil
+    private var terminationToken: NSObjectProtocol?
+
+    /// Kill an in-flight xcodebuild on app quit. `deinit` covers panel teardown,
+    /// but is not reliably delivered before Cmd-Q — without this a multi-GB build
+    /// (and its clang children) is reparented to launchd. Mirrors BaguetteRunner.
+    init() {
+        terminationToken = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.cancel() }
+        }
+    }
 
     deinit {
         // Cancel any in-flight build when the runner is torn down (e.g. when
         // SimulatorView disappears and its @StateObject is released).
         buildTask?.cancel()
         buildProcess?.stop()
+        if let terminationToken { NotificationCenter.default.removeObserver(terminationToken) }
     }
 
     // MARK: - Scheme resolution

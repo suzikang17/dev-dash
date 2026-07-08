@@ -3270,6 +3270,30 @@ final class DashboardStore: ObservableObject {
 
     @Published var claudeTasks: [String: [ClaudeTask]] = [:]   // project path → tasks
     private var runningClaude: [UUID: RunningProcess] = [:]
+    private var claudeTerminationToken: NSObjectProtocol?
+
+    /// Tear down in-flight `claude -p` agents on app quit. Without this, a running
+    /// agent (spawned with `--dangerously-skip-permissions` when edits are allowed)
+    /// is reparented to launchd past Cmd-Q and keeps editing the repo / burning
+    /// tokens with no UI to stop it. Mirrors BaguetteRunner / TerminalSessionStore.
+    init() {
+        claudeTerminationToken = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopAllRunningClaude() }
+        }
+    }
+
+    deinit {
+        if let claudeTerminationToken {
+            NotificationCenter.default.removeObserver(claudeTerminationToken)
+        }
+    }
+
+    private func stopAllRunningClaude() {
+        for proc in runningClaude.values { proc.stop() }
+        runningClaude.removeAll()
+    }
 
     func tasks(forClaudeProject projectPath: String) -> [ClaudeTask] {
         claudeTasks[projectPath] ?? []

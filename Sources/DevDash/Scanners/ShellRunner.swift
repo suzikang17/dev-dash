@@ -208,6 +208,12 @@ final class RunningProcess: @unchecked Sendable {
         process.terminationHandler = { [weak self] _ in self?.finish() }
 
         try process.run()
+        // Put the child in its own process group so `stop()`'s `kill(-pid)` reaches
+        // the whole subtree — e.g. a `zsh -ic "… claude …"` / `"… npm run watch"`
+        // wrapper whose grandchild would otherwise survive when only the shell is
+        // terminated. Best-effort and race-free enough in practice: harmless if the
+        // child has already exec'd and set its own group.
+        setpgid(process.processIdentifier, process.processIdentifier)
     }
 
     private func finish() {
@@ -231,13 +237,19 @@ final class RunningProcess: @unchecked Sendable {
     }
 
     func stop() {
+        let pid = process.processIdentifier
         if process.isRunning {
-            kill(-process.processIdentifier, SIGTERM)
-            process.terminate()
+            kill(-pid, SIGTERM)      // whole group (grandchildren included)
+            process.terminate()      // direct child, in case the group setup lost the race
         }
+        // Escalate to SIGKILL for anything that ignored SIGTERM (the nvim/claude
+        // class of process that survives a polite terminate) — group first, then
+        // the direct child as a fallback.
         DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self = self, self.process.isRunning else { return }
-            kill(self.process.processIdentifier, SIGKILL)
+            let pid = self.process.processIdentifier
+            kill(-pid, SIGKILL)
+            kill(pid, SIGKILL)
         }
     }
 }
