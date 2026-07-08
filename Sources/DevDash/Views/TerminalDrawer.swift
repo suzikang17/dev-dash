@@ -18,8 +18,8 @@ final class TerminalSessionStore {
 
     private var appearance: TerminalAppearance
 
-    /// The live look, so non-cached terminals (e.g. nvim's `EmbeddedTerminal`)
-    /// can theme themselves from the same source and re-theme when it changes.
+    /// The live look, so non-cached terminals can theme themselves from the same
+    /// source and re-theme when it changes.
     var currentAppearance: TerminalAppearance { appearance }
 
     init(appearance: TerminalAppearance) {

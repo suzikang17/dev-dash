@@ -59,8 +59,8 @@ enum TerminalFontFamily: String, CaseIterable {
 // MARK: - Resolved appearance bundle
 
 /// Everything needed to paint a terminal. Built from the store's settings and
-/// passed to applyTerminalAppearance(_:to:). Keep this a plain value type so both
-/// the cached-shell store and the nvim EmbeddedTerminal can hold/compare it.
+/// passed to applyTerminalAppearance(_:to:). Keep this a plain value type so the
+/// cached-shell store can hold/compare it.
 struct TerminalAppearance: Equatable {
     var theme: AppTheme
     var fontSize: CGFloat
@@ -68,8 +68,8 @@ struct TerminalAppearance: Equatable {
     var cursorStyle: TerminalCursorStyle
     var scrollback: Int
 
-    /// Sensible standalone default (used by EmbeddedTerminal when no store value
-    /// is threaded through). Mirrors DashboardStore's persisted defaults.
+    /// Sensible standalone default for callers with no store value threaded
+    /// through. Mirrors DashboardStore's persisted defaults.
     static func current() -> TerminalAppearance {
         let d = UserDefaults.standard
         let theme = AppTheme(rawValue: d.string(forKey: "devdash.theme") ?? "") ?? .dark
