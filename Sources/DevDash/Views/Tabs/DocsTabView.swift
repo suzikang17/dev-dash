@@ -20,6 +20,7 @@ struct DocsTabView: View {
     @State private var loaded = false
     @State private var reloadToken = 0
     @State private var watcher: NotesFileWatcher?
+    @State private var filePreview: FilePreviewTarget?
 
     var body: some View {
         if let project = store.project(for: panelSelection ?? store.selection) {
@@ -41,6 +42,22 @@ struct DocsTabView: View {
         }
         .task(id: project.path) { await reload(project.path, resetSelection: true) }
         .task(id: "\(selectedPath ?? "")#\(reloadToken)") { await render(project.path) }
+        .sheet(item: $filePreview) { target in
+            let root = LoreDocsScanner.docsRoot(projectPath: project.path)
+            let url = URL(fileURLWithPath: "\(root)/\(target.rel)")
+            VStack(spacing: 0) {
+                HStack {
+                    Text(target.rel).font(DSFont.mono(.caption)).lineLimit(1)
+                    Spacer()
+                    Button { NSWorkspace.shared.open(url) } label: { Label("Open in default app", systemImage: "arrow.up.forward.app") }
+                    Button("Close") { filePreview = nil }.keyboardShortcut(.cancelAction)
+                }
+                .padding(10)
+                Divider()
+                FileWebView(fileURL: url)
+            }
+            .frame(minWidth: 900, minHeight: 640)
+        }
     }
 
     // MARK: Loading (all file I/O off the main actor — perf guardrail)
@@ -235,13 +252,15 @@ struct DocsTabView: View {
                 Divider()
             }
             if let html = docHTML {
-                DocWebView(html: html) { target in
+                DocWebView(html: html, onOpenDoc: { target in
                     selectedPath = target
                     // Expand the target's group so the selection is visible.
                     if let dir = target.components(separatedBy: "/").first {
                         collapsedDirs.remove(dir)
                     }
-                }
+                }, onOpenFile: { rel in
+                    filePreview = FilePreviewTarget(rel: rel)
+                })
             } else {
                 Text(loaded ? "Select a doc to read" : "Loading…")
                     .foregroundColor(.secondary)
@@ -366,7 +385,7 @@ enum LoreDocHTML {
         let dir = relPath.components(separatedBy: "/").first ?? ""
         let accent = DocTypeStyle.hex(dir)
         let title = front["title"].map(esc) ?? esc((relPath as NSString).lastPathComponent)
-        let bodyHTML = Markdown.bodyHTML(linkify(body, graph: graph))
+        let bodyHTML = Markdown.bodyHTML(linkify(body, relPath: relPath, graph: graph))
 
         var kicker = "<span class=\"type-pill\">\(esc(LoreDocsScanner.label(for: dir)))</span>"
         if let id = doc?.numericID { kicker += "<span class=\"doc-id\">#\(esc(id))</span>" }
@@ -424,7 +443,48 @@ enum LoreDocHTML {
     /// so `Markdown.bodyHTML` renders them as anchors the webview can intercept.
     /// Fence- and inline-code-aware, mirroring `LoreLinkIndex.wikilinks` — a
     /// literal `[[x]]` in code stays literal. Also prettifies task checkboxes.
-    private static func linkify(_ body: String, graph: LoreLinkIndex.Graph) -> String {
+    /// Resolve a relative link target against the current doc's directory,
+    /// normalizing `..` segments. Returns a docsRoot-relative path.
+    private static func resolveRel(_ target: String, from relPath: String) -> String {
+        var parts = relPath.components(separatedBy: "/").dropLast().map { String($0) }
+        for seg in target.components(separatedBy: "/") {
+            if seg == ".." { if !parts.isEmpty { parts.removeLast() } }
+            else if seg != "." && !seg.isEmpty { parts.append(seg) }
+        }
+        return parts.joined(separator: "/")
+    }
+
+    private static let mdLinkRE = try! NSRegularExpression(pattern: #"\]\(([^)\s]+)\)"#)
+
+    /// Rewrite relative markdown links so they stay inside the app: `.md`
+    /// targets route to the docs pane (lore://open), everything else to the
+    /// in-app file viewer (lore://file). Absolute URLs are left alone.
+    private static func rewriteRelativeLinks(_ s: String, relPath: String) -> String {
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        for m in mdLinkRE.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            let target = ns.substring(with: m.range(at: 1))
+            if target.hasPrefix("lore://") || target.contains("://") || target.hasPrefix("#")
+                || target.hasPrefix("mailto:") || target.hasPrefix("/") {
+                result += ns.substring(with: m.range)
+            } else {
+                let clean = target.components(separatedBy: "#").first ?? target
+                let resolved = resolveRel(clean, from: relPath)
+                if clean.lowercased().hasSuffix(".md") {
+                    result += "](\(loreHref(resolved)))"
+                } else {
+                    result += "](\(fileHref(resolved)))"
+                }
+            }
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
+    }
+
+    private static func linkify(_ body: String, relPath: String, graph: LoreLinkIndex.Graph) -> String {
         var out: [String] = []
         var inFence = false
         for line in body.components(separatedBy: "\n") {
@@ -437,6 +497,7 @@ enum LoreDocHTML {
             let rebuilt = segments.enumerated().map { i, seg -> String in
                 guard i % 2 == 0 else { return seg }
                 var s = replaceWiki(seg, graph: graph)
+                s = rewriteRelativeLinks(s, relPath: relPath)
                 if let r = s.range(of: "- [ ] ") { s = s.replacingCharacters(in: r, with: "- ☐ ") }
                 if let r = s.range(of: "- [x] ") { s = s.replacingCharacters(in: r, with: "- ☑ ") }
                 return s
@@ -475,6 +536,12 @@ enum LoreDocHTML {
         var cs = CharacterSet.alphanumerics
         cs.insert(charactersIn: "-._/")
         return "lore://open/" + (relPath.addingPercentEncoding(withAllowedCharacters: cs) ?? relPath)
+    }
+
+    private static func fileHref(_ relPath: String) -> String {
+        var cs = CharacterSet.alphanumerics
+        cs.insert(charactersIn: "-._/")
+        return "lore://file/" + (relPath.addingPercentEncoding(withAllowedCharacters: cs) ?? relPath)
     }
 
     private static func esc(_ s: String) -> String {
@@ -609,6 +676,7 @@ enum LoreDocHTML {
 private struct DocWebView: NSViewRepresentable {
     let html: String
     let onOpenDoc: (String) -> Void
+    var onOpenFile: ((String) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -620,6 +688,7 @@ private struct DocWebView: NSViewRepresentable {
 
     func updateNSView(_ wv: WKWebView, context: Context) {
         context.coordinator.onOpenDoc = onOpenDoc
+        context.coordinator.onOpenFile = onOpenFile
         // Only reload when the page actually changed — updateNSView also fires
         // for unrelated state changes, and reloading resets scroll position.
         let hash = html.hashValue
@@ -631,6 +700,7 @@ private struct DocWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var onOpenDoc: ((String) -> Void)?
+        var onOpenFile: ((String) -> Void)?
         var lastHTMLHash: Int = 0
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
@@ -641,11 +711,15 @@ private struct DocWebView: NSViewRepresentable {
                 return
             }
             if url.scheme == "lore" {
-                let prefix = "lore://open/"
                 let abs = url.absoluteString
-                if abs.hasPrefix(prefix), let rel = String(abs.dropFirst(prefix.count)).removingPercentEncoding {
+                if abs.hasPrefix("lore://open/"),
+                   let rel = String(abs.dropFirst("lore://open/".count)).removingPercentEncoding {
                     let open = onOpenDoc
                     DispatchQueue.main.async { open?(rel) }
+                } else if abs.hasPrefix("lore://file/"),
+                          let rel = String(abs.dropFirst("lore://file/".count)).removingPercentEncoding {
+                    let openFile = onOpenFile
+                    DispatchQueue.main.async { openFile?(rel) }
                 }
             } else {
                 NSWorkspace.shared.open(url)
@@ -653,4 +727,11 @@ private struct DocWebView: NSViewRepresentable {
             decisionHandler(.cancel)
         }
     }
+}
+
+
+/// A non-markdown file linked from a doc (html, image, pdf) — shown in-app.
+struct FilePreviewTarget: Identifiable {
+    let rel: String
+    var id: String { rel }
 }
