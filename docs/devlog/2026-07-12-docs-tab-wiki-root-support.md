@@ -17,6 +17,8 @@ day: 25
 
 - **Wikis sidebar tab**: new `SidebarTab.wikis` segment (books icon) between Projects and Infra listing wiki repos (`framework == "Wiki"`) via a dedicated `SidebarWikiRow` — purple book icon, derived display name ("dev wiki" / "life wiki" — both folders are literally named `wiki`), abbreviated path, live-session dot. Wikis are excluded from the Projects tab's ungrouped list so they live in exactly one place. Seeded `devdash.lastTabPerProject` so both wikis open on the Docs tab first-time.
 
+- **Afternoon release — the wiki became an app**: pipe tables in both markdown converters (Markdown.bodyHTML is the one the Docs tab uses — patching MarkdownWebView first was a miss); relative .md links route in-pane, other files open an in-app FileWebView sheet; "Start here" group for root-level docs; section dirs (`self/`) via one-level scanner recursion; **Edit with Claude** (sparkle button: webview-selection capture → prompt sheet → interactive session in the terminal drawer via the task-launch pattern); **collection view** (anchor doc = front cover + continuous scroll of its nested collection, IntersectionObserver scrollspy drives sidebar tracking + auto-scroll, recent/A-Z toggle); **in-place editing** (pencil toggle; pure-bullet docs → OutlinerView, mixed docs → raw editor — DayOutline.parse is lossy on mixed content, so the outliner is gated by an outline-safety check).
+
 ## Decisions
 
 - Wiki detection keys on `.lore/config.yaml` presence, not profile parsing — cheap existence check on the scan path, and a project-profile repo is unaffected because its `.lore` lives under `docs/`.
