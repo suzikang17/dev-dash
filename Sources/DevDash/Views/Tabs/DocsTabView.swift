@@ -763,7 +763,16 @@ enum LoreDocHTML {
         var sections = ""
         for (idx, item) in items.enumerated() {
             let (d, front, body) = item
-            let bodyHTML = Markdown.bodyHTML(linkify(body, relPath: d.path, graph: graph))
+            // Drop a leading `# Title` — the section header renders the title.
+            var trimmedBody = body
+            let lines = trimmedBody.components(separatedBy: "\n")
+            if let first = lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+               first.hasPrefix("# ") {
+                if let idx0 = lines.firstIndex(of: first) {
+                    trimmedBody = lines[(idx0 + 1)...].joined(separator: "\n")
+                }
+            }
+            let bodyHTML = Markdown.bodyHTML(linkify(trimmedBody, relPath: d.path, graph: graph))
             var chips = ""
             if let status = front["status"] { chips += "<span class=\"chip\">\(esc(status))</span>" }
             if let author = front["author"], !author.isEmpty { chips += "<span class=\"chip mut\">\(esc(author))</span>" }
@@ -800,7 +809,14 @@ enum LoreDocHTML {
         document.querySelectorAll(".coll-item").forEach(s => obs.observe(s));
         </script>
         """
-        return base.replacingOccurrences(of: "</body>", with: collCSS + "<div class=\"doc-body\">" + sections + "</div>" + spyJS + "</body>")
+        var out = base
+        if out.contains("</main>") {
+            out = out.replacingOccurrences(of: "</main>", with: sections + "</main>")
+            out = out.replacingOccurrences(of: "</body>", with: collCSS + spyJS + "</body>")
+        } else {
+            out = out.replacingOccurrences(of: "</body>", with: collCSS + "<div class=\"doc-body\">" + sections + "</div>" + spyJS + "</body>")
+        }
+        return out
     }
 
     /// `lore://open/<encoded>` — parens/spaces must be encoded or the markdown
