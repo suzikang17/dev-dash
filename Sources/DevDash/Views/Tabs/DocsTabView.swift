@@ -702,6 +702,21 @@ enum LoreDocHTML {
             border-radius: 0 8px 8px 0;
             color: color-mix(in srgb, currentColor 82%, transparent);
         }
+        .doc-body table {
+            border-collapse: collapse; width: 100%; margin: 0.7em 0 1.1em;
+            font-size: 13px;
+        }
+        .doc-body th, .doc-body td {
+            text-align: left; padding: 6px 12px;
+            border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+        }
+        .doc-body th {
+            font-weight: 600; font-size: 11.5px; letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: color-mix(in srgb, currentColor 60%, transparent);
+            border-bottom: 2px solid color-mix(in srgb, \(accent) 45%, transparent);
+        }
+        .doc-body tr:hover td { background: color-mix(in srgb, currentColor 3%, transparent); }
         .doc-body ul, .doc-body ol { padding-left: 1.4em; margin: 0.45em 0 1em; }
         .doc-body li { margin: 0.22em 0; }
         .doc-body hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); margin: 2.2em 0; }

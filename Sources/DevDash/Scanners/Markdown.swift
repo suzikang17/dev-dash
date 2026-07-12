@@ -77,6 +77,32 @@ enum Markdown {
                 continue
             }
 
+            // Pipe table (header row + |---| separator row)
+            if trimmed.hasPrefix("|"), i + 1 < lines.count {
+                let sep = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                if sep.hasPrefix("|"), sep.contains("-"), sep.allSatisfy({ " -:|".contains($0) }) {
+                    flushList()
+                    func cells(_ s: String) -> [String] {
+                        var c = s.trimmingCharacters(in: .whitespaces)
+                        if c.hasPrefix("|") { c.removeFirst() }
+                        if c.hasSuffix("|") { c.removeLast() }
+                        return c.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                    }
+                    var html = "<table><thead><tr>"
+                    html += cells(trimmed).map { "<th>\(processInline($0))</th>" }.joined()
+                    html += "</tr></thead><tbody>"
+                    i += 2
+                    while i < lines.count {
+                        let rowT = lines[i].trimmingCharacters(in: .whitespaces)
+                        guard rowT.hasPrefix("|") else { break }
+                        html += "<tr>" + cells(rowT).map { "<td>\(processInline($0))</td>" }.joined() + "</tr>"
+                        i += 1
+                    }
+                    out.append(html + "</tbody></table>")
+                    continue
+                }
+            }
+
             // Blockquote
             if trimmed.hasPrefix("> ") {
                 flushList()
