@@ -48,7 +48,7 @@ enum LoreDocsScanner {
     /// Sidebar ordering — narrative types first, plumbing last; unknown dirs
     /// after the known ones, alphabetically.
     private static let order: [String] = [
-        "devlog", "decisions", "tickets", "tasks", "policies",
+        ".", "devlog", "decisions", "tickets", "tasks", "policies",
         "ideas", "notes", "artifacts", "kpis", "overview",
     ]
 
@@ -76,6 +76,14 @@ enum LoreDocsScanner {
         let docsPath = docsRoot(projectPath: projectPath)
         guard let entries = try? fm.contentsOfDirectory(atPath: docsPath) else { return [] }
         var groups: [LoreDocGroup] = []
+        // Root-level docs (README.md etc.) form a "Start here" group so wiki
+        // front doors are readable (and their links clickable) in-app.
+        var rootDocs = collectDocs(dirPath: docsPath, dir: ".")
+            .filter { !($0.path as NSString).lastPathComponent.hasPrefix("CLAUDE") }
+        if !rootDocs.isEmpty {
+            rootDocs.sort { $0.path < $1.path }
+            groups.append(LoreDocGroup(dir: ".", label: "Start here", docs: rootDocs))
+        }
         for dir in entries {
             guard !dir.hasPrefix(".") else { continue }
             var isDir: ObjCBool = false
