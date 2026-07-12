@@ -25,6 +25,8 @@ struct DocsTabView: View {
     @State private var claudeSelection: String = ""
     @State private var claudeInstruction: String = ""
     @State private var docWebViewRef: WKWebView?
+    @State private var visibleCollectionDoc: String?
+    @AppStorage("devdash.collectionSort") private var collectionSort = "recent"  // "recent" | "alpha"
 
     var body: some View {
         if let project = store.project(for: panelSelection ?? store.selection) {
@@ -45,7 +47,7 @@ struct DocsTabView: View {
             reader(project: project)
         }
         .task(id: project.path) { await reload(project.path, resetSelection: true) }
-        .task(id: "\(selectedPath ?? "")#\(reloadToken)") { await render(project.path) }
+        .task(id: "\(selectedPath ?? "")#\(reloadToken)#\(collectionSort)") { await render(project.path) }
         .sheet(isPresented: $claudeSheet) {
             VStack(alignment: .leading, spacing: DSSpace.md) {
                 Text("Edit with Claude")
@@ -144,6 +146,26 @@ struct DocsTabView: View {
         guard let rel = selectedPath, let graph else { docHTML = nil; return }
         let doc = groups.flatMap(\.docs).first { $0.path == rel }
         let backlinks = graph.backlinks[rel] ?? []
+        // Collection view: an anchor doc (e.g. the reading interest) renders as
+        // a front cover followed by every item in its nested collection, in one
+        // continuously scrollable page with scrollspy anchors.
+        if let cover = doc, let sub = Self.anchoredSubgroup(for: cover, in: groups) {
+            let items = Self.sortedCollection(sub.docs, by: collectionSort)
+            let sort = collectionSort
+            let html = await Task.detached(priority: .userInitiated) { () -> String? in
+                guard let coverLoaded = LoreDocsScanner.load(projectPath: projectPath, relPath: rel) else { return nil }
+                let loadedItems: [(LoreDoc, [String: String], String)] = items.compactMap { d in
+                    LoreDocsScanner.load(projectPath: projectPath, relPath: d.path).map { (d, $0.front, $0.body) }
+                }
+                return LoreDocHTML.collectionPage(coverRel: rel, coverDoc: cover,
+                                                  coverFront: coverLoaded.front, coverBody: coverLoaded.body,
+                                                  items: loadedItems, graph: graph,
+                                                  backlinks: backlinks, sortLabel: sort)
+            }.value
+            guard selectedPath == rel, collectionSort == sort else { return }
+            docHTML = html
+            return
+        }
         let html = await Task.detached(priority: .userInitiated) { () -> String? in
             guard let loaded = LoreDocsScanner.load(projectPath: projectPath, relPath: rel) else { return nil }
             return LoreDocHTML.page(relPath: rel, doc: doc, front: loaded.front,
@@ -151,6 +173,12 @@ struct DocsTabView: View {
         }.value
         guard selectedPath == rel else { return }   // selection moved on mid-render
         docHTML = html
+    }
+
+    static func sortedCollection(_ docs: [LoreDoc], by sort: String) -> [LoreDoc] {
+        sort == "alpha"
+            ? docs.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            : docs   // groups already sort newest-first
     }
 
     // MARK: Sidebar
@@ -175,6 +203,7 @@ struct DocsTabView: View {
             if loaded && groups.isEmpty {
                 emptySidebarHint
             } else {
+                ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Self.topLevelGroups(filteredGroups)) { group in
@@ -188,8 +217,10 @@ struct DocsTabView: View {
                                     if let sub = Self.anchoredSubgroup(for: doc, in: filteredGroups) {
                                         subgroupHeader(sub)
                                         if !search.isEmpty || !collapsedDirs.contains(sub.dir) {
-                                            ForEach(sub.docs) { d in
-                                                docRow(d).padding(.leading, 26)
+                                            let ordered = Self.sortedCollection(sub.docs, by: collectionSort)
+                                            ForEach(Array(ordered.enumerated()), id: \.element.id) { idx, d in
+                                                collectionRow(d, index: idx, anchorDoc: doc)
+                                                    .id(d.path)
                                             }
                                         }
                                     }
@@ -198,6 +229,12 @@ struct DocsTabView: View {
                         }
                     }
                     .padding(DSSpace.sm)
+                }
+                .onChange(of: visibleCollectionDoc) { _, newValue in
+                    if let path = newValue {
+                        withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(path, anchor: .center) }
+                    }
+                }
                 }
             }
         }
@@ -246,6 +283,27 @@ struct DocsTabView: View {
         return groups.first { $0.dir == dir }
     }
 
+    /// A collection item row: when its cover page is open, clicking scrolls the
+    /// combined view to the item (no reload); otherwise it opens the item's own
+    /// page. The scrollspy-tracked row gets an accent tint.
+    private func collectionRow(_ d: LoreDoc, index: Int, anchorDoc: LoreDoc) -> some View {
+        let tracked = visibleCollectionDoc == d.path && selectedPath == anchorDoc.path
+        return Button {
+            if selectedPath == anchorDoc.path, let wv = docWebViewRef {
+                wv.evaluateJavaScript(
+                    "document.querySelector('section[data-path=\"" + d.path + "\"]')?.scrollIntoView({behavior:'smooth',block:'start'})",
+                    completionHandler: nil)
+            } else {
+                selectedPath = d.path
+            }
+        } label: {
+            docRowLabel(d)
+                .padding(.leading, 26)
+                .background(tracked ? RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.12)) : nil)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func subgroupHeader(_ group: LoreDocGroup) -> some View {
         Button {
             if collapsedDirs.contains(group.dir) { collapsedDirs.remove(group.dir) }
@@ -266,6 +324,20 @@ struct DocsTabView: View {
                     .font(DSFont.monoDigits(.caption2))
                     .foregroundColor(.secondary)
                 Spacer()
+                HStack(spacing: 2) {
+                    Button { collectionSort = "recent" } label: {
+                        Image(systemName: "clock")
+                            .font(.system(size: 9))
+                            .foregroundColor(collectionSort == "recent" ? .accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain).help("Sort by recent")
+                    Button { collectionSort = "alpha" } label: {
+                        Image(systemName: "textformat.abc")
+                            .font(.system(size: 9))
+                            .foregroundColor(collectionSort == "alpha" ? .accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain).help("Sort alphabetically")
+                }
             }
             .padding(.leading, 14)
             .padding(.vertical, 3)
@@ -302,6 +374,29 @@ struct DocsTabView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, nested ? 14 : 0)
+    }
+
+    private func docRowLabel(_ doc: LoreDoc) -> some View {
+        let selected = doc.path == selectedPath
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(doc.title)
+                .font(selected ? DSFont.bodyEmphasized : DSFont.body)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            HStack(spacing: DSSpace.xs) {
+                if let date = doc.date { Text(DocTypeStyle.prettyDate(date)) }
+                if let status = doc.status {
+                    Text(status)
+                        .foregroundStyle(DocTypeStyle.statusColor(status))
+                }
+            }
+            .font(DSFont.micro)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, DSSpace.sm)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private func docRow(_ doc: LoreDoc) -> some View {
@@ -370,7 +465,8 @@ struct DocsTabView: View {
                     }
                 }, onOpenFile: { rel in
                     filePreview = FilePreviewTarget(rel: rel)
-                }, onWebView: { docWebViewRef = $0 })
+                }, onWebView: { docWebViewRef = $0 },
+                   onVisibleSection: { visibleCollectionDoc = $0 })
             } else {
                 Text(loaded ? "Select a doc to read" : "Loading…")
                     .foregroundColor(.secondary)
@@ -654,6 +750,59 @@ enum LoreDocHTML {
         return result
     }
 
+    /// A front-cover doc followed by its collection, one scrollable page.
+    /// Each item gets a stable anchor (`sec-<n>`) and an IntersectionObserver
+    /// posts the topmost visible item to Swift (`scrollspy` handler) so the
+    /// sidebar can track the reader's position.
+    static func collectionPage(coverRel: String, coverDoc: LoreDoc?, coverFront: [String: String],
+                               coverBody: String, items: [(LoreDoc, [String: String], String)],
+                               graph: LoreLinkIndex.Graph, backlinks: [LoreLinkIndex.Backlink],
+                               sortLabel: String) -> String {
+        let base = page(relPath: coverRel, doc: coverDoc, front: coverFront,
+                        body: coverBody, graph: graph, backlinks: [])
+        var sections = ""
+        for (idx, item) in items.enumerated() {
+            let (d, front, body) = item
+            let bodyHTML = Markdown.bodyHTML(linkify(body, relPath: d.path, graph: graph))
+            var chips = ""
+            if let status = front["status"] { chips += "<span class=\"chip\">\(esc(status))</span>" }
+            if let author = front["author"], !author.isEmpty { chips += "<span class=\"chip mut\">\(esc(author))</span>" }
+            if let fin = front["finished"], !fin.isEmpty { chips += "<span class=\"chip mut\">finished \(esc(fin))</span>" }
+            sections += """
+            <section class="coll-item" id="sec-\(idx)" data-path="\(esc(d.path))">
+              <h2 class="coll-title">\(esc(d.title))</h2>
+              <div class="coll-chips">\(chips)</div>
+              \(bodyHTML)
+            </section>
+            """
+        }
+        let collCSS = """
+        <style>
+        .coll-item { border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+                     padding: 1.6em 0 0.8em; margin-top: 1.6em; }
+        .coll-title { margin: 0 0 0.2em; }
+        .coll-chips { margin-bottom: 0.7em; }
+        .coll-chips .chip { display:inline-block; font-size:10.5px; letter-spacing:.6px;
+            text-transform:uppercase; padding:1px 8px; border-radius:9px; margin-right:6px;
+            background: color-mix(in srgb, currentColor 8%, transparent); }
+        .coll-chips .chip.mut { text-transform:none; letter-spacing:0; }
+        </style>
+        """
+        let spyJS = """
+        <script>
+        const obs = new IntersectionObserver((entries) => {
+          const vis = entries.filter(e => e.isIntersecting)
+            .sort((a,b) => a.boundingClientRect.top - b.boundingClientRect.top);
+          if (vis.length && window.webkit?.messageHandlers?.scrollspy) {
+            window.webkit.messageHandlers.scrollspy.postMessage(vis[0].target.dataset.path);
+          }
+        }, { rootMargin: "0px 0px -70% 0px" });
+        document.querySelectorAll(".coll-item").forEach(s => obs.observe(s));
+        </script>
+        """
+        return base.replacingOccurrences(of: "</body>", with: collCSS + "<div class=\"doc-body\">" + sections + "</div>" + spyJS + "</body>")
+    }
+
     /// `lore://open/<encoded>` — parens/spaces must be encoded or the markdown
     /// link regex (`[^\)]+`) truncates the URL.
     private static func loreHref(_ relPath: String) -> String {
@@ -817,11 +966,14 @@ private struct DocWebView: NSViewRepresentable {
     let onOpenDoc: (String) -> Void
     var onOpenFile: ((String) -> Void)? = nil
     var onWebView: ((WKWebView) -> Void)? = nil
+    var onVisibleSection: ((String) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
-        let wv = WKWebView()
+        let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "scrollspy")
+        let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = context.coordinator
         DispatchQueue.main.async { onWebView?(wv) }
         return wv
@@ -830,6 +982,7 @@ private struct DocWebView: NSViewRepresentable {
     func updateNSView(_ wv: WKWebView, context: Context) {
         context.coordinator.onOpenDoc = onOpenDoc
         context.coordinator.onOpenFile = onOpenFile
+        context.coordinator.onVisibleSection = onVisibleSection
         // Only reload when the page actually changed — updateNSView also fires
         // for unrelated state changes, and reloading resets scroll position.
         let hash = html.hashValue
@@ -839,9 +992,17 @@ private struct DocWebView: NSViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "scrollspy", let path = message.body as? String else { return }
+            let cb = onVisibleSection
+            DispatchQueue.main.async { cb?(path) }
+        }
+
         var onOpenDoc: ((String) -> Void)?
         var onOpenFile: ((String) -> Void)?
+        var onVisibleSection: ((String) -> Void)?
         var lastHTMLHash: Int = 0
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
