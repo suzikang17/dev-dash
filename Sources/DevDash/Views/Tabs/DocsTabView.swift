@@ -26,7 +26,8 @@ struct DocsTabView: View {
     @State private var claudeInstruction: String = ""
     @State private var docWebViewRef: WKWebView?
     @State private var visibleCollectionDoc: String?
-    @AppStorage("devdash.collectionSort") private var collectionSort = "recent"  // "recent" | "alpha"
+    @AppStorage("devdash.collectionSort") private var collectionSort = "recent"
+    @State private var editMode = false  // "recent" | "alpha"
 
     var body: some View {
         if let project = store.project(for: panelSelection ?? store.selection) {
@@ -456,7 +457,13 @@ struct DocsTabView: View {
                 readerToolbar(project: project, rel: rel)
                 Divider()
             }
-            if let html = docHTML {
+            if editMode, let rel = selectedPath {
+                DocEditPane(
+                    path: "\(LoreDocsScanner.docsRoot(projectPath: project.path))/\(rel)",
+                    projectPath: project.path,
+                    onOpenDoc: { target in selectedPath = target })
+                    .id(rel)
+            } else if let html = docHTML {
                 DocWebView(html: html, onOpenDoc: { target in
                     selectedPath = target
                     // Expand the target's group so the selection is visible.
@@ -494,6 +501,12 @@ struct DocsTabView: View {
             } label: { Image(systemName: "square.and.pencil") }
                 .buttonStyle(.borderless)
                 .help("Open in default editor")
+            Button {
+                editMode.toggle()
+                if !editMode { reloadToken += 1 }   // re-render the reader with fresh content
+            } label: { Image(systemName: editMode ? "eye" : "pencil.line") }
+                .buttonStyle(.borderless)
+                .help(editMode ? "Done editing (back to reading view)" : "Edit in place (bullets edit as an outline)")
             Button {
                 claudeSelection = ""
                 claudeInstruction = ""
@@ -1052,4 +1065,108 @@ private struct DocWebView: NSViewRepresentable {
 struct FilePreviewTarget: Identifiable {
     let rel: String
     var id: String { rel }
+}
+
+// MARK: - In-place doc editing
+
+/// Live editing for a wiki/lore doc. Pure-bullet bodies open as the Roam-style
+/// outliner (OutlinerView); anything with headings/paragraphs/tables opens as a
+/// raw markdown editor — DayOutline.parse is lossy on mixed content, so the
+/// outliner is only offered when a parse→serialize roundtrip is safe.
+/// Debounced autosave (0.6s) + flush on close/switch; frontmatter preserved.
+struct DocEditPane: View {
+    let path: String
+    let projectPath: String
+    var onOpenDoc: (String) -> Void = { _ in }
+
+    @State private var frontmatter = ""
+    @State private var nodes: [DayNode] = []
+    @State private var rawText = ""
+    @State private var useOutline = false
+    @State private var loadedBody: String?
+    @State private var loadedPath: String?
+    @State private var saveWork: DispatchWorkItem?
+
+    var body: some View {
+        Group {
+            if useOutline {
+                ScrollView {
+                    OutlinerView(nodes: $nodes, projectPath: projectPath,
+                                 onOpenDoc: onOpenDoc, autofocus: true)
+                        .padding(DSSpace.lg)
+                }
+                .onChange(of: nodes) { _, _ in scheduleSave() }
+            } else {
+                TextEditor(text: $rawText)
+                    .font(DSFont.mono(.body))
+                    .scrollContentBackground(.hidden)
+                    .padding(DSSpace.md)
+                    .onChange(of: rawText) { _, _ in scheduleSave() }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { load() }
+        .onDisappear { flushNow() }
+    }
+
+    private static func splitFrontmatter(_ raw: String) -> (fm: String, body: String) {
+        guard raw.hasPrefix("---\n"),
+              let end = raw.range(of: "\n---", range: raw.index(raw.startIndex, offsetBy: 4)..<raw.endIndex)
+        else { return ("", raw) }
+        let fm = String(raw[..<end.upperBound])
+        var body = String(raw[end.upperBound...])
+        if body.hasPrefix("\n") { body.removeFirst() }
+        return (fm, body)
+    }
+
+    /// Outline-safe = every non-empty line is a `- ` list item (any indent).
+    private static func isPureOutline(_ body: String) -> Bool {
+        let lines = body.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !lines.isEmpty else { return true }
+        return lines.allSatisfy { $0.drop(while: { $0 == " " }).hasPrefix("- ") }
+    }
+
+    private func load() {
+        let raw = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        let parts = Self.splitFrontmatter(raw)
+        frontmatter = parts.fm
+        let body = parts.body.trimmingCharacters(in: .newlines)
+        useOutline = Self.isPureOutline(body)
+        if useOutline {
+            var parsed = DayOutline.parse(body)
+            if parsed.isEmpty { parsed = [DayNode(text: "")] }
+            nodes = parsed
+            loadedBody = DayOutline.serialize(parsed)
+        } else {
+            rawText = body
+            loadedBody = body
+        }
+        loadedPath = path
+    }
+
+    private var currentBody: String { useOutline ? DayOutline.serialize(nodes) : rawText }
+
+    private func scheduleSave() {
+        guard loadedPath == path else { return }
+        let body = currentBody
+        guard body != loadedBody else { return }
+        loadedBody = body
+        saveWork?.cancel()
+        let fm = frontmatter, target = path
+        let item = DispatchWorkItem {
+            let text = fm.isEmpty ? body : fm + "\n\n" + body + "\n"
+            try? text.write(toFile: target, atomically: true, encoding: .utf8)
+        }
+        saveWork = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: item)
+    }
+
+    private func flushNow() {
+        guard let work = saveWork, let target = loadedPath else { return }
+        work.cancel()
+        saveWork = nil
+        let fm = frontmatter, body = currentBody
+        let text = fm.isEmpty ? body : fm + "\n\n" + body + "\n"
+        try? text.write(toFile: target, atomically: true, encoding: .utf8)
+    }
 }
