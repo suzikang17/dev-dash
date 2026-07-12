@@ -128,11 +128,19 @@ struct DocsTabView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(filteredGroups) { group in
-                            sectionHeader(group)
-                            // Searching auto-expands so hits are never hidden.
-                            if !search.isEmpty || !collapsedDirs.contains(group.dir) {
-                                ForEach(group.docs) { doc in docRow(doc) }
+                        ForEach(Self.nestedGroups(filteredGroups), id: \.group.id) { entry in
+                            // A nested group collapses with its parent.
+                            let parentCollapsed = entry.nested
+                                && Self.nestUnder[entry.group.dir].map { collapsedDirs.contains($0) } == true
+                                && search.isEmpty
+                            if !parentCollapsed {
+                                sectionHeader(entry.group, nested: entry.nested)
+                                // Searching auto-expands so hits are never hidden.
+                                if !search.isEmpty || !collapsedDirs.contains(entry.group.dir) {
+                                    ForEach(entry.group.docs) { doc in
+                                        docRow(doc).padding(.leading, entry.nested ? 14 : 0)
+                                    }
+                                }
                             }
                         }
                     }
@@ -165,7 +173,27 @@ struct DocsTabView: View {
         .background(RoundedRectangle(cornerRadius: DSRadius.small).fill(Color.primary.opacity(0.05)))
     }
 
-    private func sectionHeader(_ group: LoreDocGroup) -> some View {
+    /// Type dirs rendered as children of another group in the sidebar
+    /// (storage stays flat — this is presentation only).
+    static let nestUnder: [String: String] = ["books": "interests"]
+
+    struct GroupEntry { let group: LoreDocGroup; let nested: Bool }
+
+    static func nestedGroups(_ groups: [LoreDocGroup]) -> [GroupEntry] {
+        let parentDirs = Set(groups.map(\.dir))
+        let children = Dictionary(grouping: groups.filter { g in
+            nestUnder[g.dir].map { parentDirs.contains($0) } == true
+        }, by: { nestUnder[$0.dir]! })
+        var out: [GroupEntry] = []
+        for g in groups {
+            if let parent = nestUnder[g.dir], parentDirs.contains(parent) { continue }
+            out.append(GroupEntry(group: g, nested: false))
+            for c in children[g.dir] ?? [] { out.append(GroupEntry(group: c, nested: true)) }
+        }
+        return out
+    }
+
+    private func sectionHeader(_ group: LoreDocGroup, nested: Bool = false) -> some View {
         Button {
             if collapsedDirs.contains(group.dir) { collapsedDirs.remove(group.dir) }
             else { collapsedDirs.insert(group.dir) }
@@ -192,6 +220,7 @@ struct DocsTabView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.leading, nested ? 14 : 0)
     }
 
     private func docRow(_ doc: LoreDoc) -> some View {

@@ -627,10 +627,12 @@ private struct SidebarWikiRow: View {
     /// "~/dev/wiki" → "dev wiki"; "~/Documents/wiki" → "life wiki" reads nicer
     /// than "Documents wiki", but stay literal: parent dir + name, deduped.
     private var displayName: String {
+        // A folder with a distinctive name speaks for itself (work-wiki, life-wiki).
+        guard project.name == "wiki" else { return project.name }
         let comps = project.path.split(separator: "/").map(String.init)
         guard comps.count >= 2 else { return project.name }
         let parent = comps[comps.count - 2]
-        return parent == "dev" ? "dev wiki" : parent == "Documents" ? "life wiki" : "\(parent)/\(project.name)"
+        return parent == "dev" ? "dev wiki" : parent == "Documents" ? "life wiki" : "\(parent)/wiki"
     }
 
     private var abbrevPath: String {
