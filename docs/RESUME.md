@@ -1,16 +1,16 @@
-# Resume — 2026-07-12 (wiki-in-dev-dash release)
+# Resume — 2026-07-12 (evening: markdown fix + wikis-count closed)
 
-**State:** shipped & pushed (15 commits): Wikis sidebar tab, wiki-root scanning,
-tables, in-app links + file viewer, Start here group, self/ sections,
-Edit-with-Claude, collection view (scrollspy + sort), in-place editing
-(outliner for bullet docs, raw editor for mixed). Build clean, taskstore
-selftest ALL PASS.
+**State:** committed & pushed (59fd28b). Cross-line bold in Markdown.bodyHTML
+fixed (paragraph-scoped inline processing, \n→<br> after); new
+`--selftest-markdown` suite (12 checks) ALL PASS; verified live on the
+life-wiki README. Wikis count-3/rows-2 sighting CLOSED as a one-frame List
+diffing artifact — count/rows provably derive from the same array.
 
 **Next steps:**
-1. Fix inline `**bold**` mid-sentence miss in Markdown.bodyHTML (seen in wiki README).
-2. Wikis tab showed count 3 / 2 rows once (suspected scan race) — reproduce or close.
-3. Consider generalizing nestAnchor + collections beyond books (recipes under Cooking, songs under Music).
+1. Decide: generalize nestAnchor + collections beyond books (recipes under
+   Cooking, songs under Music)? Suki's call — scope, not a bug.
 
-**Gotchas:** Docs tab renders via Scanners/Markdown.swift, NOT MarkdownWebView.
-DayOutline.parse drops non-bullet lines — never feed it mixed docs (DocEditPane
-gates on isPureOutline). Wiki row display names special-case folders named "wiki".
+**Gotchas:** extend MarkdownSelfTest before touching processInline. Italic is
+deliberately per-line ([^*\n]) so stray asterisks can't pair across lines.
+Never `screencapture -R` for app evidence — window-scoped `-l<id>` only
+(a -R capture grabbed the user's browser once this session).
