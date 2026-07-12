@@ -128,6 +128,34 @@ private func convertBody(_ md: String) -> String {
             closeLists(); out += "<hr>"; i += 1; continue
         }
 
+        // --- Pipe table (header row + |---| separator row) ---
+        if trimmed.hasPrefix("|"), i + 1 < lines.count {
+            let sep = lines[i + 1].trimmingCharacters(in: .whitespaces)
+            let sepOK = sep.hasPrefix("|") && sep.contains("-")
+                && sep.allSatisfy { " -:|".contains($0) }
+            if sepOK {
+                closeLists()
+                func cells(_ s: String) -> [String] {
+                    var t = s.trimmingCharacters(in: .whitespaces)
+                    if t.hasPrefix("|") { t.removeFirst() }
+                    if t.hasSuffix("|") { t.removeLast() }
+                    return t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                }
+                var html = "<table><thead><tr>"
+                html += cells(trimmed).map { "<th>\(inline($0))</th>" }.joined()
+                html += "</tr></thead><tbody>"
+                i += 2
+                while i < lines.count {
+                    let rowT = lines[i].trimmingCharacters(in: .whitespaces)
+                    guard rowT.hasPrefix("|") else { break }
+                    html += "<tr>" + cells(rowT).map { "<td>\(inline($0))</td>" }.joined() + "</tr>"
+                    i += 1
+                }
+                out += html + "</tbody></table>"
+                continue
+            }
+        }
+
         // --- List items ---
         let indent = raw.prefix(while: { $0 == " " }).count
         let stripped = raw.trimmingCharacters(in: .whitespaces)
