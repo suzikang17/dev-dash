@@ -21,6 +21,10 @@ struct DocsTabView: View {
     @State private var reloadToken = 0
     @State private var watcher: NotesFileWatcher?
     @State private var filePreview: FilePreviewTarget?
+    @State private var claudeSheet = false
+    @State private var claudeSelection: String = ""
+    @State private var claudeInstruction: String = ""
+    @State private var docWebViewRef: WKWebView?
 
     var body: some View {
         if let project = store.project(for: panelSelection ?? store.selection) {
@@ -42,6 +46,51 @@ struct DocsTabView: View {
         }
         .task(id: project.path) { await reload(project.path, resetSelection: true) }
         .task(id: "\(selectedPath ?? "")#\(reloadToken)") { await render(project.path) }
+        .sheet(isPresented: $claudeSheet) {
+            VStack(alignment: .leading, spacing: DSSpace.md) {
+                Text("Edit with Claude")
+                    .font(DSFont.title)
+                if let rel = selectedPath {
+                    Text(rel).font(DSFont.mono(.caption2)).foregroundStyle(.secondary)
+                }
+                if !claudeSelection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("SELECTED PASSAGE").font(DSFont.micro.weight(.semibold)).foregroundStyle(.secondary)
+                        ScrollView {
+                            Text(claudeSelection)
+                                .font(DSFont.mono(.caption2))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 90)
+                        .padding(6)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+                    }
+                }
+                Text("INSTRUCTION").font(DSFont.micro.weight(.semibold)).foregroundStyle(.secondary)
+                TextEditor(text: $claudeInstruction)
+                    .font(DSFont.body)
+                    .frame(minHeight: 80, maxHeight: 140)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.12)))
+                HStack {
+                    Spacer()
+                    Button("Cancel") { claudeSheet = false }.keyboardShortcut(.cancelAction)
+                    Button("Open Claude session") {
+                        if let rel = selectedPath,
+                           let project = store.project(for: panelSelection ?? store.selection) {
+                            store.openClaudeForDoc(
+                                projectPath: project.path, relPath: rel,
+                                selection: claudeSelection, instruction: claudeInstruction)
+                        }
+                        claudeSheet = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(claudeInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(DSSpace.xl)
+            .frame(width: 520)
+        }
         .sheet(item: $filePreview) { target in
             let root = LoreDocsScanner.docsRoot(projectPath: project.path)
             let url = URL(fileURLWithPath: "\(root)/\(target.rel)")
@@ -321,7 +370,7 @@ struct DocsTabView: View {
                     }
                 }, onOpenFile: { rel in
                     filePreview = FilePreviewTarget(rel: rel)
-                })
+                }, onWebView: { docWebViewRef = $0 })
             } else {
                 Text(loaded ? "Select a doc to read" : "Loading…")
                     .foregroundColor(.secondary)
@@ -349,6 +398,20 @@ struct DocsTabView: View {
             } label: { Image(systemName: "square.and.pencil") }
                 .buttonStyle(.borderless)
                 .help("Open in default editor")
+            Button {
+                claudeSelection = ""
+                claudeInstruction = ""
+                if let wv = docWebViewRef {
+                    wv.evaluateJavaScript("window.getSelection().toString()") { result, _ in
+                        claudeSelection = (result as? String) ?? ""
+                        claudeSheet = true
+                    }
+                } else {
+                    claudeSheet = true
+                }
+            } label: { Image(systemName: "sparkle") }
+                .buttonStyle(.borderless)
+                .help("Edit with Claude (uses your text selection if any)")
         }
         .padding(.horizontal, DSSpace.md)
         .frame(height: 32)
@@ -753,12 +816,14 @@ private struct DocWebView: NSViewRepresentable {
     let html: String
     let onOpenDoc: (String) -> Void
     var onOpenFile: ((String) -> Void)? = nil
+    var onWebView: ((WKWebView) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
         let wv = WKWebView()
         wv.navigationDelegate = context.coordinator
+        DispatchQueue.main.async { onWebView?(wv) }
         return wv
     }
 

@@ -3064,6 +3064,41 @@ final class DashboardStore: ObservableObject {
         }
     }
 
+    /// Open an interactive Claude Code session in the terminal drawer, pointed
+    /// at a specific lore doc (optionally a selected passage) with an editing
+    /// instruction. Mirrors the task-launch flow: prompt goes through a temp
+    /// file to avoid shell-quoting hazards; NotesFileWatcher picks up the edit
+    /// so the reading pane refreshes live.
+    func openClaudeForDoc(projectPath: String, relPath: String, selection: String?, instruction: String) {
+        let docsRoot = LoreDocsScanner.docsRoot(projectPath: projectPath)
+        let typeDir = relPath.components(separatedBy: "/").dropLast().joined(separator: "/")
+        var parts: [String] = []
+        parts.append("Edit the lore doc `\(docsRoot)/\(relPath)` (path relative to repo: \(relPath)).")
+        if let sel = selection?.trimmingCharacters(in: .whitespacesAndNewlines), !sel.isEmpty {
+            parts.append("The user selected this passage — the instruction applies to it specifically:\n\"\"\"\n\(sel)\n\"\"\"")
+        }
+        parts.append("Instruction: \(instruction)")
+        parts.append("Rules: preserve the lore frontmatter format exactly (comma-separated multi-value fields, no YAML lists). After editing, run `lore reindex \(typeDir.isEmpty ? "<type>" : typeDir)`-equivalent for the doc's type and `lore validate` for it; fix any validation errors. Do not commit unless asked.")
+        let prompt = parts.joined(separator: "\n\n")
+
+        let launchDir = (NSHomeDirectory() as NSString).appendingPathComponent(".devdash/launch")
+        let promptPath = (launchDir as NSString).appendingPathComponent("doc-edit-\(Int(Date().timeIntervalSince1970)).txt")
+        do {
+            try FileManager.default.createDirectory(
+                atPath: launchDir, withIntermediateDirectories: true, attributes: nil)
+            try prompt.write(toFile: promptPath, atomically: true, encoding: .utf8)
+        } catch { return }
+
+        self.selection = .project(path: projectPath)
+        terminalOpen = true
+        _ = terminals.session(for: projectPath)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            let cmd = "claude \"$(cat '\(promptPath)')\"\n"
+            self.terminals.send(cmd, to: projectPath)
+        }
+    }
+
     /// Ask claude -p to suggest tasks for the current stage given the
     /// methodology + existing tasks. Output is plain markdown bullets.
     func suggestTasksForStage(projectPath: String, template: LaunchTemplate, stage: TemplateStage) async {
