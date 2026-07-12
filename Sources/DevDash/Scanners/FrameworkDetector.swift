@@ -31,6 +31,7 @@ enum FrameworkDetector {
         "PostgreSQL": "#336791",
         "Redis": "#dc382d",
         "Ollama": "#444444",
+        "Wiki": "#6b5ca5",
         "Unknown": "#666666"
     ]
 
@@ -121,6 +122,7 @@ enum FrameworkDetector {
         }
         // Swift / Apple platforms
         if let swiftFramework = detectSwiftFramework(at: path) { return swiftFramework }
+        if fm.fileExists(atPath: "\(path)/.lore/config.yaml") { return "Wiki" }
         return "Unknown"
     }
 
@@ -143,6 +145,12 @@ enum FrameworkDetector {
             if entries.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) {
                 return "swift"
             }
+        }
+        // A lore root (wiki-profile repo: `.lore/` at the top level, type dirs
+        // beside it) is a docs-only project — no build stack, but the Docs tab
+        // is its whole point.
+        if fm.fileExists(atPath: "\(path)/.lore/config.yaml") {
+            return "lore"
         }
         return nil
     }

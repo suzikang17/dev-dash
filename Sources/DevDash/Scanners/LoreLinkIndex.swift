@@ -40,7 +40,7 @@ enum LoreLinkIndex {
         var resolve: [String: Target] = [:]
         var idIndex: [String: [String: String]] = [:]   // dir → numeric id → path
         for dir in dirs {
-            let dirPath = "\(projectPath)/docs/\(dir)"
+            let dirPath = "\(LoreDocsScanner.docsRoot(projectPath: projectPath))/\(dir)"
             // Sort so "first wins" on a title/filename collision is deterministic
             // (matches lore-core, which indexes a sorted doc list).
             for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
@@ -94,7 +94,7 @@ enum LoreLinkIndex {
         let fm = FileManager.default
         var out: [(title: String, dir: String, path: String)] = []
         for dir in dirs {
-            let dirPath = "\(projectPath)/docs/\(dir)"
+            let dirPath = "\(LoreDocsScanner.docsRoot(projectPath: projectPath))/\(dir)"
             for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
                 guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
                 guard let raw = try? String(contentsOfFile: "\(dirPath)/\(file)", encoding: .utf8) else { continue }

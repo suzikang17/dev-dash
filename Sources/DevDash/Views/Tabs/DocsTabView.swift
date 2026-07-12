@@ -68,7 +68,7 @@ struct DocsTabView: View {
         // refresh the view live. Dirs created after this scan aren't watched until
         // the project is revisited.
         if resetSelection || watcher == nil {
-            watcher = NotesFileWatcher(dirs: g.map { "\(projectPath)/docs/\($0.dir)" }) {
+            watcher = NotesFileWatcher(dirs: g.map { "\(LoreDocsScanner.docsRoot(projectPath: projectPath))/\($0.dir)" }) {
                 Task { await reload(projectPath, resetSelection: false) }
             }
         }
@@ -251,7 +251,7 @@ struct DocsTabView: View {
     }
 
     private func readerToolbar(project: Project, rel: String) -> some View {
-        let fileURL = URL(fileURLWithPath: "\(project.path)/docs/\(rel)")
+        let fileURL = URL(fileURLWithPath: "\(LoreDocsScanner.docsRoot(projectPath: project.path))/\(rel)")
         return HStack(spacing: DSSpace.sm) {
             Text(rel)
                 .font(DSFont.mono(.caption2))

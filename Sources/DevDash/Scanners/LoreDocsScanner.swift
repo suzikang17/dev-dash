@@ -56,11 +56,20 @@ enum LoreDocsScanner {
         labels[dir] ?? dir.prefix(1).uppercased() + dir.dropFirst()
     }
 
+    /// Where a project's lore docs live. Project-profile repos nest them under
+    /// `docs/`; wiki-profile repos (`.lore/` at the top level — e.g. ~/dev/wiki,
+    /// ~/Documents/wiki) keep the type dirs at the root itself.
+    static func docsRoot(projectPath: String) -> String {
+        FileManager.default.fileExists(atPath: "\(projectPath)/.lore/config.yaml")
+            ? projectPath
+            : projectPath + "/docs"
+    }
+
     /// All doc groups for a project, ready for the sidebar. Blocking file I/O —
     /// call off the main actor.
     static func scan(projectPath: String) -> [LoreDocGroup] {
         let fm = FileManager.default
-        let docsPath = projectPath + "/docs"
+        let docsPath = docsRoot(projectPath: projectPath)
         guard let entries = try? fm.contentsOfDirectory(atPath: docsPath) else { return [] }
         var groups: [LoreDocGroup] = []
         for dir in entries {
@@ -97,7 +106,7 @@ enum LoreDocsScanner {
     /// Load one doc's frontmatter + markdown body. Blocking file I/O — call off
     /// the main actor. `relPath` is relative to `docs/` (a `LoreDoc.path`).
     static func load(projectPath: String, relPath: String) -> (front: [String: String], body: String)? {
-        guard let raw = try? String(contentsOfFile: "\(projectPath)/docs/\(relPath)", encoding: .utf8)
+        guard let raw = try? String(contentsOfFile: "\(docsRoot(projectPath: projectPath))/\(relPath)", encoding: .utf8)
         else { return nil }
         return (LoreReader.parseFrontmatter(raw), LoreLinkIndex.bodyOf(raw))
     }
