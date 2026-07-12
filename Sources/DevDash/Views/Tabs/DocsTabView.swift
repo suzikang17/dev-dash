@@ -281,7 +281,14 @@ struct DocsTabView: View {
 
     static func anchoredSubgroup(for doc: LoreDoc, in groups: [LoreDocGroup]) -> LoreDocGroup? {
         guard let dir = nestAnchor.first(where: { $0.value == doc.path })?.key else { return nil }
-        return groups.first { $0.dir == dir }
+        guard let g = groups.first(where: { $0.dir == dir }) else { return nil }
+        // Items tagged `inactive` stay out of the collection (sidebar rows +
+        // combined scroll); they remain reachable through the type's index table.
+        let active = g.docs.filter { d in
+            !(d.front["tags"] ?? "").components(separatedBy: ",")
+                .contains { $0.trimmingCharacters(in: .whitespaces) == "inactive" }
+        }
+        return LoreDocGroup(dir: g.dir, label: g.label, docs: active)
     }
 
     /// A collection item row: when its cover page is open, clicking scrolls the
@@ -521,6 +528,18 @@ struct DocsTabView: View {
             } label: { Image(systemName: "sparkle") }
                 .buttonStyle(.borderless)
                 .help("Edit with Claude (uses your text selection if any)")
+            if project.framework == "Wiki" {
+                Menu {
+                    Button("Check-in") { store.openCoachSession(projectPath: project.path, mode: "check-in") }
+                    Button("Goal design") { store.openCoachSession(projectPath: project.path, mode: "goal design") }
+                    Button("Gut-check") { store.openCoachSession(projectPath: project.path, mode: "decision gut-check") }
+                    Button("Season review") { store.openCoachSession(projectPath: project.path, mode: "season review") }
+                } label: { Image(systemName: "figure.mind.and.body") }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Coach session in the terminal drawer (evidence over advice)")
+            }
         }
         .padding(.horizontal, DSSpace.md)
         .frame(height: 32)

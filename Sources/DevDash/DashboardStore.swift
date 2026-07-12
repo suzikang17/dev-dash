@@ -3099,6 +3099,31 @@ final class DashboardStore: ObservableObject {
         }
     }
 
+    /// Launch an interactive /coach session in the terminal drawer, cwd = the
+    /// wiki root. The coach skill owns its context loading and coaching
+    /// contract; the app only seeds the requested mode.
+    func openCoachSession(projectPath: String, mode: String) {
+        let prompt = "Run the /coach skill: I want a \(mode) session. "
+            + "Follow the coaching contract exactly — load its context files first, one question at a time."
+
+        let launchDir = (NSHomeDirectory() as NSString).appendingPathComponent(".devdash/launch")
+        let promptPath = (launchDir as NSString).appendingPathComponent("coach-\(Int(Date().timeIntervalSince1970)).txt")
+        do {
+            try FileManager.default.createDirectory(
+                atPath: launchDir, withIntermediateDirectories: true, attributes: nil)
+            try prompt.write(toFile: promptPath, atomically: true, encoding: .utf8)
+        } catch { return }
+
+        selection = .project(path: projectPath)
+        terminalOpen = true
+        _ = terminals.session(for: projectPath)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            let cmd = "claude \"$(cat '\(promptPath)')\"\n"
+            self.terminals.send(cmd, to: projectPath)
+        }
+    }
+
     /// Ask claude -p to suggest tasks for the current stage given the
     /// methodology + existing tasks. Output is plain markdown bullets.
     func suggestTasksForStage(projectPath: String, template: LaunchTemplate, stage: TemplateStage) async {
