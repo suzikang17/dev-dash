@@ -128,17 +128,21 @@ struct DocsTabView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(Self.nestedGroups(filteredGroups), id: \.group.id) { entry in
-                            // A nested group collapses with its parent.
-                            let parentCollapsed = entry.nested
-                                && Self.nestUnder[entry.group.dir].map { collapsedDirs.contains($0) } == true
-                                && search.isEmpty
-                            if !parentCollapsed {
-                                sectionHeader(entry.group, nested: entry.nested)
-                                // Searching auto-expands so hits are never hidden.
-                                if !search.isEmpty || !collapsedDirs.contains(entry.group.dir) {
-                                    ForEach(entry.group.docs) { doc in
-                                        docRow(doc).padding(.leading, entry.nested ? 14 : 0)
+                        ForEach(Self.topLevelGroups(filteredGroups)) { group in
+                            sectionHeader(group)
+                            // Searching auto-expands so hits are never hidden.
+                            if !search.isEmpty || !collapsedDirs.contains(group.dir) {
+                                ForEach(group.docs) { doc in
+                                    docRow(doc)
+                                    // A type dir anchored to this doc nests beneath it
+                                    // (books under the reading interest).
+                                    if let sub = Self.anchoredSubgroup(for: doc, in: filteredGroups) {
+                                        subgroupHeader(sub)
+                                        if !search.isEmpty || !collapsedDirs.contains(sub.dir) {
+                                            ForEach(sub.docs) { d in
+                                                docRow(d).padding(.leading, 26)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -173,24 +177,52 @@ struct DocsTabView: View {
         .background(RoundedRectangle(cornerRadius: DSRadius.small).fill(Color.primary.opacity(0.05)))
     }
 
-    /// Type dirs rendered as children of another group in the sidebar
-    /// (storage stays flat — this is presentation only).
-    static let nestUnder: [String: String] = ["books": "interests"]
+    /// Type dirs rendered nested beneath a specific doc row instead of as
+    /// top-level groups (storage stays flat — presentation only).
+    /// child dir → the doc path it anchors under.
+    static let nestAnchor: [String: String] = ["books": "interests/reading-and-books.md"]
 
-    struct GroupEntry { let group: LoreDocGroup; let nested: Bool }
-
-    static func nestedGroups(_ groups: [LoreDocGroup]) -> [GroupEntry] {
-        let parentDirs = Set(groups.map(\.dir))
-        let children = Dictionary(grouping: groups.filter { g in
-            nestUnder[g.dir].map { parentDirs.contains($0) } == true
-        }, by: { nestUnder[$0.dir]! })
-        var out: [GroupEntry] = []
-        for g in groups {
-            if let parent = nestUnder[g.dir], parentDirs.contains(parent) { continue }
-            out.append(GroupEntry(group: g, nested: false))
-            for c in children[g.dir] ?? [] { out.append(GroupEntry(group: c, nested: true)) }
+    static func topLevelGroups(_ groups: [LoreDocGroup]) -> [LoreDocGroup] {
+        let anchored = Set(nestAnchor.keys).intersection(groups.map(\.dir))
+        // Only suppress a child group when its anchor doc is actually present.
+        let anchorDocs = Set(groups.flatMap { $0.docs.map(\.path) })
+        return groups.filter { g in
+            guard anchored.contains(g.dir), let anchor = nestAnchor[g.dir] else { return true }
+            return !anchorDocs.contains(anchor)
         }
-        return out
+    }
+
+    static func anchoredSubgroup(for doc: LoreDoc, in groups: [LoreDocGroup]) -> LoreDocGroup? {
+        guard let dir = nestAnchor.first(where: { $0.value == doc.path })?.key else { return nil }
+        return groups.first { $0.dir == dir }
+    }
+
+    private func subgroupHeader(_ group: LoreDocGroup) -> some View {
+        Button {
+            if collapsedDirs.contains(group.dir) { collapsedDirs.remove(group.dir) }
+            else { collapsedDirs.insert(group.dir) }
+        } label: {
+            HStack(spacing: DSSpace.xs) {
+                Image(systemName: collapsedDirs.contains(group.dir) ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Circle()
+                    .fill(DocTypeStyle.color(group.dir))
+                    .frame(width: 6, height: 6)
+                Text(group.label)
+                    .font(DSFont.micro.weight(.semibold))
+                    .tracking(0.8)
+                    .foregroundColor(.secondary)
+                Text(verbatim: String(group.docs.count))
+                    .font(DSFont.monoDigits(.caption2))
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.leading, 14)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func sectionHeader(_ group: LoreDocGroup, nested: Bool = false) -> some View {

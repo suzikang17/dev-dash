@@ -53,7 +53,11 @@ enum LoreDocsScanner {
     ]
 
     static func label(for dir: String) -> String {
-        labels[dir] ?? dir.prefix(1).uppercased() + dir.dropFirst()
+        if let l = labels[dir] { return l }
+        // Nested section dirs ("self/goals-2026") read as "Self · Goals-2026".
+        return dir.components(separatedBy: "/")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " · ")
     }
 
     /// Where a project's lore docs live. Project-profile repos nest them under
@@ -77,20 +81,25 @@ enum LoreDocsScanner {
             var isDir: ObjCBool = false
             let dirPath = "\(docsPath)/\(dir)"
             guard fm.fileExists(atPath: dirPath, isDirectory: &isDir), isDir.boolValue else { continue }
-            var docs: [LoreDoc] = []
-            for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
-                guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
-                guard let raw = try? String(contentsOfFile: "\(dirPath)/\(file)", encoding: .utf8) else { continue }
-                let front = LoreReader.parseFrontmatter(raw)
-                docs.append(LoreDoc(
-                    path: "\(dir)/\(file)",
-                    dir: dir,
-                    title: front["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
-                    date: front["date"] ?? front["created"],
-                    status: front["status"],
-                    front: front))
+            var docs: [LoreDoc] = collectDocs(dirPath: dirPath, dir: dir)
+            if docs.isEmpty {
+                // A section dir (e.g. self/) holding subdirs of docs: emit each
+                // subdir as its own group, one level deep only.
+                for sub in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
+                    guard !sub.hasPrefix(".") else { continue }
+                    var subIsDir: ObjCBool = false
+                    let subPath = "\(dirPath)/\(sub)"
+                    guard fm.fileExists(atPath: subPath, isDirectory: &subIsDir), subIsDir.boolValue else { continue }
+                    var subDocs = collectDocs(dirPath: subPath, dir: "\(dir)/\(sub)")
+                    guard !subDocs.isEmpty else { continue }
+                    subDocs.sort {
+                        let (a, b) = ($0.date ?? "", $1.date ?? "")
+                        return a == b ? $0.path > $1.path : a > b
+                    }
+                    groups.append(LoreDocGroup(dir: "\(dir)/\(sub)", label: label(for: "\(dir)/\(sub)"), docs: subDocs))
+                }
+                continue
             }
-            guard !docs.isEmpty else { continue }
             // Newest first: by date, then filename (id prefixes sort naturally).
             docs.sort {
                 let (a, b) = ($0.date ?? "", $1.date ?? "")
@@ -101,6 +110,24 @@ enum LoreDocsScanner {
         func rank(_ dir: String) -> Int { order.firstIndex(of: dir) ?? order.count }
         groups.sort { rank($0.dir) == rank($1.dir) ? $0.dir < $1.dir : rank($0.dir) < rank($1.dir) }
         return groups
+    }
+
+    private static func collectDocs(dirPath: String, dir: String) -> [LoreDoc] {
+        let fm = FileManager.default
+        var docs: [LoreDoc] = []
+        for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
+            guard file.hasSuffix(".md"), file.lowercased() != "index.md" else { continue }
+            guard let raw = try? String(contentsOfFile: "\(dirPath)/\(file)", encoding: .utf8) else { continue }
+            let front = LoreReader.parseFrontmatter(raw)
+            docs.append(LoreDoc(
+                path: "\(dir)/\(file)",
+                dir: dir,
+                title: front["title"] ?? file.replacingOccurrences(of: ".md", with: ""),
+                date: front["date"] ?? front["created"],
+                status: front["status"],
+                front: front))
+        }
+        return docs
     }
 
     /// Load one doc's frontmatter + markdown body. Blocking file I/O — call off
