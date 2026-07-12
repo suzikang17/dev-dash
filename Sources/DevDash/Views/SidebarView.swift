@@ -2,12 +2,13 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: String, CaseIterable, Identifiable {
-    case running, projects, infra
+    case running, projects, wikis, infra
     var id: String { rawValue }
     var label: String {
         switch self {
         case .running: return "Running"
         case .projects: return "Projects"
+        case .wikis: return "Wikis"
         case .infra: return "Infra"
         }
     }
@@ -15,6 +16,7 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .running: return "play.circle.fill"
         case .projects: return "folder.fill"
+        case .wikis: return "books.vertical.fill"
         case .infra: return "server.rack"
         }
     }
@@ -161,7 +163,8 @@ struct SidebarView: View {
                     }
 
                     // --- Ungrouped repos under their dev-root folder headers ---
-                    let ungrouped = projects.filter { !groupedPaths.contains($0.path) }
+                    // Wikis live in their own sidebar tab, not the projects list.
+                    let ungrouped = projects.filter { !groupedPaths.contains($0.path) && $0.framework != "Wiki" }
                     // Compute worktree groups from the ungrouped set; child worktrees
                     // are removed from the flat list and nested under their parent.
                     let wtGroups = Self.groupWorktrees(ungrouped, gitStatuses: store.gitStatuses)
@@ -225,6 +228,25 @@ struct SidebarView: View {
                                     .foregroundColor(.secondary)
                             }
                             .padding(.vertical, 3)
+                        }
+                    }
+                case .wikis:
+                    let wikis = projects.filter { $0.framework == "Wiki" }
+                    if wikis.isEmpty {
+                        Text("No wikis found — a wiki is a repo with `.lore/config.yaml` at its root. Add its folder under Settings → Project folders.")
+                            .foregroundColor(.secondary)
+                            .font(DSFont.label)
+                            .padding(.vertical, DSSpace.md)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Section {
+                            ForEach(wikis) { proj in
+                                SidebarWikiRow(project: proj)
+                                    .tag(Selection.project(path: proj.path))
+                            }
+                        } header: {
+                            SidebarHeader(title: "Wikis", count: wikis.count, systemImage: "books.vertical")
                         }
                     }
                 case .infra:
@@ -588,6 +610,74 @@ private struct SidebarServiceRow: View {
                 Button(role: .destructive) {
                     Task { await store.stopServer(pid: service.pid) }
                 } label: { Label("Stop server", systemImage: "stop.fill") }
+            }
+        }
+    }
+}
+
+/// A wiki in the Wikis tab. Both wikis are folders named "wiki", so the row
+/// leads with a derived display name (parent dir disambiguates) and shows the
+/// abbreviated path beneath.
+private struct SidebarWikiRow: View {
+    let project: Project
+    @EnvironmentObject var store: DashboardStore
+
+    private var wikiColor: Color { Color(red: 0x6b/255, green: 0x5c/255, blue: 0xa5/255) }
+
+    /// "~/dev/wiki" → "dev wiki"; "~/Documents/wiki" → "life wiki" reads nicer
+    /// than "Documents wiki", but stay literal: parent dir + name, deduped.
+    private var displayName: String {
+        let comps = project.path.split(separator: "/").map(String.init)
+        guard comps.count >= 2 else { return project.name }
+        let parent = comps[comps.count - 2]
+        return parent == "dev" ? "dev wiki" : parent == "Documents" ? "life wiki" : "\(parent)/\(project.name)"
+    }
+
+    private var abbrevPath: String {
+        project.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+    }
+
+    private var hasLiveSession: Bool {
+        store.liveSessions.values.contains {
+            $0.status == .active && (
+                $0.projectPath == project.path
+                || $0.cwd == project.path
+                || $0.cwd.hasPrefix("\(project.path)/")
+            )
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: DSSpace.sm) {
+            Image(systemName: "book.closed.fill")
+                .font(.system(size: 11))
+                .foregroundColor(wikiColor)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: DSSpace.xs) {
+                    Text(displayName)
+                        .font(DSFont.bodyEmphasized)
+                        .lineLimit(1)
+                    if hasLiveSession {
+                        Circle()
+                            .fill(DSColor.success)
+                            .frame(width: 6, height: 6)
+                            .help("Active Claude session")
+                    }
+                }
+                Text(abbrevPath)
+                    .font(DSFont.mono(.caption2))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(.vertical, DSSpace.xs)
+        .padding(.horizontal, 2)
+        .contextMenu {
+            Button {
+                NSWorkspace.shared.open(URL(fileURLWithPath: project.path))
+            } label: {
+                Label("Reveal in Finder", systemImage: "folder")
             }
         }
     }
