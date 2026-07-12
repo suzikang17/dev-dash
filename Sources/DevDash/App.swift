@@ -15,6 +15,7 @@ struct DevDashApp: App {
         PolicySelfTest.runIfRequested()     // exits early when launched with --selftest-policy
         EventLogSelfTest.runIfRequested()   // exits early when launched with --selftest-eventlog
         NotificationSelfTest.runIfRequested() // exits early when launched with --selftest-notifications
+        MarkdownSelfTest.runIfRequested()   // exits early when launched with --selftest-markdown
     }
 
     var body: some Scene {

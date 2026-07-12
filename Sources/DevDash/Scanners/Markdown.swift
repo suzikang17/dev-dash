@@ -158,8 +158,10 @@ enum Markdown {
             }
             // Preserve single newlines as line breaks (notes/PKM expectation),
             // rather than collapsing them to spaces like strict markdown. Inline
-            // formatting is applied per line, then joined with <br>.
-            let rendered = paragraph.map { processInline($0) }.joined(separator: "<br>")
+            // formatting runs on the whole paragraph so spans (e.g. **bold**)
+            // can cross hard-wrapped lines; newlines become <br> afterward.
+            let rendered = processInline(paragraph.joined(separator: "\n"))
+                .replacingOccurrences(of: "\n", with: "<br>")
             out.append("<p>\(rendered)</p>")
         }
         flushList()
