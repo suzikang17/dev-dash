@@ -700,7 +700,7 @@ enum LoreDocHTML {
         let dir = relPath.components(separatedBy: "/").first ?? ""
         let accent = DocTypeStyle.hex(dir)
         let title = front["title"].map(esc) ?? esc((relPath as NSString).lastPathComponent)
-        let bodyHTML = Markdown.bodyHTML(linkify(body, relPath: relPath, graph: graph))
+        let bodyHTML = applyTimeline(Markdown.bodyHTML(linkify(body, relPath: relPath, graph: graph)))
 
         var kicker = "<span class=\"type-pill\">\(esc(LoreDocsScanner.label(for: dir)))</span>"
         if let id = doc?.numericID { kicker += "<span class=\"doc-id\">#\(esc(id))</span>" }
@@ -715,6 +715,14 @@ enum LoreDocHTML {
         }
         for key in ["owner", "phase", "applies_to"] {
             if let v = front[key] { meta.append("<span class=\"m\">\(esc(key)): \(esc(v))</span>") }
+        }
+        // Tags render as legend-style dot chips (life-map look).
+        if let tags = front["tags"] {
+            for tag in tags.components(separatedBy: ",") {
+                let t = tag.trimmingCharacters(in: .whitespaces)
+                guard !t.isEmpty else { continue }
+                meta.append("<span class=\"tag\"><span class=\"tag-dot\" style=\"background:\(tagColor(t))\"></span>\(esc(t))</span>")
+            }
         }
 
         var backlinksHTML = ""
@@ -752,6 +760,63 @@ enum LoreDocHTML {
         </body>
         </html>
         """
+    }
+
+    /// Deterministic legend color for a tag — hue from a stable hash.
+    private static func tagColor(_ tag: String) -> String {
+        let hue = tag.lowercased().unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF } % 360
+        return "hsl(\(hue), 42%, 52%)"
+    }
+
+    private static let timelineParaRE = try! NSRegularExpression(
+        pattern: #"<p><strong>((?:19|20)\d\d)</strong>\s*([\s\S]*?)</p>"#)
+
+    /// Runs of ≥3 consecutive paragraphs opening with a bold 4-digit year
+    /// (the annual-review / life-arc shape) render as a vertical timeline —
+    /// year gutter, accent dot, connecting line. Pure HTML post-pass; pages
+    /// without the shape are untouched.
+    static func applyTimeline(_ html: String) -> String {
+        let ns = html as NSString
+        let matches = timelineParaRE.matches(in: html, range: NSRange(location: 0, length: ns.length))
+        guard matches.count >= 3 else { return html }
+        // Group into runs of consecutive matches (only whitespace between them).
+        var runs: [[NSTextCheckingResult]] = []
+        var current: [NSTextCheckingResult] = []
+        for m in matches {
+            if let last = current.last {
+                let gapLoc = last.range.location + last.range.length
+                let gap = ns.substring(with: NSRange(location: gapLoc, length: m.range.location - gapLoc))
+                if gap.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    current.append(m)
+                } else {
+                    runs.append(current); current = [m]
+                }
+            } else {
+                current = [m]
+            }
+        }
+        runs.append(current)
+        let qualifying = runs.filter { $0.count >= 3 }
+        guard !qualifying.isEmpty else { return html }
+
+        var result = ""
+        var cursor = 0
+        for run in qualifying {
+            let start = run.first!.range.location
+            let end = run.last!.range.location + run.last!.range.length
+            result += ns.substring(with: NSRange(location: cursor, length: start - cursor))
+            var entries = ""
+            for m in run {
+                let year = ns.substring(with: m.range(at: 1))
+                let text = ns.substring(with: m.range(at: 2))
+                entries += "<div class=\"tl-entry\"><div class=\"tl-year\">\(year)</div>"
+                    + "<div class=\"tl-dot\"></div><div class=\"tl-text\">\(text)</div></div>"
+            }
+            result += "<div class=\"timeline\">\(entries)</div>"
+            cursor = end
+        }
+        result += ns.substring(from: cursor)
+        return result
     }
 
     /// Pre-convert `[[wikilinks]]` to markdown links (`[title](lore://open/<path>)`)
@@ -982,6 +1047,8 @@ enum LoreDocHTML {
         .st-active  { color: #3f7fd6; background: color-mix(in srgb, #3f7fd6 14%, transparent); }
         .st-blocked { color: #cf4d4d; background: color-mix(in srgb, #cf4d4d 14%, transparent); }
         .st-neutral { color: color-mix(in srgb, currentColor 70%, transparent); background: color-mix(in srgb, currentColor 9%, transparent); }
+        .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+        .tag-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 
         /* ---- body ---- */
         .doc-body h1, .doc-body h2, .doc-body h3, .doc-body h4 {
@@ -1025,6 +1092,40 @@ enum LoreDocHTML {
             border-radius: 0 8px 8px 0;
             color: color-mix(in srgb, currentColor 82%, transparent);
         }
+        /* The page's first quote reads as a hero pull-quote (life-map look). */
+        .doc-body > blockquote:first-of-type {
+            font-family: ui-serif, "New York", Georgia, serif;
+            font-style: italic; font-size: 18.5px; line-height: 1.55;
+            background: transparent;
+            border-left-width: 4px;
+            padding: 0.2em 1.2em;
+            color: color-mix(in srgb, \(accent) 72%, currentColor);
+        }
+
+        /* ---- timeline (runs of bold-year paragraphs) ---- */
+        .timeline { margin: 1.4em 0 1.8em; }
+        .tl-entry {
+            display: grid; grid-template-columns: 52px 16px 1fr;
+            gap: 0 12px; position: relative; padding-bottom: 1.15em;
+        }
+        .tl-year {
+            font-family: ui-serif, "New York", Georgia, serif;
+            font-size: 16px; font-weight: 650; text-align: right;
+            line-height: 1.5; opacity: 0.85;
+        }
+        .tl-dot { position: relative; }
+        .tl-dot::before {
+            content: ""; position: absolute; left: 4px; top: 8px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: \(accent);
+        }
+        .tl-dot::after {
+            content: ""; position: absolute; left: 7.5px; top: 22px; bottom: -4px;
+            width: 1px; background: color-mix(in srgb, currentColor 16%, transparent);
+        }
+        .tl-entry:last-child { padding-bottom: 0.2em; }
+        .tl-entry:last-child .tl-dot::after { display: none; }
+        .tl-text { line-height: 1.7; }
         .doc-body table {
             border-collapse: collapse; width: 100%; margin: 0.7em 0 1.1em;
             font-size: 13px;

@@ -38,6 +38,16 @@ enum MarkdownSelfTest {
         let acrossPara = body("open **bold\n\nnever closed")
         check(!acrossPara.contains("<strong>"), "bold not matched across blank line")
 
+        // Timeline post-pass (LoreDocHTML.applyTimeline over rendered paragraphs)
+        let arc = body("**2020** — first\n\n**2021** — second\n\n**2022** — third")
+        let timeline = LoreDocHTML.applyTimeline(arc)
+        check(timeline.contains("<div class=\"timeline\">"), "timeline wraps 3+ year paragraphs")
+        check(timeline.contains("<div class=\"tl-year\">2021</div>"), "timeline year gutter")
+        let two = LoreDocHTML.applyTimeline(body("**2020** — a\n\n**2021** — b"))
+        check(!two.contains("timeline"), "2 year paragraphs stay plain")
+        let prose = LoreDocHTML.applyTimeline(body("**2020** was a year. More prose."))
+        check(!prose.contains("timeline"), "inline year bold untouched")
+
         // Block elements still intact
         check(body("# Title").contains("<h1>Title</h1>"), "heading")
         check(body("- item **b**").contains("<li>item <strong>b</strong></li>"), "list item inline")
