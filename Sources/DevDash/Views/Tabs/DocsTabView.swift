@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UniformTypeIdentifiers
 
 // MARK: - DocsTabView
 
@@ -143,15 +144,19 @@ struct DocsTabView: View {
         }
     }
 
+    /// Anything that isn't lore markdown renders as a raw file, not via the
+    /// markdown pipeline.
+    static func isAsset(_ rel: String) -> Bool { !rel.lowercased().hasSuffix(".md") }
+
     private func render(_ projectPath: String) async {
-        guard let rel = selectedPath, let graph else { docHTML = nil; return }
+        guard let rel = selectedPath, !Self.isAsset(rel), let graph else { docHTML = nil; return }
         let doc = groups.flatMap(\.docs).first { $0.path == rel }
         let backlinks = graph.backlinks[rel] ?? []
         // Collection view: an anchor doc (e.g. the reading interest) renders as
         // a front cover followed by every item in its nested collection, in one
         // continuously scrollable page with scrollspy anchors.
         if let cover = doc, let sub = Self.anchoredSubgroup(for: cover, in: groups) {
-            let items = Self.sortedCollection(sub.docs, by: collectionSort)
+            let items = Self.sortedCollection(sub.docs.filter { !$0.isFile }, by: collectionSort)
             let sort = collectionSort
             let html = await Task.detached(priority: .userInitiated) { () -> String? in
                 guard let coverLoaded = LoreDocsScanner.load(projectPath: projectPath, relPath: rel) else { return nil }
@@ -220,8 +225,12 @@ struct DocsTabView: View {
                                         if !search.isEmpty || !collapsedDirs.contains(sub.dir) {
                                             let ordered = Self.sortedCollection(sub.docs, by: collectionSort)
                                             ForEach(Array(ordered.enumerated()), id: \.element.id) { idx, d in
-                                                collectionRow(d, index: idx, anchorDoc: doc)
-                                                    .id(d.path)
+                                                if d.isFile {
+                                                    docRow(d).padding(.leading, 26).id(d.path)
+                                                } else {
+                                                    collectionRow(d, index: idx, anchorDoc: doc)
+                                                        .id(d.path)
+                                                }
                                             }
                                         }
                                     }
@@ -316,6 +325,11 @@ struct DocsTabView: View {
     }
 
     private func subgroupHeader(_ group: LoreDocGroup) -> some View {
+        subgroupHeaderBody(group)
+            .onDrop(of: [UTType.fileURL], isTargeted: nil) { handleFileDrop($0, into: group.dir) }
+    }
+
+    private func subgroupHeaderBody(_ group: LoreDocGroup) -> some View {
         Button {
             if collapsedDirs.contains(group.dir) { collapsedDirs.remove(group.dir) }
             else { collapsedDirs.insert(group.dir) }
@@ -357,6 +371,26 @@ struct DocsTabView: View {
         .buttonStyle(.plain)
     }
 
+    /// Copy externally dropped files into a group's folder — every group doubles
+    /// as a swipe-file bin. The dir watcher picks the copies up and reloads.
+    private func handleFileDrop(_ providers: [NSItemProvider], into dir: String) -> Bool {
+        guard let project = store.project(for: panelSelection ?? store.selection) else { return false }
+        let root = LoreDocsScanner.docsRoot(projectPath: project.path)
+        let destDir = dir == "." ? root : "\(root)/\(dir)"
+        var any = false
+        for p in providers where p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            any = true
+            p.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                let dest = "\(destDir)/\(url.lastPathComponent)"
+                guard !FileManager.default.fileExists(atPath: dest) else { return }
+                try? FileManager.default.copyItem(atPath: url.path, toPath: dest)
+            }
+        }
+        return any
+    }
+
     private func sectionHeader(_ group: LoreDocGroup, nested: Bool = false) -> some View {
         Button {
             if collapsedDirs.contains(group.dir) { collapsedDirs.remove(group.dir) }
@@ -385,6 +419,7 @@ struct DocsTabView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, nested ? 14 : 0)
+        .onDrop(of: [UTType.fileURL], isTargeted: nil) { handleFileDrop($0, into: group.dir) }
     }
 
     private func docRowLabel(_ doc: LoreDoc) -> some View {
@@ -410,16 +445,35 @@ struct DocsTabView: View {
         .contentShape(Rectangle())
     }
 
+    /// SF symbol for a non-md asset row, by extension.
+    static func assetIcon(_ path: String) -> String {
+        switch (path as NSString).pathExtension.lowercased() {
+        case "html", "htm":                        return "globe"
+        case "png", "jpg", "jpeg", "gif", "svg", "webp", "heic": return "photo"
+        case "pdf":                                return "doc.richtext"
+        case "csv", "tsv":                         return "tablecells"
+        case "mov", "mp4":                         return "film"
+        default:                                   return "doc"
+        }
+    }
+
     private func docRow(_ doc: LoreDoc) -> some View {
         let selected = doc.path == selectedPath
         return Button {
             selectedPath = doc.path
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text(doc.title)
-                    .font(selected ? DSFont.bodyEmphasized : DSFont.body)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                HStack(spacing: DSSpace.xs) {
+                    if doc.isFile {
+                        Image(systemName: Self.assetIcon(doc.path))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(doc.title)
+                        .font(selected ? DSFont.bodyEmphasized : DSFont.body)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
                 HStack(spacing: DSSpace.xs) {
                     if let date = doc.date { Text(DocTypeStyle.prettyDate(date)) }
                     if let status = doc.status {
@@ -467,7 +521,11 @@ struct DocsTabView: View {
                 readerToolbar(project: project, rel: rel)
                 Divider()
             }
-            if editMode, let rel = selectedPath {
+            if let rel = selectedPath, Self.isAsset(rel) {
+                // Non-md assets (html prototypes, images, pdfs) render raw.
+                FileWebView(fileURL: URL(fileURLWithPath: "\(LoreDocsScanner.docsRoot(projectPath: project.path))/\(rel)"))
+                    .id(rel)
+            } else if editMode, let rel = selectedPath {
                 DocEditPane(
                     path: "\(LoreDocsScanner.docsRoot(projectPath: project.path))/\(rel)",
                     projectPath: project.path,
@@ -511,26 +569,28 @@ struct DocsTabView: View {
             } label: { Image(systemName: "square.and.pencil") }
                 .buttonStyle(.borderless)
                 .help("Open in default editor")
-            Button {
-                editMode.toggle()
-                if !editMode { reloadToken += 1 }   // re-render the reader with fresh content
-            } label: { Image(systemName: editMode ? "eye" : "pencil.line") }
-                .buttonStyle(.borderless)
-                .help(editMode ? "Done editing (back to reading view)" : "Edit in place (bullets edit as an outline)")
-            Button {
-                claudeSelection = ""
-                claudeInstruction = ""
-                if let wv = docWebViewRef {
-                    wv.evaluateJavaScript("window.getSelection().toString()") { result, _ in
-                        claudeSelection = (result as? String) ?? ""
+            if !Self.isAsset(rel) {
+                Button {
+                    editMode.toggle()
+                    if !editMode { reloadToken += 1 }   // re-render the reader with fresh content
+                } label: { Image(systemName: editMode ? "eye" : "pencil.line") }
+                    .buttonStyle(.borderless)
+                    .help(editMode ? "Done editing (back to reading view)" : "Edit in place (bullets edit as an outline)")
+                Button {
+                    claudeSelection = ""
+                    claudeInstruction = ""
+                    if let wv = docWebViewRef {
+                        wv.evaluateJavaScript("window.getSelection().toString()") { result, _ in
+                            claudeSelection = (result as? String) ?? ""
+                            claudeSheet = true
+                        }
+                    } else {
                         claudeSheet = true
                     }
-                } else {
-                    claudeSheet = true
-                }
-            } label: { Image(systemName: "sparkle") }
-                .buttonStyle(.borderless)
-                .help("Edit with Claude (uses your text selection if any)")
+                } label: { Image(systemName: "sparkle") }
+                    .buttonStyle(.borderless)
+                    .help("Edit with Claude (uses your text selection if any)")
+            }
             if project.framework == "Wiki" {
                 Menu {
                     Button("Check-in") { store.openCoachSession(projectPath: project.path, mode: "check-in") }

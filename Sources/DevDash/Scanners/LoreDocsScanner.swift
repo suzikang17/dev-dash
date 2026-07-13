@@ -10,6 +10,7 @@ struct LoreDoc: Identifiable, Hashable {
     let date: String?           // raw YYYY-MM-DD (frontmatter `date` ?? `created`)
     let status: String?
     let front: [String: String] // full frontmatter (chips in the reading header)
+    var isFile: Bool = false    // non-md asset (html/image/pdf …) — rendered raw
 
     var id: String { path }
 
@@ -76,12 +77,20 @@ enum LoreDocsScanner {
         let docsPath = docsRoot(projectPath: projectPath)
         guard let entries = try? fm.contentsOfDirectory(atPath: docsPath) else { return [] }
         var groups: [LoreDocGroup] = []
+        func newestFirst(_ docs: inout [LoreDoc]) {
+            docs.sort {
+                let (a, b) = ($0.date ?? "", $1.date ?? "")
+                return a == b ? $0.path > $1.path : a > b
+            }
+        }
         // Root-level docs (README.md etc.) form a "Start here" group so wiki
-        // front doors are readable (and their links clickable) in-app.
+        // front doors are readable (and their links clickable) in-app. Loose
+        // root files (life-map.html …) list beside them.
         var rootDocs = collectDocs(dirPath: docsPath, dir: ".")
             .filter { !($0.path as NSString).lastPathComponent.hasPrefix("CLAUDE") }
+        rootDocs.sort { $0.path < $1.path }
+        rootDocs += collectFiles(dirPath: docsPath, dir: ".")
         if !rootDocs.isEmpty {
-            rootDocs.sort { $0.path < $1.path }
             groups.append(LoreDocGroup(dir: ".", label: "Start here", docs: rootDocs))
         }
         for dir in entries {
@@ -90,30 +99,25 @@ enum LoreDocsScanner {
             let dirPath = "\(docsPath)/\(dir)"
             guard fm.fileExists(atPath: dirPath, isDirectory: &isDir), isDir.boolValue else { continue }
             var docs: [LoreDoc] = collectDocs(dirPath: dirPath, dir: dir)
-            if docs.isEmpty {
-                // A section dir (e.g. self/) holding subdirs of docs: emit each
-                // subdir as its own group, one level deep only.
-                for sub in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
-                    guard !sub.hasPrefix(".") else { continue }
-                    var subIsDir: ObjCBool = false
-                    let subPath = "\(dirPath)/\(sub)"
-                    guard fm.fileExists(atPath: subPath, isDirectory: &subIsDir), subIsDir.boolValue else { continue }
-                    var subDocs = collectDocs(dirPath: subPath, dir: "\(dir)/\(sub)")
-                    guard !subDocs.isEmpty else { continue }
-                    subDocs.sort {
-                        let (a, b) = ($0.date ?? "", $1.date ?? "")
-                        return a == b ? $0.path > $1.path : a > b
-                    }
-                    groups.append(LoreDocGroup(dir: "\(dir)/\(sub)", label: label(for: "\(dir)/\(sub)"), docs: subDocs))
-                }
-                continue
+            newestFirst(&docs)
+            docs += collectFiles(dirPath: dirPath, dir: dir)
+            // Subdirs become their own groups, one level deep — both section
+            // dirs of docs (self/goals-2026) and asset folders inside a type
+            // dir (projects/trainer-website-prototypes).
+            for sub in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
+                guard !sub.hasPrefix(".") else { continue }
+                var subIsDir: ObjCBool = false
+                let subPath = "\(dirPath)/\(sub)"
+                guard fm.fileExists(atPath: subPath, isDirectory: &subIsDir), subIsDir.boolValue else { continue }
+                var subDocs = collectDocs(dirPath: subPath, dir: "\(dir)/\(sub)")
+                newestFirst(&subDocs)
+                subDocs += collectFiles(dirPath: subPath, dir: "\(dir)/\(sub)")
+                guard !subDocs.isEmpty else { continue }
+                groups.append(LoreDocGroup(dir: "\(dir)/\(sub)", label: label(for: "\(dir)/\(sub)"), docs: subDocs))
             }
-            // Newest first: by date, then filename (id prefixes sort naturally).
-            docs.sort {
-                let (a, b) = ($0.date ?? "", $1.date ?? "")
-                return a == b ? $0.path > $1.path : a > b
+            if !docs.isEmpty {
+                groups.append(LoreDocGroup(dir: dir, label: label(for: dir), docs: docs))
             }
-            groups.append(LoreDocGroup(dir: dir, label: label(for: dir), docs: docs))
         }
         func rank(_ dir: String) -> Int { order.firstIndex(of: dir) ?? order.count }
         groups.sort { rank($0.dir) == rank($1.dir) ? $0.dir < $1.dir : rank($0.dir) < rank($1.dir) }
@@ -136,6 +140,21 @@ enum LoreDocsScanner {
                 front: front))
         }
         return docs
+    }
+
+    /// Non-md files (html prototypes, images, pdfs — swipe-file material),
+    /// name-sorted. Rendered via FileWebView instead of the markdown pipeline.
+    private static func collectFiles(dirPath: String, dir: String) -> [LoreDoc] {
+        let fm = FileManager.default
+        var files: [LoreDoc] = []
+        for file in ((try? fm.contentsOfDirectory(atPath: dirPath)) ?? []).sorted() {
+            guard !file.hasPrefix("."), !file.lowercased().hasSuffix(".md") else { continue }
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: "\(dirPath)/\(file)", isDirectory: &isDir), !isDir.boolValue else { continue }
+            files.append(LoreDoc(path: "\(dir)/\(file)", dir: dir, title: file,
+                                 date: nil, status: nil, front: [:], isFile: true))
+        }
+        return files
     }
 
     /// Load one doc's frontmatter + markdown body. Blocking file I/O — call off
