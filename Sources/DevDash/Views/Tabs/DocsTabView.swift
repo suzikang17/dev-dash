@@ -267,7 +267,10 @@ struct DocsTabView: View {
     /// Type dirs rendered nested beneath a specific doc row instead of as
     /// top-level groups (storage stays flat — presentation only).
     /// child dir → the doc path it anchors under.
-    static let nestAnchor: [String: String] = ["books": "interests/reading-and-books.md"]
+    static let nestAnchor: [String: String] = [
+        "books": "interests/reading-and-books.md",
+        "recipes": "interests/cooking.md",
+    ]
 
     static func topLevelGroups(_ groups: [LoreDocGroup]) -> [LoreDocGroup] {
         let anchored = Set(nestAnchor.keys).intersection(groups.map(\.dir))
@@ -1105,6 +1108,7 @@ struct DocEditPane: View {
     @State private var loadedBody: String?
     @State private var loadedPath: String?
     @State private var saveWork: DispatchWorkItem?
+    @FocusState private var rawFocused: Bool
 
     var body: some View {
         Group {
@@ -1120,11 +1124,20 @@ struct DocEditPane: View {
                     .font(DSFont.mono(.body))
                     .scrollContentBackground(.hidden)
                     .padding(DSSpace.md)
+                    .focused($rawFocused)
                     .onChange(of: rawText) { _, _ in scheduleSave() }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear { load() }
+        .onAppear {
+            load()
+            // Land the user in a blinking cursor, matching the outliner's
+            // autofocus. The delay lets the TextEditor attach to the window
+            // first — focusing in the same tick silently no-ops.
+            if !useOutline {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { rawFocused = true }
+            }
+        }
         .onDisappear { flushNow() }
     }
 
